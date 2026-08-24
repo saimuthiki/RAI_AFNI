@@ -1,0 +1,64 @@
+---
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+title: "Documentation"
+---
+## Product Documentation
+
+Product documentation for the toolkit is available at
+[https://docs.nvidia.com/nemo/guardrails](https://docs.nvidia.com/nemo/guardrails).
+
+## Building the Documentation
+
+1. Make sure Node.js 22 is installed.
+
+1. Build the documentation:
+
+   ```console
+   make docs-fern
+   ```
+
+   The Fern docs configuration is validated with the pinned Fern CLI.
+
+## Live Documentation Server
+
+For local development with automatic rebuilding on file changes, use one of the following methods:
+
+### Option 1: Local Fern Server
+
+```bash
+make docs-fern-live
+```
+
+The Fern development server starts locally and updates as you edit docs files.
+
+### Option 2: Published Branch Preview
+
+```bash
+make docs-fern-preview-watch
+```
+
+This watches local docs and Fern configuration changes and publishes a preview for the current Git branch.
+
+### Option 3: Direct Fern Command
+
+```bash
+cd fern
+npx --yes fern-api@$(node -p "require('./fern.config.json').version") docs dev
+```
+
+Once the server is running:
+
+- Open the local URL printed by Fern
+- Edit documentation files or Fern configuration
+- Save the file
+- The browser will automatically refresh with the updated content
+
+Press `Ctrl+C` to stop the server.
+
+## Publishing the Documentation
+
+Tag the commit to publish with `docs-v<semver>`.
+Push the tag to GitHub.
+
+To avoid publishing the documentation as the latest, ensure the commit has `/not-latest` on a single line, tag that commit, and push to GitHub.

@@ -1,0 +1,17 @@
+{
+  "name": "openguardrails-monorepo",
+  "private": true,
+  "description": "OpenGuardrails protocol, core runtimes, integrations, benchmark, examples, skill, and website.",
+  "license": "Apache-2.0",
+  "workspaces": [
+    "integrations/agent/dsh"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

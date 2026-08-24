@@ -1,0 +1,261 @@
+# OpenGuardrails Runtime API — OpenAPI 3.1 description of the normative HTTP
+# binding in ../specification/runtime-api.md. The Markdown specification is
+# authoritative; this document is its machine-readable projection, kept in
+# lockstep with the JSON Schemas in this directory
+# (guard-event.schema.json, verdict.schema.json).
+openapi: 3.1.0
+
+info:
+  title: OpenGuardrails Runtime API
+  version: "0.8"
+  summary: The HTTP wire contract between an OGR runtime (PDP) and its integration points (PEPs).
+  description: |
+    The OpenGuardrails (OGR) Runtime API is the normative HTTP binding of the
+    OGR contract: the API a runtime (Policy Decision Point) exposes and an
+    integration point (Policy Enforcement Point, PEP) calls. There is no SDK
+    layer — this API is the integration surface: one decision endpoint and
+    one recipe, the same for a developer instrumenting their own agent loop
+    and for a gateway proxying model traffic.
+
+    The observed plane is LLM messages. One step is one model call, reported
+    as two events — `step/request` (what is about to be sent) and
+    `step/response` (what came back, whole, before the agent acts on it) —
+    bound to each other by a producer-minted `step_id`. Everything above the
+    step (session, turn, numbering) is derived server-side; nothing else is
+    declared on the wire.
+
+    `POST /v1/evaluate` is the one event path: one event in, one verdict
+    out, called while the PEP is holding an action; every accepted evaluate
+    also records the event. A streamed response is judged exactly once,
+    whole, behind a held-back tail. The remaining endpoints are PEP liveness
+    and runtime health.
+
+    All requests and responses are JSON, UTF-8,
+    `Content-Type: application/json`. Field names on the wire are
+    `snake_case`, exactly as in the JSON Schemas. There is no protocol
+    version on the wire; the runtime adapts to the events it receives.
+
+    Hosted reference documentation: https://openguardrails.com/api/docs/
+    Normative specification:
+    https://github.com/openguardrails/openguardrails/blob/main/specification/runtime-api.md
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+  contact:
+    name: OpenGuardrails
+    url: https://openguardrails.com
+
+externalDocs:
+  description: "Runtime API (HTTP binding) — the normative specification this document projects."
+  url: https://github.com/openguardrails/openguardrails/blob/main/specification/runtime-api.md
+
+servers:
+  - url: "https://{host}"
+    description: |
+      Any OGR runtime deployment. Canonical endpoint paths are rooted at
+      `/v1/` and MUST be joined to a single configured base URL; the base URL
+      MAY include a deployment-specific prefix (the reference runtime also
+      mounts the same handlers under `/api/public/ogr`, so
+      `https://host/api/public/ogr/v1/evaluate` is equally valid). Clients
+      MUST NOT hard-code any prefix other than the configured base URL plus
+      the canonical `/v1/...` path.
+    variables:
+      host:
+        default: ogr.example.com
+
+security:
+  - orgApiKey: []
+
+tags:
+  - name: decisions
+    description: The decision path — since v0.8 also the only event path.
+  - name: liveness
+    description: Integration liveness and runtime health.
+
+paths:
+  /v1/evaluate:
+    post:
+      tags: [decisions]
+      operationId: evaluate
+      summary: Judge one event and return one verdict.
+      description: |
+        One `GuardEvent` in, one `Verdict` out. A PEP calls this while
+        holding an action: the step's request before the model call, or the
+        step's complete response before executing what the model asked for.
+        Every accepted evaluate also RECORDS the event — evaluate is the
+        observation channel; there is no separate ingest path.
+
+        A streamed response is judged exactly once, whole, after stream
+        reassembly, while the integration holds back the stream's tail
+        (see the specification's streaming section).
+
+        On failure (timeout, 429, 5xx, network) the PEP applies its
+        configured fail mode. The default is open: proceed and record the
+        step as unjudged; deployments gating dangerous categories configure
+        closed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuardEvent"
+      responses:
+        "200":
+          description: The verdict.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Verdict"
+        "400": { $ref: "#/components/responses/InvalidEvent" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/heartbeat:
+    post:
+      tags: [liveness]
+      operationId: heartbeat
+      summary: Integration liveness over the authenticated channel.
+      description: |
+        Lets the runtime distinguish "agent idle" from "integration went
+        dark". Transport-level: a heartbeat is not a GuardEvent and carries
+        no guarded action. This is also where the integration build id
+        lives (it left the event in v0.8) — fleet coverage and bad-rollout
+        triage read it from here. A heartbeat MUST register a live-but-idle
+        agent so fleet coverage reflects integrations that have not yet
+        emitted an event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                integration:
+                  type: string
+                  description: The reporting integration and build, e.g. "ogr-higress/3.0.0".
+                agent_id:
+                  type: string
+                interval_s:
+                  type: integer
+                  minimum: 1
+                counters:
+                  type: object
+                  additionalProperties:
+                    type: number
+      responses:
+        "200":
+          description: Acknowledged.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+        "400": { $ref: "#/components/responses/InvalidBody" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/health:
+    get:
+      tags: [liveness]
+      operationId: health
+      security: []
+      summary: Unauthenticated runtime liveness.
+      responses:
+        "200":
+          description: The runtime can serve decisions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+                  version:
+                    type: string
+        "503":
+          description: The runtime cannot serve decisions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: error
+
+components:
+  securitySchemes:
+    orgApiKey:
+      type: http
+      scheme: bearer
+      description: |
+        Organization API key (`Authorization: Bearer ogr_<key>`). The key
+        proves the ORGANIZATION — the tenant boundary every asserted name is
+        resolved inside — and is the identity floor: a caller whose identity
+        four-tuple is all empty strings is still fully attributable (agent
+        derived from the key, sessions derived, the key's workspace).
+
+  responses:
+    InvalidEvent:
+      description: Body failed schema validation.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: string
+                const: invalid_event
+              details:
+                type: array
+                items:
+                  type: string
+    InvalidBody:
+      description: Malformed request.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: string
+    Unauthorized:
+      description: Missing or invalid API key.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: string
+                const: unauthorized
+    RateLimited:
+      description: Rate limit exhausted. Clients back off and treat a 429 on /v1/evaluate like an unreachable runtime (apply the configured fail mode; the default is open, and deployments gating dangerous categories configure closed).
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error, limit]
+            properties:
+              error:
+                type: string
+                const: rate_limited
+              limit:
+                type: integer
+
+  schemas:
+    GuardEvent:
+      $ref: "./guard-event.schema.json"
+    Verdict:
+      $ref: "./verdict.schema.json"

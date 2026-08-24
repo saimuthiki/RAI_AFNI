@@ -1,0 +1,21 @@
+name: ogr-guard
+version: 1.0.0
+description: "Guard a Hermes agent through the OpenGuardrails (OGR) v0.8 Runtime API: two evaluates per model call, verdicts enforced on the answer, the tool calls, and the real exec."
+author: "OpenGuardrails"
+hooks:
+  - pre_api_request
+  - post_api_request
+  # Enforces the verdict on the answer — the only hook Hermes lets a plugin
+  # substitute what the user sees. Withholds a block, applies redaction spans.
+  - transform_llm_output
+  # Enforces the verdict on tool calls: a blocked step/response means the
+  # round's tool calls do not run.
+  - pre_tool_call
+requires_env:
+  - name: OGR_RUNTIME_URL
+    description: "OpenGuardrails runtime base URL, e.g. https://your-ogr-instance.example.com (blank = no runtime; the fail mode decides, and the default is open = pass-through)"
+  - name: OGR_API_KEY
+    description: "Organization API key from your OGR console (Authorization: Bearer)"
+    secret: true
+  - name: OGR_AGENT_ID
+    description: "WHICH agent this Hermes is, unique in your organization (e.g. hermes-laptop-tom). Blank is valid: identity then derives from the API key"

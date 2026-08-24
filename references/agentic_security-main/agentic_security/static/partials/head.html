@@ -1,0 +1,117 @@
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Vulnerability Scanner</title>
+    <style type="text/tailwindcss">
+      @theme {
+        --font-sans: Inter, sans-serif;
+        --font-technopollas: Technopollas, sans-serif;
+
+        --color-dark-bg: #0D0D0D;
+        --color-dark-card: #1A1A1A;
+        --color-dark-text: #FFFFFF;
+        --color-dark-accent-green: #E0A3B6;
+        --color-dark-accent-red: #1C3F74;
+        --color-dark-accent-orange: #A5A5A5;
+        --color-dark-accent-yellow: #2E4053;
+
+        --color-dark1-bg: #121212;
+        --color-dark1-card: #1E1E1E;
+        --color-dark1-text: #FFFFFF;
+        --color-dark1-accent-green: #4CAF50;
+        --color-dark1-accent-red: #F44336;
+        --color-dark1-accent-orange: #FF9800;
+        --color-dark1-accent-yellow: #FFEB3B;
+        --color-dark1-accent-berry: #E0A3B6;
+        --color-dark1-accent-blue: #1C3F74;
+        --color-dark1-accent-silver: #A5A5A5;
+        --color-dark1-accent-black: #DAF7A6;
+        --color-dark1-variant1-primary: #E0A3B6;
+        --color-dark1-variant1-secondary: #1C3F74;
+        --color-dark1-variant1-highlight: #A5A5A5;
+        --color-dark1-variant1-dark: #000000;
+        --color-dark1-variant2-primary: #FF5733;
+        --color-dark1-variant2-secondary: #2E4053;
+        --color-dark1-variant2-highlight: #C0C0C0;
+        --color-dark1-variant2-dark: #121212;
+        --color-dark1-variant3-primary: #3D9970;
+        --color-dark1-variant3-secondary: #85144B;
+        --color-dark1-variant3-highlight: #AAAAAA;
+        --color-dark1-variant3-dark: #111111;
+        --color-dark1-variant4-primary: #FFC300;
+        --color-dark1-variant4-secondary: #DAF7A6;
+        --color-dark1-variant4-highlight: #888888;
+        --color-dark1-variant4-dark: #222222;
+
+        --radius-lg: 1rem;
+      }
+    </style>
+    <script src="/cdn/tailwindcss.js"></script>
+    <script src="/cdn/vue.js"></script>
+    <script src="/cdn/lucide.js"></script>
+    <link href="/cdn/technopollas.css" rel="stylesheet">
+    <style>
+      @import url('/cdn/inter.css');
+    </style>
+    <style>
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;     /* Firefox */
+}
+
+    </style>
+<style>
+/* Toast-specific colors */
+.bg-success-toast {
+    background: #1C3F74
+}
+
+.bg-error-toast {
+    background: #85144B
+}
+
+.bg-info-toast {
+    background: #FFC300
+}
+
+.border-accent-green, .border-accent-red, .border-accent-orange {
+    border-color: rgba(255, 255, 255, 0.1); /* Subtle white border for depth */
+}
+
+/* Animation */
+.animate-toast-in {
+    animation: tSlideIn 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+@keyframes tSlideIn {
+    from {
+        transform: translateX(120%) scale(0.95);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0) scale(1);
+        opacity: 1;
+    }
+}
+
+.toast-enter-active,
+.toast-leave-active {
+    transition: all 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.toast-enter-from,
+.toast-leave-to {
+    transform: translateX(120%) scale(0.95);
+    opacity: 0;
+}
+
+/* Hover effect */
+[toast-type]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+}
+</style>
+  </head>

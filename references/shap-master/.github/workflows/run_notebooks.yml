@@ -1,0 +1,42 @@
+name: notebooks
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+    paths:
+      - "shap/**"
+      - "notebooks/**"
+      - ".github/workflows/run_notebooks.yml"
+      - "scripts/**"
+      - "pyproject.toml"
+      - "CMakeLists.txt"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Cancel only PR intermediate builds
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+
+jobs:
+  run_notebooks:
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Graphviz
+        run: sudo apt-get update && sudo apt-get install -y graphviz
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Install dependencies
+        run: |
+          uv pip install --system . --group test --group plots --group nbtest
+      - name: Run notebooks
+        run: |
+          python scripts/run_notebooks_timeouts.py

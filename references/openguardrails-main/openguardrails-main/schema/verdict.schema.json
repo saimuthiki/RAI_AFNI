@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openguardrails.com/schema/0.8/verdict.schema.json",
+  "title": "Verdict",
+  "description": "The runtime's decision about a GuardEvent. Two decisions: allow | block. Redaction is not a decision — a non-empty modifications.spans on an allow says it. \"Flag\" is not a decision — allow with findings says it.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "provider",
+    "decision"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Runtime-assigned identity of the judged event, returned to the caller here."
+    },
+    "provider": {
+      "type": "string",
+      "minLength": 1
+    },
+    "decision": {
+      "enum": [
+        "allow",
+        "block"
+      ]
+    },
+    "latency_ms": {
+      "type": "number",
+      "minimum": 0
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "category"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string",
+            "pattern": "^(safety|security|privacy|x)\\.[a-z0-9_.]+$"
+          },
+          "severity": {
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "action": {
+            "enum": [
+              "flag",
+              "redact",
+              "block"
+            ],
+            "description": "What this finding contributed to the decision."
+          },
+          "path": {
+            "type": "string",
+            "description": "Payload path of the judged text, e.g. payload.tool_calls.1.arguments.command. Registration contract: paths name locations the producer registered when building the event."
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "detector": {
+            "type": "string"
+          },
+          "fp": {
+            "type": "string",
+            "description": "Whitelist fingerprint: a hash of the finding's subject, minted by the engine. Never the value itself."
+          },
+          "whitelisted": {
+            "type": "boolean",
+            "description": "True when an operator whitelisted this exact subject: the finding is recorded but contributes nothing to the decision."
+          },
+          "subject": {
+            "type": "string",
+            "description": "The detected value this finding is about, as the producer sent it — at most one per finding, and what an operator's false-positive exception keys on. NOT a per-span echo of matched text, which findings MUST NOT carry."
+          }
+        }
+      }
+    },
+    "modifications": {
+      "type": "object",
+      "required": [
+        "spans"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "spans": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "path",
+              "start",
+              "end",
+              "replacement"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "start": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "end": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "replacement": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "unjudged": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Payload paths this verdict could NOT judge. Absent or empty asserts every routed text was judged; a fail-closed enforcement point MUST treat a non-empty value as \"could not look\", which is not \"found nothing\"."
+    }
+  }
+}

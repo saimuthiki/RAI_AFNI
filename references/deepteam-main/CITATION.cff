@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it as below.
+authors:
+  - family-names: Ip
+    given-names: Jeffrey
+  - family-names: Vongthongsri
+    given-names: Kritin
+title: deepteam
+version: 1.0.9
+date-released: "2026-08-13"
+url: https://confident-ai.com
+repository-code: https://github.com/confident-ai/deepteam
+license: Apache-2.0
+type: software
+description: The Open-Source LLM Red Teaming Framework
