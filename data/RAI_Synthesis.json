@@ -1,0 +1,1237 @@
+{
+  "master_aspect_list": [
+    {
+      "aspect": "Presidio-backed PII entity detection and redaction",
+      "tenet": "Privacy",
+      "source_repos": ["llm-guard-main", "Guardrails-develop", "Infosys-Responsible-AI-Toolkit-master", "guardrails-main"],
+      "notes": "Microsoft Presidio (analyzer + anonymizer, spaCy/DeBERTa NLP engine) is the single most reused PII engine across the set, wrapped four different ways."
+    },
+    {
+      "aspect": "Email address detection (regex)",
+      "tenet": "Privacy",
+      "source_repos": ["agentic_security-main", "hai-guardrails-main", "safe-zone-main", "deepchecks-main", "llm-guard-main"],
+      "notes": "Cheapest and most universally implemented PII check; deterministic and effectively free to run at request time."
+    },
+    {
+      "aspect": "Phone number detection (regex, US and international)",
+      "tenet": "Privacy",
+      "source_repos": ["agentic_security-main", "hai-guardrails-main", "safe-zone-main", "llm-guard-main", "Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Widely present but formats vary by repo, so a single canonical pattern set should be standardised for AFNI."
+    },
+    {
+      "aspect": "US Social Security Number detection",
+      "tenet": "Privacy",
+      "source_repos": ["agentic_security-main", "hai-guardrails-main", "safe-zone-main", "llm-guard-main", "Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "agentic_security-main is the only one excluding invalid 000/666/9xx area codes, which meaningfully cuts false positives."
+    },
+    {
+      "aspect": "Credit card detection with Luhn checksum validation",
+      "tenet": "Privacy",
+      "source_repos": ["agentic_security-main", "llm-guard-main", "Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Luhn validation is the difference between a usable check and a noisy one; hai-guardrails-main and safe-zone-main omit it and self-document false positives."
+    },
+    {
+      "aspect": "IBAN / bank account / routing number detection",
+      "tenet": "Privacy",
+      "source_repos": ["llm-guard-main", "safe-zone-main", "Infosys-Responsible-AI-Toolkit-master", "guardrails-main"],
+      "notes": "Financial identifiers are covered but country coverage is uneven and mostly EU/TR/US."
+    },
+    {
+      "aspect": "National / government ID detection across jurisdictions",
+      "tenet": "Privacy",
+      "source_repos": ["Infosys-Responsible-AI-Toolkit-master", "safe-zone-main", "openguardrails-main", "llm-guard-main"],
+      "notes": "Infosys covers roughly 30 entity types including IN_PAN/IN_AADHAAR, UK_NHS, SG_NRIC, IT and AU IDs; safe-zone-main is Turkey-heavy; openguardrails-main only defines the vocabulary."
+    },
+    {
+      "aspect": "Healthcare PHI entities (ICD-10, MRN, NPI, DEA, medical licence)",
+      "tenet": "Privacy",
+      "source_repos": ["hai-guardrails-main", "Infosys-Responsible-AI-Toolkit-master", "guardrails-main"],
+      "notes": "hai-guardrails-main has the most concrete healthcare regex table and is worth porting into Presidio as custom recognisers."
+    },
+    {
+      "aspect": "Network identifiers treated as PII (IP address, MAC, UUID)",
+      "tenet": "Privacy",
+      "source_repos": ["hai-guardrails-main", "safe-zone-main", "llm-guard-main"],
+      "notes": "Useful for internal-infrastructure leakage, but noisy unless scoped to outbound responses only."
+    },
+    {
+      "aspect": "Zero-shot / NER-model PII detection beyond a fixed taxonomy",
+      "tenet": "Privacy",
+      "source_repos": ["Guardrails-develop", "llm-guard-main"],
+      "notes": "NeMo's GLiNER-PII rail and LLM Guard's ai4privacy DeBERTa NER catch entity types no regex list anticipated."
+    },
+    {
+      "aspect": "LLM-as-judge PII leakage detection",
+      "tenet": "Privacy",
+      "source_repos": ["deepeval-main", "deepteam-main", "promptfoo-main", "safe-zone-main", "hai-guardrails-main"],
+      "notes": "Good recall on unusual or partially redacted identifiers, but every call costs money and latency, so it belongs in evaluation rather than the hot path."
+    },
+    {
+      "aspect": "Reversible anonymisation with a vault for later re-identification",
+      "tenet": "Privacy",
+      "source_repos": ["llm-guard-main"],
+      "notes": "The Anonymize/Deanonymize vault pair is unique in the set and is what makes redaction usable in real workflows rather than destructive."
+    },
+    {
+      "aspect": "Synthetic-value substitution, encryption and differential privacy",
+      "tenet": "Privacy",
+      "source_repos": ["Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Faker-based masking plus an encryption utility and a differential-privacy path; only repo offering non-destructive alternatives to plain redaction at this depth."
+    },
+    {
+      "aspect": "Multi-format and multi-modal PII scanning (PDF, Office, images/OCR, DICOM, video)",
+      "tenet": "Privacy",
+      "source_repos": ["Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Unique capability in the set and directly relevant if AFNI ingests client documents."
+    },
+    {
+      "aspect": "PII leakage red-team probing (ProPILE twin/triplet/quadruplet patterns)",
+      "tenet": "Privacy",
+      "source_repos": ["garak-main", "deepteam-main", "promptfoo-main", "giskard-oss-main"],
+      "notes": "The offline counterpart to runtime PII filtering: it proves whether the model itself will surrender personal data under pressure."
+    },
+    {
+      "aspect": "Training-data memorisation / verbatim replay leak testing",
+      "tenet": "Privacy",
+      "source_repos": ["garak-main", "JCB-main", "PyRIT-main"],
+      "notes": "Detects a model reproducing memorised copyrighted or personal source text, using cloze prompts and MinHash near-duplicate matching."
+    },
+    {
+      "aspect": "Log and telemetry secret redaction before persistence",
+      "tenet": "Privacy",
+      "source_repos": ["agentic_security-main", "safe-zone-main"],
+      "notes": "Often forgotten: the guardrail log itself becomes a data-leak surface unless keys and tokens are scrubbed on the way in."
+    },
+    {
+      "aspect": "System-prompt and configuration leakage detection",
+      "tenet": "Privacy",
+      "source_repos": ["deepteam-main", "hai-guardrails-main", "rebuff-main", "garak-main", "PyRIT-main"],
+      "notes": "Covers both the runtime guard (leakage guard, canary token) and the attack probes (sysprompt_extraction, prompt-leakage vulnerability)."
+    },
+    {
+      "aspect": "Standardised PII entity vocabulary and severity taxonomy",
+      "tenet": "Privacy",
+      "source_repos": ["openguardrails-main"],
+      "notes": "Fourteen semantic PII buckets with country refinement plus an explicit Presidio-to-taxonomy mapping table, so different detectors can report in one language."
+    },
+    {
+      "aspect": "Fine-tuned transformer prompt-injection classifier",
+      "tenet": "Security",
+      "source_repos": ["llm-guard-main", "Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "LLM Guard's DeBERTa-v3 injection classifier (0.92 default threshold) is the strongest local, no-API-cost injection detector in the set."
+    },
+    {
+      "aspect": "Heuristic / fuzzy keyword prompt-injection screening",
+      "tenet": "Security",
+      "source_repos": ["rebuff-main", "hai-guardrails-main"],
+      "notes": "Rebuff generates roughly 7,700 templated injection phrases and fuzzy-matches them; English-only but effectively free and a good first-pass filter."
+    },
+    {
+      "aspect": "Regex / phrase-list prompt-injection and jailbreak detection",
+      "tenet": "Security",
+      "source_repos": ["hai-guardrails-main", "safe-zone-main", "PyRIT-main", "openguardrails-main"],
+      "notes": "PyRIT's maintainers openly document their static injection scorer as high-recall and high-false-positive, which is the right way to use this layer."
+    },
+    {
+      "aspect": "LLM-as-judge prompt-injection scoring",
+      "tenet": "Security",
+      "source_repos": ["rebuff-main", "hai-guardrails-main", "deepteam-main", "safe-zone-main"],
+      "notes": "Catches novel phrasings the keyword tiers miss, at the cost of one model call per request."
+    },
+    {
+      "aspect": "Managed cloud jailbreak / prompt-shield API integration",
+      "tenet": "Security",
+      "source_repos": ["PyRIT-main", "FuzzyAI-main", "Guardrails-develop"],
+      "notes": "Azure Prompt Shields, AWS Bedrock Guardrails and Azure Content Safety are all already wired up as callable checks in these repos."
+    },
+    {
+      "aspect": "Vector-similarity lookup against a learned attack corpus",
+      "tenet": "Security",
+      "source_repos": ["rebuff-main", "Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Infosys ships a 1.7MB pre-computed jailbreak embedding bank; Rebuff grows its own corpus from confirmed leaks."
+    },
+    {
+      "aspect": "Canary-token insertion and leak detection",
+      "tenet": "Security",
+      "source_repos": ["rebuff-main"],
+      "notes": "A cheap, deterministic tripwire that proves context exfiltration actually happened rather than guessing at it."
+    },
+    {
+      "aspect": "Perplexity-based jailbreak heuristics (length ratio, prefix/suffix)",
+      "tenet": "Security",
+      "source_repos": ["Guardrails-develop"],
+      "notes": "NeMo publishes honest numbers: about 31% detection at 7.4% false positives for the length heuristic, but 49 of 50 GCG suffix attacks caught at 0.04% false positives."
+    },
+    {
+      "aspect": "Model-based jailbreak classifier on embeddings",
+      "tenet": "Security",
+      "source_repos": ["Guardrails-develop", "Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Random-forest over Snowflake arctic-embed embeddings (NeMo) or a fine-tuned DistilBERT (Infosys); both run locally without a paid API."
+    },
+    {
+      "aspect": "DAN / roleplay persona jailbreak attack library",
+      "tenet": "Security",
+      "source_repos": ["garak-main", "FuzzyAI-main", "deepteam-main", "PyRIT-main", "promptfoo-main", "agentic_security-main"],
+      "notes": "garak-main has the deepest catalogue (20-plus DAN variants plus an in-the-wild corpus) with a verified 127-prompt ablation set."
+    },
+    {
+      "aspect": "Encoding and obfuscation attacks (base64, ROT13, leetspeak, morse, unicode tags, ASCII art, steganography)",
+      "tenet": "Security",
+      "source_repos": ["garak-main", "PyRIT-main", "promptfoo-main", "agentic_security-main", "FuzzyAI-main", "deepteam-main", "giskard-oss-main"],
+      "notes": "The single most duplicated attack family; garak-main (20 encodings) and PyRIT-main (about 80 converters) are the definitive implementations."
+    },
+    {
+      "aspect": "Multi-turn iterative jailbreaks (Crescendo, TAP, PAIR, GOAT, Tree, Linear, ActorAttack)",
+      "tenet": "Security",
+      "source_repos": ["PyRIT-main", "deepteam-main", "giskard-oss-main", "promptfoo-main", "garak-main", "FuzzyAI-main"],
+      "notes": "This is where real-world breaches happen and where single-turn filters fail; PyRIT-main has the most rigorous implementations with backtracking."
+    },
+    {
+      "aspect": "Many-shot / context-stuffing jailbreak simulation",
+      "tenet": "Security",
+      "source_repos": ["agentic_security-main", "FuzzyAI-main", "PyRIT-main", "deepteam-main"],
+      "notes": "Directly exercises long-context models, and is the attack NeMo's context-bloat rail is designed to stop."
+    },
+    {
+      "aspect": "Optimisation-based adversarial suffix attacks (GCG, genetic, Best-of-N)",
+      "tenet": "Security",
+      "source_repos": ["giskard-oss-main", "promptfoo-main", "FuzzyAI-main", "agentic_security-main"],
+      "notes": "Mostly shipped as fixed pre-computed suffixes rather than live gradient search, and maintainers note they are English-tuned."
+    },
+    {
+      "aspect": "Seed-template mutation with bandit-based success reuse",
+      "tenet": "Security",
+      "source_repos": ["JCB-main", "agentic_security-main"],
+      "notes": "JCB's WordNet synonym mutator plus UCB/epsilon-greedy seed selection is an efficient way to find cheap wins, but the code is research-grade."
+    },
+    {
+      "aspect": "Indirect / latent prompt injection via documents, RAG chunks and web content",
+      "tenet": "Security",
+      "source_repos": ["garak-main", "promptfoo-main", "deepteam-main"],
+      "notes": "The highest-risk category for AFNI's RAG applications because the attacker never touches the chat box."
+    },
+    {
+      "aspect": "YARA-rule injection detection (SQLi, Jinja template, code, XSS)",
+      "tenet": "Security",
+      "source_repos": ["Guardrails-develop"],
+      "notes": "Fully local, deterministic and fast; note the sanitise action is unimplemented so only reject/omit are usable."
+    },
+    {
+      "aspect": "Insecure-output-handling scorers (SQLi, XSS, SSRF, SSTI, XXE, path traversal, LDAP, shell)",
+      "tenet": "Security",
+      "source_repos": ["PyRIT-main", "deepteam-main", "promptfoo-main"],
+      "notes": "PyRIT's nine regex scorers map explicitly to OWASP LLM02 and run with zero model calls, making them ideal runtime output rails."
+    },
+    {
+      "aspect": "Secrets and credential leak regex scanning",
+      "tenet": "Security",
+      "source_repos": ["garak-main", "hai-guardrails-main", "safe-zone-main", "llm-guard-main", "PyRIT-main", "openguardrails-main"],
+      "notes": "garak-main carries 58 named provider patterns and llm-guard-main delegates to the maintained bc-detect-secrets plugin set."
+    },
+    {
+      "aspect": "Shannon-entropy gating to suppress secret false positives",
+      "tenet": "Security",
+      "source_repos": ["hai-guardrails-main"],
+      "notes": "A small idea with a large payoff: every secret regex should be paired with an entropy floor before it blocks traffic."
+    },
+    {
+      "aspect": "Access-control red-teaming (BOLA, BFLA, RBAC bypass, debug access)",
+      "tenet": "Security",
+      "source_repos": ["deepteam-main", "promptfoo-main"],
+      "notes": "Essential once an AI app can call authenticated internal APIs; note many promptfoo variants are remote-only plugins."
+    },
+    {
+      "aspect": "Agentic attack surface probes (goal theft, tool-metadata poisoning, orchestration abuse, agent identity abuse)",
+      "tenet": "Security",
+      "source_repos": ["deepteam-main", "promptfoo-main"],
+      "notes": "DeepTeam's 12 agentic families with 19 matching judges is the deepest agent-specific coverage in the set."
+    },
+    {
+      "aspect": "Tool-call and tool-result schema validation (fail-closed, no model call)",
+      "tenet": "Security",
+      "source_repos": ["Guardrails-develop", "deepeval-main"],
+      "notes": "NeMo's IORails validate emitted tool calls against declared JSON schemas; DeepEval's ToolPermission enforces an allow/deny list deterministically."
+    },
+    {
+      "aspect": "Invisible-text, zero-width and ASCII-smuggling detection",
+      "tenet": "Security",
+      "source_repos": ["llm-guard-main", "Infosys-Responsible-AI-Toolkit-master", "promptfoo-main", "garak-main", "PyRIT-main"],
+      "notes": "Deterministic, near-zero-cost and catches a whole class of filter-bypass tricks; should be non-negotiable in the input rail."
+    },
+    {
+      "aspect": "Context-bloat and prompt-stuffing heuristics (entropy, repeated n-grams, longest run, size cap)",
+      "tenet": "Security",
+      "source_repos": ["Guardrails-develop"],
+      "notes": "Applied cheapest-first, so it drops abusive payloads before any expensive check runs."
+    },
+    {
+      "aspect": "Gibberish / noise input detection",
+      "tenet": "Security",
+      "source_repos": ["llm-guard-main", "Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Catches obfuscated adversarial payloads that read as nonsense to a classifier but decode for the model."
+    },
+    {
+      "aspect": "Malicious URL classification and reachability checking",
+      "tenet": "Security",
+      "source_repos": ["llm-guard-main", "Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Stops the model handing users a phishing link; Infosys uses a codebert-based classifier, LLM Guard uses heuristics plus a live reachability probe."
+    },
+    {
+      "aspect": "Malicious command and data-exfiltration egress control",
+      "tenet": "Security",
+      "source_repos": ["openguardrails-main", "agentic_security-main"],
+      "notes": "Regexes for curl-piped-to-shell and rm -rf plus a network host allowlist; reference-grade only, but the right control to build for coding agents."
+    },
+    {
+      "aspect": "LLM-driven static code scanning for AI-security defects",
+      "tenet": "Security",
+      "source_repos": ["deepteam-main", "promptfoo-main"],
+      "notes": "Flags eval/exec, shell=True and hardcoded keys in the application code itself, and emits SARIF for GitHub code scanning (promptfoo)."
+    },
+    {
+      "aspect": "Sandbox-escape and container-recon detection in model output",
+      "tenet": "Security",
+      "source_repos": ["agentic_security-main"],
+      "notes": "Regexes for capability probing, docker.sock inspection and Kubernetes service-account probing; niche but directly relevant to agent runtimes."
+    },
+    {
+      "aspect": "Known-bad signature reproduction tests (EICAR, GTUBE, GTphish)",
+      "tenet": "Security",
+      "source_repos": ["garak-main"],
+      "notes": "A clean way to verify that downstream content-scanning actually inspects model output."
+    },
+    {
+      "aspect": "Code-block detection and blocking in prompts and responses",
+      "tenet": "Security",
+      "source_repos": ["llm-guard-main", "Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Only appropriate for non-developer-facing applications, otherwise it produces constant false positives."
+    },
+    {
+      "aspect": "Randomised-perturbation jailbreak defence (SmoothLLM)",
+      "tenet": "Security",
+      "source_repos": ["Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Resamples noisy prompt variants to test robustness; expensive because it multiplies model calls."
+    },
+    {
+      "aspect": "Multimodal attack adapters (image, audio, video jailbreaks)",
+      "tenet": "Security",
+      "source_repos": ["agentic_security-main", "garak-main", "PyRIT-main", "promptfoo-main"],
+      "notes": "Typographic image attacks and speech-synthesised prompts bypass text-only filters entirely."
+    },
+    {
+      "aspect": "Guardrail-presence probing (shields up/down)",
+      "tenet": "Security",
+      "source_repos": ["garak-main"],
+      "notes": "Lets AFNI audit whether a deployed moderation layer is actually intercepting content, which is exactly the evidence a client review asks for."
+    },
+    {
+      "aspect": "Cloud moderation and guardrail APIs used as attack-success oracles",
+      "tenet": "Security",
+      "source_repos": ["FuzzyAI-main"],
+      "notes": "Azure Content Safety detectJailbreak/shieldPrompt, Bedrock apply_guardrail and OpenAI omni-moderation are all callable as scoring classifiers, ideal for benchmarking cloud filters against open-source guards."
+    },
+    {
+      "aspect": "Versioned YAML attack-rule authoring with severity and pass/fail conditions",
+      "tenet": "Security",
+      "source_repos": ["agentic_security-main"],
+      "notes": "Makes the red-team corpus reviewable and diffable in git rather than buried in code."
+    },
+    {
+      "aspect": "Group fairness disparity metrics (demographic parity, equalised odds, equal opportunity, disparate impact)",
+      "tenet": "Fairness & Bias",
+      "source_repos": ["fairlearn-main", "AIF360-main", "Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "All three trace back to the same peer-reviewed definitions; Fairlearn's implementation is the cleanest and MIT-licensed."
+    },
+    {
+      "aspect": "Disaggregated metric computation with derived difference and ratio wrappers",
+      "tenet": "Fairness & Bias",
+      "source_repos": ["fairlearn-main", "AIF360-main"],
+      "notes": "Fairlearn's MetricFrame auto-generates group-disparity versions of 11 standard scikit-learn metrics, which covers most governance reporting needs out of the box."
+    },
+    {
+      "aspect": "Individual-fairness and inequality indices (Theil, generalised entropy, consistency)",
+      "tenet": "Fairness & Bias",
+      "source_repos": ["AIF360-main"],
+      "notes": "Answers a different question from group parity: whether similar individuals are treated similarly."
+    },
+    {
+      "aspect": "Automated biased-subgroup discovery (MDSS, FACTS, GerryFair, weak segments)",
+      "tenet": "Fairness & Bias",
+      "source_repos": ["AIF360-main", "deepchecks-main"],
+      "notes": "The only capability in the set that finds harmed groups nobody thought to look for; AIF360's scans are heuristic optimisers, not exhaustive proofs."
+    },
+    {
+      "aspect": "Intersectional / multi-attribute fairness with bootstrap confidence intervals",
+      "tenet": "Fairness & Bias",
+      "source_repos": ["fairlearn-main", "AIF360-main"],
+      "notes": "Confidence intervals matter because small subgroup samples produce dramatic but meaningless disparity numbers."
+    },
+    {
+      "aspect": "Pre-processing bias mitigation (Reweighing, Disparate Impact Remover, CorrelationRemover, LFR)",
+      "tenet": "Fairness & Bias",
+      "source_repos": ["AIF360-main", "fairlearn-main", "Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Requires access to training data, so it only applies where AFNI owns the model pipeline."
+    },
+    {
+      "aspect": "In-processing bias mitigation (adversarial debiasing, exponentiated gradient, grid search, prejudice remover)",
+      "tenet": "Fairness & Bias",
+      "source_repos": ["AIF360-main", "fairlearn-main"],
+      "notes": "Highest-effort tier: needs a retrainable model plus PyTorch or TensorFlow for the adversarial variants."
+    },
+    {
+      "aspect": "Post-processing bias mitigation (ThresholdOptimizer, calibrated equalised odds, reject option, reranking)",
+      "tenet": "Fairness & Bias",
+      "source_repos": ["fairlearn-main", "AIF360-main", "Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "The pragmatic choice for black-box models: only needs scores at inference, no retraining."
+    },
+    {
+      "aspect": "Optimal-transport (Wasserstein) fairness distance",
+      "tenet": "Fairness & Bias",
+      "source_repos": ["AIF360-main"],
+      "notes": "Compares whole outcome distributions rather than a single rate, useful for continuous scores."
+    },
+    {
+      "aspect": "Subgroup performance-gap, class-imbalance and label-leakage data checks",
+      "tenet": "Fairness & Bias",
+      "source_repos": ["deepchecks-main"],
+      "notes": "PerformanceBias plus imbalance and identifier-correlation checks catch bias that is baked into the dataset before any model is trained."
+    },
+    {
+      "aspect": "LLM-output bias detection by demographic axis (LLM-as-judge)",
+      "tenet": "Fairness & Bias",
+      "source_repos": ["deepeval-main", "deepteam-main", "hai-guardrails-main", "promptfoo-main", "giskard-oss-main"],
+      "notes": "The only practical route to fairness testing for generative text, since no protected-attribute column exists."
+    },
+    {
+      "aspect": "Local model-based bias classifier for text",
+      "tenet": "Fairness & Bias",
+      "source_repos": ["llm-guard-main", "deepeval-main"],
+      "notes": "LLM Guard's output Bias scanner and DeepEval's optional Dbias scorer both run locally with no per-call API cost."
+    },
+    {
+      "aspect": "Bias red-team probe packs (age, disability, gender, race, LMRC risk cards)",
+      "tenet": "Fairness & Bias",
+      "source_repos": ["promptfoo-main", "garak-main", "PyRIT-main"],
+      "notes": "PyRIT additionally ships a repeatable story-generation fairness benchmark across professions and roles."
+    },
+    {
+      "aspect": "Image and multimodal demographic bias review",
+      "tenet": "Fairness & Bias",
+      "source_repos": ["Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Vision-model review of generated images for demographic skew; unique in the set and relevant if AFNI ships image generation."
+    },
+    {
+      "aspect": "Feature-level decomposition of between-group outcome gaps",
+      "tenet": "Fairness & Bias",
+      "source_repos": ["shap-master"],
+      "notes": "SHAP's group_difference turns a fairness metric from a red number into an explanation of which features caused it."
+    },
+    {
+      "aspect": "Standard bias benchmark harnesses (BBQ, EquityMedQA, TrustLLM fairness)",
+      "tenet": "Fairness & Bias",
+      "source_repos": ["deepeval-main", "Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Gives an externally recognisable score to show a client reviewer, rather than an internal metric they must take on trust."
+    },
+    {
+      "aspect": "Shapley-value feature attribution across model families (Tree, Kernel, Deep, Gradient, Linear, GPU)",
+      "tenet": "Explainability & Transparency",
+      "source_repos": ["shap-master", "Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Tree and Linear SHAP are mathematically exact; Kernel and Permutation are stochastic approximations whose quality depends on background data and sample count."
+    },
+    {
+      "aspect": "LIME local surrogate explanations",
+      "tenet": "Explainability & Transparency",
+      "source_repos": ["Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Cheaper and faster than Kernel SHAP for single-prediction explanations, and familiar to reviewers."
+    },
+    {
+      "aspect": "Token-level attribution for text and generative models",
+      "tenet": "Explainability & Transparency",
+      "source_repos": ["shap-master", "Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "SHAP wraps HuggingFace pipelines with teacher-forcing and top-k LM models; Infosys uses a prompt-based token-importance scorer."
+    },
+    {
+      "aspect": "Plain-language and JSON explainers for computed metrics",
+      "tenet": "Explainability & Transparency",
+      "source_repos": ["AIF360-main"],
+      "notes": "Turns each fairness number into a sentence a non-technical reviewer can read, which is exactly what an approval pack needs."
+    },
+    {
+      "aspect": "Structured-output and JSON-schema contract enforcement",
+      "tenet": "Explainability & Transparency",
+      "source_repos": ["guardrails-main", "giskard-oss-main", "deepeval-main", "llm-guard-main", "safe-zone-main"],
+      "notes": "Making the model answer in a declared shape is the cheapest form of transparency and the easiest to test."
+    },
+    {
+      "aspect": "Character-offset error spans on streamed output",
+      "tenet": "Explainability & Transparency",
+      "source_repos": ["guardrails-main", "openguardrails-main"],
+      "notes": "Lets a UI highlight exactly which substring failed, instead of showing an opaque blocked message; openguardrails also fixed a real Unicode offset bug here."
+    },
+    {
+      "aspect": "Per-check confidence breakdown showing which layer fired and why",
+      "tenet": "Explainability & Transparency",
+      "source_repos": ["safe-zone-main", "rebuff-main", "openguardrails-main"],
+      "notes": "safe-zone-main exposes regex score, model score and final score separately, which is the right shape for an audit record."
+    },
+    {
+      "aspect": "Custom natural-language rubric judges with reasons (G-Eval, llm-rubric, Conformity, DAG)",
+      "tenet": "Explainability & Transparency",
+      "source_repos": ["deepeval-main", "promptfoo-main", "giskard-oss-main", "Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Lets AFNI encode a client's own written policy as a check that returns a score plus a written justification."
+    },
+    {
+      "aspect": "Structured reasoning explanations (Chain-of-Thought, Chain-of-Verification, Thread/Graph-of-Thought)",
+      "tenet": "Explainability & Transparency",
+      "source_repos": ["Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Explains an LLM answer by re-deriving it; useful for demos but adds several model calls per request."
+    },
+    {
+      "aspect": "Readability and reading-level metrics",
+      "tenet": "Explainability & Transparency",
+      "source_repos": ["giskard-oss-main", "llm-guard-main"],
+      "notes": "Flesch, Gunning Fog, Coleman-Liau and Dale-Chall scores; a simple accessibility and comprehensibility control."
+    },
+    {
+      "aspect": "Topic-adherence / on-topic scope classification",
+      "tenet": "Explainability & Transparency",
+      "source_repos": ["Guardrails-develop", "deepteam-main", "llm-guard-main", "deepeval-main", "guardrails-main"],
+      "notes": "Being explicit about what an assistant will and will not discuss is both a transparency and a scope-control measure."
+    },
+    {
+      "aspect": "Counterfactual recourse and minimal-change action optimisation",
+      "tenet": "Explainability & Transparency",
+      "source_repos": ["shap-master", "AIF360-main"],
+      "notes": "Answers the question a real user asks: what would have to change for a different decision."
+    },
+    {
+      "aspect": "Explanation-quality benchmarking (local accuracy, faithfulness, keep/remove-and-retrain)",
+      "tenet": "Explainability & Transparency",
+      "source_repos": ["shap-master"],
+      "notes": "Tests the explanation method itself, which matters because approximate SHAP variants can be misleading."
+    },
+    {
+      "aspect": "Deterministic format validators (regex, length, range, choices, valid URL, one-line)",
+      "tenet": "Explainability & Transparency",
+      "source_repos": ["guardrails-main", "giskard-oss-main", "promptfoo-main", "safe-zone-main", "deepeval-main"],
+      "notes": "Fully reproducible by construction, free to run, and the backbone of any CI regression suite."
+    },
+    {
+      "aspect": "Transformer toxicity classifier (Detoxify, roberta-toxicity, unbiased-toxic-roberta)",
+      "tenet": "Profanity / Content Safety",
+      "source_repos": ["llm-guard-main", "deepchecks-main", "deepeval-main", "Infosys-Responsible-AI-Toolkit-master", "garak-main"],
+      "notes": "Local, no per-call cost, and the workhorse of content safety; garak's own eval shows one such model at only 0.375 recall, so thresholds must be tuned on real traffic."
+    },
+    {
+      "aspect": "Profanity wordlist, slur list and substring blocklist filtering",
+      "tenet": "Profanity / Content Safety",
+      "source_repos": ["garak-main", "Infosys-Responsible-AI-Toolkit-master", "llm-guard-main", "openguardrails-main"],
+      "notes": "garak bundles Surge AI's 9 categories, UK Ofcom's 6 and the LDNOOBW list; Infosys adds exact begin/end offsets for censoring."
+    },
+    {
+      "aspect": "LLM-as-judge toxicity, hate-speech and harassment classification",
+      "tenet": "Profanity / Content Safety",
+      "source_repos": ["deepteam-main", "hai-guardrails-main", "giskard-oss-main", "deepeval-main", "PyRIT-main"],
+      "notes": "Handles context and sarcasm far better than wordlists, but every check is a paid call and results vary with the judge model."
+    },
+    {
+      "aspect": "Managed safety-model integration (Llama Guard, ShieldGemma, Azure Content Safety, Perspective, OpenAI Moderation)",
+      "tenet": "Profanity / Content Safety",
+      "source_repos": ["PyRIT-main", "Guardrails-develop", "FuzzyAI-main", "garak-main", "promptfoo-main"],
+      "notes": "Already wired up in five repos, so switching between cloud and self-hosted guard models is a config change rather than a rewrite."
+    },
+    {
+      "aspect": "Multi-category harm taxonomy (self-harm, sexual, violence, weapons/CBRN, illegal, child exploitation)",
+      "tenet": "Profanity / Content Safety",
+      "source_repos": ["deepteam-main", "promptfoo-main", "openguardrails-main", "PyRIT-main", "giskard-oss-main"],
+      "notes": "promptfoo's 25-plus categories map to MLCommons and HarmBench taxonomies, which is what auditors recognise."
+    },
+    {
+      "aspect": "Zero-shot restricted-topic and banned-topic classification",
+      "tenet": "Profanity / Content Safety",
+      "source_repos": ["llm-guard-main", "Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Lets each AFNI application declare its own forbidden topics without training a model per project."
+    },
+    {
+      "aspect": "NSFW image and video frame detection",
+      "tenet": "Profanity / Content Safety",
+      "source_repos": ["Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "NudeNet plus a separate NSFW detector; the only non-text content-safety implementation in the set."
+    },
+    {
+      "aspect": "Adult / explicit text content detection",
+      "tenet": "Profanity / Content Safety",
+      "source_repos": ["hai-guardrails-main", "deepteam-main", "giskard-oss-main"],
+      "notes": "All LLM-judge based, returning category labels plus an explicit boolean."
+    },
+    {
+      "aspect": "Sentiment and hostility screening",
+      "tenet": "Profanity / Content Safety",
+      "source_repos": ["llm-guard-main", "deepchecks-main"],
+      "notes": "A softer signal than toxicity; better used for routing and alerting than for hard blocking."
+    },
+    {
+      "aspect": "Harmful-content red-team datasets (HarmBench, BeaverTails, DoNotAnswer, AdvBench, ToxicChat, Aegis, XSTest)",
+      "tenet": "Profanity / Content Safety",
+      "source_repos": ["promptfoo-main", "JCB-main", "giskard-oss-main", "deepteam-main", "agentic_security-main", "FuzzyAI-main"],
+      "notes": "Reusing published labelled corpora is far cheaper and more defensible than authoring an internal harmful-prompt set from scratch."
+    },
+    {
+      "aspect": "Multilingual and localised refusal messaging",
+      "tenet": "Profanity / Content Safety",
+      "source_repos": ["Guardrails-develop"],
+      "notes": "Language detection across nine languages so a blocked user gets a message they can read."
+    },
+    {
+      "aspect": "Multimodal content-safety probes (UnsafeBench, VLGuard, image/audio/video wrapping)",
+      "tenet": "Profanity / Content Safety",
+      "source_repos": ["promptfoo-main", "garak-main"],
+      "notes": "Wraps unsafe content in non-text modalities to test whether the guardrail only inspects text."
+    },
+    {
+      "aspect": "NLI / entailment-based groundedness scoring",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["llm-guard-main", "Guardrails-develop", "deepeval-main"],
+      "notes": "LLM Guard's cross-encoder FactualConsistency scanner, NeMo's AlignScore rail and DeepEval's SummaC path all run locally without a paid judge."
+    },
+    {
+      "aspect": "LLM-as-judge groundedness and faithfulness",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["giskard-oss-main", "deepeval-main", "deepteam-main", "Infosys-Responsible-AI-Toolkit-master", "promptfoo-main", "guardrails-main", "evals-main"],
+      "notes": "The most duplicated check in the whole set; giskard usefully separates strict groundedness from a permissive contradiction-only variant."
+    },
+    {
+      "aspect": "RAG retrieval-quality metrics (contextual precision, recall, relevance, answer relevancy)",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["deepeval-main", "promptfoo-main", "giskard-oss-main"],
+      "notes": "Most hallucinations in AFNI-style applications are retrieval failures, so measuring retrieval is the higher-leverage fix."
+    },
+    {
+      "aspect": "Embedding-similarity groundedness (input-output, response-source, input-source)",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["Infosys-Responsible-AI-Toolkit-master", "giskard-oss-main", "guardrails-main"],
+      "notes": "Cheap and fast but shallow: high similarity does not prove factual support."
+    },
+    {
+      "aspect": "Self-consistency sampling hallucination check (SelfCheckGPT style)",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["Guardrails-develop"],
+      "notes": "Generates extra sampled completions and asks a judge whether they agree; effective but multiplies cost and latency."
+    },
+    {
+      "aspect": "Dedicated hallucination-evaluation models (Vectara, Patronus Lynx)",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["deepeval-main", "Guardrails-develop"],
+      "notes": "Purpose-trained scorers that avoid a general LLM judge entirely, which stabilises results and cuts cost."
+    },
+    {
+      "aspect": "Fabrication probes for fake citations, APIs, entities and statistics",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["deepteam-main", "giskard-oss-main"],
+      "notes": "Includes sycophancy and out-of-scope generators that pressure the model with a false premise to see if it agrees."
+    },
+    {
+      "aspect": "Package / dependency hallucination detection",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["garak-main", "PyRIT-main"],
+      "notes": "A real supply-chain risk for coding assistants; garak's bundled package list dates from December 2021 and must be refreshed."
+    },
+    {
+      "aspect": "Refusal and over-refusal detection (phrase list, ML classifier, LLM judge, NoRefusal)",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["agentic_security-main", "garak-main", "FuzzyAI-main", "PyRIT-main", "llm-guard-main", "JCB-main"],
+      "notes": "Serves two purposes: scoring red-team success, and catching an over-tuned guardrail that refuses legitimate work."
+    },
+    {
+      "aspect": "Data and concept drift detection (PSI, Cramer's V, Wasserstein, KS, embedding drift)",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["deepchecks-main"],
+      "notes": "The clearest early-warning signal that a model quietly stopped working after deployment."
+    },
+    {
+      "aspect": "Data integrity and dataset hygiene checks (nulls, mixed types, duplicates, unknown tokens, conflicting labels)",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["deepchecks-main"],
+      "notes": "Cheap deterministic checks that prevent a whole class of downstream reliability problems."
+    },
+    {
+      "aspect": "Outlier and anomaly sample detection",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["deepchecks-main"],
+      "notes": "LoOP over a Gower distance matrix handles mixed numeric and categorical data, which most outlier tools do not."
+    },
+    {
+      "aspect": "Deterministic regression matchers (exact, fuzzy, includes, JSON match, schema validity)",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["evals-main", "deepeval-main", "promptfoo-main", "giskard-oss-main"],
+      "notes": "Zero cost, fully reproducible, and the only checks that will never flake in CI."
+    },
+    {
+      "aspect": "Classic NLP overlap and similarity metrics (ROUGE, BLEU, METEOR, BERTScore, Levenshtein)",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["deepeval-main", "promptfoo-main"],
+      "notes": "Useful for summarisation and translation regression tracking where a reference answer exists."
+    },
+    {
+      "aspect": "Agent loop, stagnation and knowledge-retention checks",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["deepeval-main"],
+      "notes": "The loop detector is deterministic (difflib plus Jaccard over agent steps) and catches runaway agent spend with no model call."
+    },
+    {
+      "aspect": "Academic capability and truthfulness benchmark harnesses (MMLU, TruthfulQA, HellaSwag, TrustLLM, 463-eval registry)",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["deepeval-main", "evals-main", "Infosys-Responsible-AI-Toolkit-master"],
+      "notes": "Gives model-selection decisions an externally citable basis rather than a subjective preference."
+    },
+    {
+      "aspect": "Copyright and verbatim-reproduction detection (MinHash sliding window, plagiarism scorer)",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["JCB-main", "PyRIT-main", "garak-main"],
+      "notes": "Reference-set bound: JCB only covers 100 pre-hashed books and songs, so it does not generalise without new hashes."
+    },
+    {
+      "aspect": "Language consistency verification",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["llm-guard-main", "deepchecks-main"],
+      "notes": "Catches off-target-language responses and gates which English-only checks should even run."
+    },
+    {
+      "aspect": "Structural output validation with automatic repair and re-ask",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["guardrails-main", "llm-guard-main", "safe-zone-main", "hai-guardrails-main"],
+      "notes": "Re-asking the model with the exact validation error is a higher-yield remediation than simply blocking."
+    },
+    {
+      "aspect": "Text-quality properties (fluency, formality, frequent substrings, near-duplicates)",
+      "tenet": "Hallucination / Reliability",
+      "source_repos": ["deepchecks-main"],
+      "notes": "Surfaces templated boilerplate and near-duplicate samples that quietly skew fine-tuning and evaluation data."
+    },
+    {
+      "aspect": "Per-call execution history and persistent audit trail",
+      "tenet": "Accountability",
+      "source_repos": ["guardrails-main", "PyRIT-main", "safe-zone-main"],
+      "notes": "Guardrails AI records every raw output, validated output, per-validator verdict, token count and timing; PyRIT persists whole conversations to SQLite or Azure SQL."
+    },
+    {
+      "aspect": "Security-event emission to SIEM plus per-request audit log lines",
+      "tenet": "Accountability",
+      "source_repos": ["safe-zone-main"],
+      "notes": "Publishes action, category, confidence, threshold, request ID and timestamp, which is exactly the record a client security review asks to see."
+    },
+    {
+      "aspect": "OpenTelemetry tracing of guardrail execution",
+      "tenet": "Accountability",
+      "source_repos": ["guardrails-main", "Guardrails-develop", "promptfoo-main"],
+      "notes": "Lets guardrail latency and failure rates land in the same observability stack AFNI already runs."
+    },
+    {
+      "aspect": "CI-gateable pass/fail condition system with JUnit and JSON export",
+      "tenet": "Accountability",
+      "source_repos": ["deepchecks-main", "giskard-oss-main", "deepeval-main", "promptfoo-main"],
+      "notes": "This is the mechanism that turns red-team findings into a build that actually fails."
+    },
+    {
+      "aspect": "Threshold-based gating on measured failure rate",
+      "tenet": "Accountability",
+      "source_repos": ["agentic_security-main", "promptfoo-main"],
+      "notes": "agentic_security-main additionally uses Bayesian optimisation to stop a scan early once the failure rate crosses a threshold, keeping scan cost bounded."
+    },
+    {
+      "aspect": "Policy-as-code rule evaluation (OPA / Rego)",
+      "tenet": "Accountability",
+      "source_repos": ["giskard-oss-main"],
+      "notes": "Lets compliance rules live in a reviewable policy file rather than in application code."
+    },
+    {
+      "aspect": "Named on-fail remediation actions (allow, mask, block, filter, refrain, re-ask, fix)",
+      "tenet": "Accountability",
+      "source_repos": ["guardrails-main", "safe-zone-main", "Guardrails-develop", "openguardrails-main"],
+      "notes": "A policy-driven remediation path is far more defensible than a silent pass or a bare exception."
+    },
+    {
+      "aspect": "Fail-open versus fail-closed degraded-mode contract with unjudged reporting",
+      "tenet": "Accountability",
+      "source_repos": ["openguardrails-main", "Guardrails-develop"],
+      "notes": "Critical and often missed: NeMo's jailbreak rail fails open silently on detector outage, which openguardrails' unjudged field is designed to make visible."
+    },
+    {
+      "aspect": "Multi-detector composition with explicit precedence",
+      "tenet": "Accountability",
+      "source_repos": ["openguardrails-main", "Infosys-Responsible-AI-Toolkit-master", "rebuff-main"],
+      "notes": "Deny-wins ordering (block over approve over redact over allow) or a simple OR-threshold across tiers; both make the combined verdict predictable."
+    },
+    {
+      "aspect": "Detector accuracy self-evaluation against human labels",
+      "tenet": "Accountability",
+      "source_repos": ["PyRIT-main", "garak-main"],
+      "notes": "The rarest and most valuable capability in the set: PyRIT computes Krippendorff's alpha against human labels and garak publishes precision/recall for six of its detectors."
+    },
+    {
+      "aspect": "Harm-category taxonomy files and risk register",
+      "tenet": "Accountability",
+      "source_repos": ["PyRIT-main", "openguardrails-main", "deepteam-main"],
+      "notes": "PyRIT ships 17 harm-definition YAMLs including AI governance failure and AI supply chain, which map neatly onto a corporate risk register."
+    },
+    {
+      "aspect": "Compliance-framework mapping and reporting (OWASP LLM Top 10, NIST AI RMF, MITRE ATLAS, EU AI Act, ISO 42001, GDPR)",
+      "tenet": "Accountability",
+      "source_repos": ["promptfoo-main", "deepteam-main", "giskard-oss-main", "PyRIT-main"],
+      "notes": "The fastest route to passing a client security review: run the scan, hand over the framework-mapped report."
+    },
+    {
+      "aspect": "Domain and regulatory compliance plugin packs (medical FDA, SOX, COPPA/FERPA, fair housing, telecom CPNI)",
+      "tenet": "Accountability",
+      "source_repos": ["promptfoo-main"],
+      "notes": "Dozens of narrowly scoped checks, though most are remote-only plugins that call promptfoo's cloud, which raises a data-residency question."
+    },
+    {
+      "aspect": "Role, topic and scope adherence enforcement (misuse, non-advice, role violation)",
+      "tenet": "Accountability",
+      "source_repos": ["deepeval-main", "deepteam-main"],
+      "notes": "Encodes who the assistant is allowed to be and what it must not advise on, which is a governance control rather than a safety filter."
+    },
+    {
+      "aspect": "Competitor and brand mention control",
+      "tenet": "Accountability",
+      "source_repos": ["llm-guard-main", "guardrails-main", "deepteam-main"],
+      "notes": "Business-policy rather than safety, but frequently the first thing a client asks about before a demo."
+    },
+    {
+      "aspect": "Cost, token and rate-limit controls",
+      "tenet": "Accountability",
+      "source_repos": ["llm-guard-main", "agentic_security-main", "safe-zone-main"],
+      "notes": "Token caps, scan budgets and request rate limits prevent both runaway spend and context-stuffing abuse."
+    },
+    {
+      "aspect": "Per-tenant threshold and policy configuration service",
+      "tenet": "Accountability",
+      "source_repos": ["Infosys-Responsible-AI-Toolkit-master", "safe-zone-main"],
+      "notes": "Different AFNI applications need different strictness; hard-coded thresholds do not survive multi-project reuse."
+    },
+    {
+      "aspect": "Agent trace and trajectory auditing after the fact",
+      "tenet": "Accountability",
+      "source_repos": ["deepteam-main", "promptfoo-main"],
+      "notes": "Scores multi-step agent executions against the risk taxonomy, plus tool-sequence and step-count assertions over OpenTelemetry traces."
+    },
+    {
+      "aspect": "Deception, sandbagging and covert-persuasion evaluations",
+      "tenet": "Accountability",
+      "source_repos": ["evals-main"],
+      "notes": "Uniquely tests whether a model deliberately underperforms, manipulates, or hides capability; relevant to any autonomy claim AFNI makes."
+    },
+    {
+      "aspect": "Intellectual property, copyright and ethics violation checks",
+      "tenet": "Accountability",
+      "source_repos": ["deepteam-main", "hai-guardrails-main"],
+      "notes": "Business-risk probes for imitation, trademark, patent and moral-integrity failures."
+    },
+    {
+      "aspect": "Excessive agency, debug access and tool-discovery checks",
+      "tenet": "Accountability",
+      "source_repos": ["promptfoo-main", "deepteam-main"],
+      "notes": "Tests whether an agent oversteps its remit or leaks its own tool list, which is the precursor to most agent exploits."
+    },
+    {
+      "aspect": "Self-hardening attack-signature corpus that learns from confirmed incidents",
+      "tenet": "Accountability",
+      "source_repos": ["rebuff-main"],
+      "notes": "Every confirmed leak is embedded and stored so the next similar attack scores higher; an institutional-memory pattern worth reimplementing."
+    },
+    {
+      "aspect": "Vendor-neutral guardrail wire protocol and verdict schema",
+      "tenet": "Accountability",
+      "source_repos": ["openguardrails-main"],
+      "notes": "GuardEvent in, Verdict out with findings, severity, score, detector name and redaction spans; lets AFNI swap detectors without changing applications."
+    },
+    {
+      "aspect": "Governance dashboards, leaderboards and report artefacts",
+      "tenet": "Accountability",
+      "source_repos": ["promptfoo-main", "Infosys-Responsible-AI-Toolkit-master", "agentic_security-main", "openguardrails-main"],
+      "notes": "The reporting surface is what converts engineering work into something a governance lead and a client reviewer can act on."
+    }
+  ],
+  "tenet_matrix": [
+    {
+      "tenet": "Privacy",
+      "open_source_repos": ["llm-guard-main", "Guardrails-develop", "hai-guardrails-main", "safe-zone-main", "Infosys-Responsible-AI-Toolkit-master", "agentic_security-main", "garak-main", "deepeval-main", "deepteam-main", "promptfoo-main", "openguardrails-main", "guardrails-main", "deepchecks-main"],
+      "cloud_paid_options": ["Microsoft Presidio (open-source, but the de facto engine everything wraps)", "Azure AI Language PII detection service", "AWS Bedrock Guardrails (PII filters and masking)", "Private AI / Polygraf PII (already wired as NeMo Guardrails rails)", "NVIDIA GLiNER-PII NIM (hosted zero-shot PII NER)"],
+      "recommended_combination": ["llm-guard-main", "Guardrails-develop", "garak-main"],
+      "combination_rationale": "Two runtime layers plus one testing layer, and deliberately not three runtime layers. LLM Guard is the strongest single runtime PII component in the whole set because it pairs Presidio with an ai4privacy DeBERTa NER model and, uniquely, a Vault that lets redacted values be restored after the model call, so redaction stops breaking real workflows. It is free, MIT-licensed and needs no paid API. Its one real weakness is that Protect AI has archived the repo, so AFNI must fork, pin and own it. NeMo Guardrails is the second layer because it is the rail engine AFNI will already be running for Security, and it brings a GLiNER zero-shot PII rail that catches entity types no fixed regex list anticipated, plus a clean place to plug in Azure AI Language PII if a client insists on a Microsoft-supported service. We deliberately did not add a third LLM-as-judge PII layer at runtime: DeepEval and DeepTeam both offer one, but every call costs money and adds latency, and the accuracy gain over Presidio plus NER is not worth it in the request path. Instead the third slot goes to garak, which runs the ProPILE PII-leakage probes and training-data replay tests offline so AFNI can prove the model itself will not surrender personal data. Two cheap ports are recommended rather than adopted as dependencies: hai-guardrails-main's healthcare regex table (ICD-10, MRN, NPI, DEA) and secret patterns should be lifted into Presidio as custom recognisers, since they are just regex tables and the repo has almost no test coverage of its own.",
+      "afni_prior_experience_note": "This is the single highest-leverage tenet for Sai's prior experience. Presidio sits underneath both recommended runtime repos, so the custom-recogniser work, entity allow/deny lists and threshold tuning done at Infosys transfers almost directly. The Infosys toolkit's privacy module is also the most capable PII implementation in the set for multi-format and multi-modal input (PDF, Office, OCR images, DICOM, video) plus Faker-based anonymisation and differential privacy, so those specific sub-packages are worth vendoring even though the full 20-microservice toolkit is not."
+    },
+    {
+      "tenet": "Security",
+      "open_source_repos": ["Guardrails-develop", "llm-guard-main", "PyRIT-main", "garak-main", "deepteam-main", "promptfoo-main", "rebuff-main", "safe-zone-main", "hai-guardrails-main", "agentic_security-main", "FuzzyAI-main", "JCB-main", "LLMFuzzer-main", "giskard-oss-main", "openguardrails-main", "Infosys-Responsible-AI-Toolkit-master", "evals-main"],
+      "cloud_paid_options": ["Azure AI Content Safety Prompt Shields (jailbreak and indirect-injection detection)", "AWS Bedrock Guardrails", "Azure AI Foundry red-team agent (already integrated in PyRIT)", "Cisco AI Defense / CrowdStrike AIDR / Prompt Security (available as NeMo Guardrails rails)", "Google Perspective API (as a scoring oracle)"],
+      "recommended_combination": ["llm-guard-main", "Guardrails-develop", "PyRIT-main"],
+      "combination_rationale": "Security is the one tenet where a genuine three-part split is justified, but the split is cheap-to-expensive rather than library/model/prompt. First, LLM Guard's fine-tuned DeBERTa-v3 prompt-injection classifier is the best local, zero-API-cost injection detector available here, and it comes with Secrets scanning, InvisibleText and BanCode in the same package. Second, NeMo Guardrails supplies the enforcement engine and the deterministic tier that costs almost nothing to run: YARA rules for SQL, template, code and XSS injection, context-bloat heuristics using entropy and n-gram repetition, arbitrary regex blocking, and fail-closed tool-call schema validation. NeMo also publishes honest detection numbers for its perplexity jailbreak heuristics, which is rare and useful; the prefix/suffix check catches 49 of 50 GCG attacks at a 0.04 percent false-positive rate, while the length heuristic catches only about 31 percent, so AFNI should enable the former and treat the latter as signal only. One critical caveat to fix on day one: NeMo's jailbreak rail fails open on detector outage, which must be flipped to fail-closed for anything client-facing. Third, PyRIT is the offline attack engine, with Crescendo, TAP and PAIR multi-turn attacks, roughly 80 obfuscation converters, and nine deterministic regex output scorers mapped to OWASP LLM02 that double as free runtime output rails. PyRIT also carries the only real accuracy-measurement tooling in the set. We did not add a fourth runtime LLM-judge injection layer because independent benchmarks show cloud and judge-based filters degrade on adversarial and out-of-distribution input, so the money is better spent on a second offline scanner: run garak alongside PyRIT in CI, and route Azure Prompt Shields in as a NeMo rail for a third opinion on high-risk traffic rather than as the primary defence.",
+      "afni_prior_experience_note": "PyRIT is the direct continuation of Sai's existing Microsoft red-teaming experience, so the attacker-target orchestration, scorer configuration and memory layer are known ground. Rebuff's canary-token pattern and Rebuff's self-hardening vector store are worth reimplementing as custom NeMo rails rather than adopted as a dependency, since the maintainers themselves label Rebuff a prototype."
+    },
+    {
+      "tenet": "Fairness & Bias",
+      "open_source_repos": ["fairlearn-main", "AIF360-main", "deepchecks-main", "promptfoo-main", "deepeval-main", "deepteam-main", "hai-guardrails-main", "giskard-oss-main", "shap-master", "PyRIT-main", "garak-main", "Infosys-Responsible-AI-Toolkit-master"],
+      "cloud_paid_options": ["Fiddler AI", "Arthur AI", "DataRobot (bias and fairness monitoring)", "Truera", "Monitaur", "Azure Machine Learning Responsible AI dashboard (Fairlearn-based)"],
+      "recommended_combination": ["fairlearn-main", "AIF360-main", "promptfoo-main"],
+      "combination_rationale": "Three repos, but for a completely different reason from the Infosys library/model/prompt pattern: these three cover three different kinds of model, not three detection techniques. Fairlearn is the primary choice for classic tabular models because it is MIT-licensed, Microsoft-maintained, has 62 unit-test files with warnings-as-errors CI, and every algorithm traces to a named peer-reviewed paper. Its MetricFrame auto-generates group-disparity versions of 11 standard scikit-learn metrics with bootstrap confidence intervals, which covers almost all governance reporting, and ThresholdOptimizer gives post-hoc mitigation that works on a black-box model without retraining. AIF360 is added for exactly one thing Fairlearn cannot do: automated discovery of harmed subgroups nobody thought to check, via MDSS subset scanning and FACTS counterfactual-recourse scanning. That capability is worth the extra dependency, but AFNI should use only the pure-Python metrics and detector modules and avoid the mitigation algorithms that drag in TensorFlow 1.x, CVXPY or rpy2. Third, promptfoo covers generative text, where no protected-attribute column exists and statistical parity is meaningless; its age, disability, gender and race bias plugins generate adversarial prompts and grade the responses with an LLM judge in CI. We did not include Deepchecks despite its genuinely useful PerformanceBias and weak-segment checks, because it is AGPL-3.0 and AFNI ships AI-enabled products to its own clients. We also did not add a runtime bias guard: bias is a distributional property measured over many decisions, so blocking a single response on a bias score produces false confidence and a poor user experience.",
+      "afni_prior_experience_note": "The Infosys toolkit's fairness module is literally a wrapper around AIF360 plus Fairlearn (statistical parity difference, disparate impact, four-fifths rule, Cohen's D, equal opportunity difference, plus Reweighing, Disparate Impact Remover and ThresholdOptimizer), so Sai has already integrated exactly this pair. The recommendation is to keep the metric selection and threshold conventions from that work and drop the bespoke wrapper package, calling Fairlearn and AIF360 directly."
+    },
+    {
+      "tenet": "Explainability & Transparency",
+      "open_source_repos": ["shap-master", "Infosys-Responsible-AI-Toolkit-master", "AIF360-main", "guardrails-main", "deepeval-main", "promptfoo-main", "giskard-oss-main", "openguardrails-main", "safe-zone-main", "llm-guard-main", "deepchecks-main"],
+      "cloud_paid_options": ["Microsoft InterpretML (open-source, Azure-aligned)", "IBM AIX360", "LIME (open-source, used inside the Infosys toolkit)", "Fiddler AI / Arthur AI (hosted explainability dashboards)", "Azure Machine Learning Responsible AI dashboard"],
+      "recommended_combination": ["shap-master", "deepeval-main"],
+      "combination_rationale": "Two repos, not three, because explainability splits cleanly into two questions and nothing else in the set adds a third. For classic and tabular models the answer is SHAP alone: it is MIT-licensed, Production/Stable, backed by Nature-published papers, has 55 test files, covers 12 estimation algorithms behind one auto-dispatching API, and is exact rather than approximate for tree and linear models, which are the model families AFNI's decisioning use cases will actually use. Its group_difference plot is also the bridge to the Fairness tenet, decomposing a between-group outcome gap into per-feature contributions with bootstrap bounds, so one library serves two tenets. For generative applications the answer is DeepEval's G-Eval and DAG metrics, which let AFNI encode a client's own written policy as a rubric and get back a score plus a written justification; DeepEval is already being adopted for Hallucination, so this costs no new dependency. We explicitly rejected adding a third layer. Guardrails AI has the best explainability plumbing in the set (character-offset error spans on streamed output, full Call/Iteration history), but it ships no detectors at all, is mid-migration away from its hosted hub, and has a documented supply-chain compromise in its own SECURITY_ADVISORY, so AFNI should copy its error-span and history design into the OpenGuardrails verdict schema rather than depend on it. LIME from the Infosys toolkit is worth adding later only if reviewers specifically ask for it, since Kernel SHAP answers the same question more rigorously and more slowly.",
+      "afni_prior_experience_note": "Sai's Infosys explainability module already combines SHAP and LIME for tabular models with prompt-based token importance and Chain-of-Thought style explanations for LLM answers. The recommendation keeps SHAP as-is, replaces the bespoke prompt-based explainer with DeepEval's G-Eval so the rubric is versioned and CI-runnable, and treats the reasoning-template approaches as optional demo material because each one multiplies model calls per request."
+    },
+    {
+      "tenet": "Profanity / Content Safety",
+      "open_source_repos": ["llm-guard-main", "Guardrails-develop", "promptfoo-main", "deepteam-main", "garak-main", "giskard-oss-main", "hai-guardrails-main", "deepeval-main", "deepchecks-main", "Infosys-Responsible-AI-Toolkit-master", "PyRIT-main", "FuzzyAI-main", "openguardrails-main", "JCB-main", "safe-zone-main"],
+      "cloud_paid_options": ["Azure AI Content Safety (hate, sexual, violence, self-harm with severity levels, plus custom blocklists)", "OpenAI Moderation API (omni-moderation)", "AWS Bedrock Guardrails content filters", "Google Perspective API", "Llama Guard 3 / ShieldGemma / Nemotron Content Safety (self-hostable guard models, already wired into NeMo and PyRIT)"],
+      "recommended_combination": ["llm-guard-main", "Guardrails-develop", "promptfoo-main"],
+      "combination_rationale": "Three repos: one cheap local classifier, one policy-model router, one offline attack corpus. LLM Guard runs a local transformer toxicity classifier plus zero-shot BanTopics and deterministic BanSubstrings, all on-premise with no per-call cost, which is what makes always-on content safety affordable at AFNI's likely traffic volumes. NeMo Guardrails is the router: its content_safety rail can call Llama Guard 3, ShieldGemma, Nemotron Content Safety or Azure AI Content Safety through the same config, returning safe/unsafe plus violated policy categories, and it adds localised refusal messages in nine languages. This is where the benchmark nuance matters most and drives the design: independent evaluations show cloud content filters are noticeably weaker on adversarial and out-of-distribution input than specialised open-source guards, so AFNI must not rely on a single cloud filter. The recommended posture is local classifier first (cheap, catches the bulk), a dedicated guard model second for anything the first tier scores near the threshold, and Azure AI Content Safety as a third opinion on high-risk categories and for the audit trail a client reviewer wants to see, with a custom blocklist for AFNI-specific and client-specific terms. Third, promptfoo supplies the offline proof: 25-plus harm categories mapped to MLCommons and HarmBench taxonomies, plus dataset plugins pulling BeaverTails, HarmBench, DoNotAnswer, ToxicChat, Aegis and XSTest, so the deployed stack is measured against published corpora rather than an internal wordlist. A hard calibration warning belongs in the plan: garak's own published evaluation shows a shipped toxicity classifier at 0.69 accuracy but only 0.375 recall, so default thresholds must be re-tuned on AFNI traffic before anyone claims a coverage number.",
+      "afni_prior_experience_note": "The Infosys toolkit's safety module (a seven-way fine-tuned toxicity model plus Detoxify plus better_profanity offset censoring plus NudeNet for images) is the closest thing in the set to a finished content-safety service, and Sai's threshold and category conventions carry over. Its NSFW image and video detection is the only implementation in the 23 repos and should be vendored directly if AFNI ships any image generation or user upload feature."
+    },
+    {
+      "tenet": "Hallucination / Reliability",
+      "open_source_repos": ["llm-guard-main", "deepeval-main", "Guardrails-develop", "giskard-oss-main", "deepchecks-main", "promptfoo-main", "deepteam-main", "Infosys-Responsible-AI-Toolkit-master", "garak-main", "guardrails-main", "evals-main", "PyRIT-main", "agentic_security-main", "FuzzyAI-main", "JCB-main", "safe-zone-main"],
+      "cloud_paid_options": ["Azure AI Content Safety groundedness detection", "Patronus AI Lynx hallucination model (available as a NeMo rail)", "Cleanlab trustworthiness score (available as a NeMo rail)", "Fiddler AI faithfulness monitoring", "Vectara hallucination evaluation model (self-hostable, wired into DeepEval)"],
+      "recommended_combination": ["llm-guard-main", "deepeval-main"],
+      "combination_rationale": "Two repos only, and this is the clearest case in the whole synthesis for refusing to force a third layer. At runtime, LLM Guard's FactualConsistency scanner uses a cross-encoder NLI model to score entailment between the retrieved source and the model's answer. It runs locally, needs no judge LLM, produces a stable numeric score, and is therefore the only groundedness check that is affordable to run on every single response. Offline, DeepEval carries the full measurement suite that actually diagnoses why a hallucination happened: Faithfulness, Hallucination, Contextual Precision, Contextual Recall, Contextual Relevancy and Answer Relevancy, plus non-LLM local alternatives via SummaC and the Vectara hallucination model for teams that want to avoid judge cost entirely. It is Low integration effort, pytest-native, and already needed for the Explainability rubric work, so the marginal cost of adopting it is close to zero. Adding a third layer here would mean either self-consistency sampling from NeMo (which multiplies model calls by three or more per request and is hard to justify economically) or another LLM-judge groundedness check duplicating what DeepEval already does. Neither adds accuracy proportional to its cost. The one supplement worth planning is not a third repo but a cloud service: route Azure AI Content Safety groundedness detection in as a NeMo rail for regulated or client-facing RAG flows where a Microsoft-supported service in the evidence pack is worth more than the marginal accuracy. Two narrow additions are also worth pulling in as single checks rather than full adoptions: garak's package-hallucination detector if AFNI builds coding assistants, and Deepchecks' drift metrics in a scheduled job if a model runs long enough to decay.",
+      "afni_prior_experience_note": "The Infosys hallucination module blends embedding similarity across input, output and source with a four-criterion G-Eval judge covering faithfulness, relevance, adherence and correctness. That criteria set is good and should be carried forward as the DeepEval G-Eval rubric, but the embedding-similarity blend should be replaced by the NLI entailment scorer, because high embedding similarity does not actually prove factual support and produced a soft signal rather than a decision."
+    },
+    {
+      "tenet": "Accountability",
+      "open_source_repos": ["openguardrails-main", "PyRIT-main", "promptfoo-main", "guardrails-main", "safe-zone-main", "deepchecks-main", "giskard-oss-main", "deepeval-main", "deepteam-main", "Guardrails-develop", "rebuff-main", "evals-main", "agentic_security-main", "Infosys-Responsible-AI-Toolkit-master", "AIF360-main", "shap-master", "llm-guard-main", "JCB-main", "LLMFuzzer-main", "hai-guardrails-main"],
+      "cloud_paid_options": ["Monitaur (AI governance and model audit records)", "Fiddler AI / Arthur AI (production monitoring and drift alerting)", "DataRobot governance and model registry", "Azure Monitor plus Application Insights for guardrail telemetry", "Microsoft Purview for data-governance lineage"],
+      "recommended_combination": ["openguardrails-main", "PyRIT-main", "promptfoo-main"],
+      "combination_rationale": "Three repos covering the three things accountability actually requires: a contract, evidence that the checks work, and evidence that the system was tested. OpenGuardrails contributes no detectors at all, and that is precisely why it belongs here: its GuardEvent and Verdict JSON schemas, the safety/security/privacy taxonomy, the span-based redaction contract, the deny-wins composition rules and the fail-open versus fail-closed degraded-mode specification with an explicit unjudged field give AFNI a stable interface that every detector reports into. That means AFNI can swap LLM Guard for a cloud service, or add a vendor, without touching a single application, and the audit record stays comparable across years. Adopt the schema and taxonomy; ignore its toy reference detectors and its tiny 8-to-14-example benchmark suites. PyRIT is the second pick for a reason most tool comparisons miss: it is the only repo in the set with real machinery for measuring whether a detector is any good, computing Krippendorff's alpha and comparing scorer output against human-labelled ground truth, and it ships 17 harm-definition taxonomy files including AI governance failure and AI supply chain that map onto a corporate risk register. Its SQLAlchemy memory layer also persists every prompt, response and score. Third, promptfoo produces the artefact that gets AFNI through a client review: scan results mapped to OWASP LLM Top 10, NIST AI RMF, MITRE ATLAS, EU AI Act, ISO 42001 and GDPR, exportable from CI. We deliberately did not pick Guardrails AI here despite it having the most detailed per-call history object in the set, because it ships no detectors, is mid-migration, and carries a documented supply-chain compromise, which is a poor look for governance infrastructure; its history and error-span design should be copied into the OpenGuardrails schema instead. Two patterns should be reimplemented rather than adopted: safe-zone-main's SIEM SecurityEvent record shape (action, category, confidence, threshold, request ID, timestamp) and Infosys's per-tenant threshold configuration service, because different AFNI projects need different strictness and hard-coded thresholds will not survive reuse.",
+      "afni_prior_experience_note": "The Infosys toolkit's admin service, per-account and per-portfolio threshold configuration and Elasticsearch telemetry pipeline are directly relevant prior art, and the per-tenant configuration model should be rebuilt on the new stack. One lesson to carry forward as a negative: the Infosys moderation dispatcher wraps checks in broad try/except blocks that log and return None, so a single misconfigured threshold or model timeout can silently drop a check. AFNI's version must fail loudly and report unjudged, which is exactly what the OpenGuardrails contract enforces."
+    }
+  ],
+  "dev_vs_testing_split": {
+    "guardrail_development_repos": ["llm-guard-main", "Guardrails-develop", "guardrails-main", "hai-guardrails-main", "safe-zone-main", "rebuff-main", "Infosys-Responsible-AI-Toolkit-master", "fairlearn-main", "AIF360-main", "shap-master", "deepchecks-main", "deepeval-main"],
+    "vulnerability_testing_repos": ["garak-main", "FuzzyAI-main", "JCB-main", "LLMFuzzer-main"],
+    "both_repos": ["PyRIT-main", "deepteam-main", "promptfoo-main", "giskard-oss-main", "agentic_security-main", "evals-main", "openguardrails-main"],
+    "how_they_connect": "Treat the two halves as one closed loop with four concrete hand-offs, all of them automated. First, the attack corpus becomes the test suite. PyRIT, garak, DeepTeam and promptfoo each generate adversarial inputs and score whether the target complied. AFNI should export those generated prompts, together with the scored verdict, into a single versioned regression corpus in git, tagged by tenet and by OWASP LLM Top 10 category. That corpus is the asset, not the tool: it survives any future tool swap. Second, every finding becomes a named guardrail requirement. A jailbreak that got through is not just a report line, it is a ticket against a specific rail in NeMo Guardrails, a threshold change in LLM Guard, or a new blocklist entry, and it is closed only when the same input is replayed and blocked. Third, CI gates the deploy. The pipeline runs three tiers on every pull request touching prompts, rails, thresholds or model versions: a fast deterministic tier of a few minutes (DeepEval and promptfoo deterministic assertions, PyRIT regex output scorers, replay of the frozen corpus of previously-fixed attacks, which must be 100 percent blocked or the build fails); a medium tier on merge to main of roughly 30 to 60 minutes (a promptfoo redteam run over the OWASP-mapped plugin set plus a garak probe subset, gated on a maximum attack-success rate rather than zero findings, since zero is not achievable); and a slow nightly or pre-release tier (full PyRIT Crescendo, TAP and PAIR multi-turn attacks, DeepTeam agentic vulnerabilities, and Deepchecks drift and data-quality suites). Findings from the medium and slow tiers land as tickets; regressions in the fast tier block the merge outright. Fourth, and most often skipped: test the guardrails, not just the model. garak's shields up and shields down probes are pointed at AFNI's own gateway to confirm the rails actually fire, and PyRIT's scorer_evaluation tooling with Krippendorff's alpha is run against a human-labelled sample of production traffic each quarter so AFNI can state a measured precision and recall figure for each detector instead of a vendor claim. Every result from every tier is written in the OpenGuardrails Verdict schema, so a red-team finding, a CI failure and a live production block are all the same record shape and can be trended on one dashboard. The whole loop is what AFNI shows a client reviewer: here is the attack corpus, here is the gate, here is the measured detector accuracy, here is the trend."
+  },
+  "feasibility_matrix": [
+    {
+      "repo_folder": "llm-guard-main",
+      "integration_effort": "Medium",
+      "cost_model": "Free / open-source",
+      "reliability_confidence": "Medium",
+      "reliability_reason": "Built on well-regarded components (Presidio, purpose-trained DeBERTa-v3 classifiers, NLI entailment models) so out-of-the-box quality is good, but the repo is archived so no upstream fixes will arrive.",
+      "maintenance_burden": "High",
+      "verdict": "Adopt now",
+      "verdict_reason": "The single best value-per-effort component in the set for Privacy, Security and Content Safety, but AFNI must fork it, pin model revisions and own it internally from day one."
+    },
+    {
+      "repo_folder": "Guardrails-develop",
+      "integration_effort": "Medium",
+      "cost_model": "Mixed (free core + optional paid add-ons)",
+      "reliability_confidence": "High",
+      "reliability_reason": "NVIDIA-maintained with a 383-file pytest suite, cross-platform CI, an arXiv paper, and unusually honest published false-positive and detection rates for its own heuristics.",
+      "maintenance_burden": "Medium",
+      "verdict": "Adopt now",
+      "verdict_reason": "The recommended runtime backbone: config-driven input, output and retrieval rails that can host AFNI's own detectors and route to Azure services, with the fail-open jailbreak default flipped to fail-closed."
+    },
+    {
+      "repo_folder": "PyRIT-main",
+      "integration_effort": "Medium",
+      "cost_model": "Mixed (free core + optional paid add-ons)",
+      "reliability_confidence": "High",
+      "reliability_reason": "Microsoft AI Red Team ownership, 60-plus scorer test files, tiered integration and end-to-end suites, and a dedicated scorer_evaluation module that measures detector accuracy against human labels.",
+      "maintenance_burden": "Medium",
+      "verdict": "Adopt now",
+      "verdict_reason": "The red-team engine plus the only credible accuracy-measurement tooling in the set, and it builds directly on experience AFNI already has."
+    },
+    {
+      "repo_folder": "garak-main",
+      "integration_effort": "Medium",
+      "cost_model": "Mixed (free core + optional paid add-ons)",
+      "reliability_confidence": "Medium",
+      "reliability_reason": "NVIDIA-backed with 153 test files and, uniquely, published precision and recall for six of its detectors, but the maintainers themselves state results are not scientifically comparable across probes.",
+      "maintenance_burden": "Low",
+      "verdict": "Adopt now",
+      "verdict_reason": "Run it as a CLI scan in CI where effort is genuinely low; its DAN corpus, encoding probes, ProPILE PII probes and shields up/down guardrail audit are all hard to source elsewhere."
+    },
+    {
+      "repo_folder": "promptfoo-main",
+      "integration_effort": "Medium",
+      "cost_model": "Mixed (free core + optional paid add-ons)",
+      "reliability_confidence": "Medium",
+      "reliability_reason": "Very mature engineering (1078 source files, 841 test files, active release pipeline) but grading quality depends entirely on the configured judge model and no in-repo accuracy figures are published.",
+      "maintenance_burden": "Low",
+      "verdict": "Adopt now",
+      "verdict_reason": "Best compliance-framework reporting in the set and a huge plugin catalogue; accept that it is a Node CLI called from CI, and pin PROMPTFOO_DISABLE_REMOTE_GENERATION decisions early because many plugins are cloud-only."
+    },
+    {
+      "repo_folder": "deepeval-main",
+      "integration_effort": "Low",
+      "cost_model": "Mixed (free core + optional paid add-ons)",
+      "reliability_confidence": "Medium",
+      "reliability_reason": "Actively maintained with 394 test files and CI, and its deterministic metrics are exact by construction, but the safety metrics are LLM-judge based with no published precision or recall.",
+      "maintenance_burden": "Low",
+      "verdict": "Adopt now",
+      "verdict_reason": "Lowest integration effort in the whole set and the natural metrics engine for hallucination, RAG quality and custom G-Eval policy rubrics in CI."
+    },
+    {
+      "repo_folder": "deepteam-main",
+      "integration_effort": "Medium",
+      "cost_model": "Requires paid API or hosted model",
+      "reliability_confidence": "Medium",
+      "reliability_reason": "Actively maintained and built on DeepEval, but every single check is an LLM-as-judge prompt with no deterministic fallback and no published accuracy numbers.",
+      "maintenance_burden": "Low",
+      "verdict": "Adopt now",
+      "verdict_reason": "Adopt the red-team half for its 50-plus vulnerability probes, agentic attack families and OWASP/NIST/MITRE/EU-AI-Act mappings; do not use its seven runtime guards as primary defences since each costs a live API call."
+    },
+    {
+      "repo_folder": "fairlearn-main",
+      "integration_effort": "Medium",
+      "cost_model": "Free / open-source",
+      "reliability_confidence": "High",
+      "reliability_reason": "Every algorithm traces to a named peer-reviewed paper, with 62 unit-test files, warnings-as-errors pytest config and Microsoft maintenance, though it self-classifies as Alpha.",
+      "maintenance_burden": "Low",
+      "verdict": "Adopt now",
+      "verdict_reason": "The clearest, best-licensed and best-tested fairness measurement and mitigation library available, and it aligns with AFNI's Azure-first posture."
+    },
+    {
+      "repo_folder": "shap-master",
+      "integration_effort": "Medium",
+      "cost_model": "Free / open-source",
+      "reliability_confidence": "High",
+      "reliability_reason": "Production/Stable, MIT-licensed, Nature-published methods, 55 test files with image-baseline comparison, and mathematically exact for tree and linear models.",
+      "maintenance_burden": "Low",
+      "verdict": "Adopt now",
+      "verdict_reason": "The default explainability engine, and its group_difference decomposition also serves the Fairness tenet, so one dependency covers two."
+    },
+    {
+      "repo_folder": "openguardrails-main",
+      "integration_effort": "Medium",
+      "cost_model": "Mixed (free core + optional paid add-ons)",
+      "reliability_confidence": "Medium",
+      "reliability_reason": "The protocol and integration plumbing are well tested (including a fixed Unicode offset bug), but it ships no real detectors and its own benchmark suites are only 8 to 14 examples per category.",
+      "maintenance_burden": "Low",
+      "verdict": "Adopt now",
+      "verdict_reason": "Adopt the Verdict and GuardEvent schemas, taxonomy and fail-open/fail-closed contract as AFNI's internal interface; ignore its toy reference detectors and treat the pre-1.0 version churn as a pinning task."
+    },
+    {
+      "repo_folder": "AIF360-main",
+      "integration_effort": "Medium",
+      "cost_model": "Free / open-source",
+      "reliability_confidence": "Medium",
+      "reliability_reason": "Metrics are deterministic published formulas with inline academic citations and a strong notebook-executing test suite, but the subgroup scanners are heuristic optimisers and setup.py self-labels the project Alpha.",
+      "maintenance_burden": "Medium",
+      "verdict": "Combine with fairlearn-main",
+      "verdict_reason": "Adopt only the pure-Python metrics and the MDSS and FACTS subgroup scanners that Fairlearn lacks, and avoid the mitigation algorithms that pull in TensorFlow 1.x, CVXPY or rpy2."
+    },
+    {
+      "repo_folder": "Infosys-Responsible-AI-Toolkit-master",
+      "integration_effort": "High",
+      "cost_model": "Mixed (free core + optional paid add-ons)",
+      "reliability_confidence": "Medium",
+      "reliability_reason": "A large 331-file test suite is a positive signal, but no accuracy figures exist for any of its in-house fine-tuned models, the red-team modules are marked retired, and the core dispatcher swallows check failures in broad try/except blocks.",
+      "maintenance_burden": "High",
+      "verdict": "Combine with Guardrails-develop",
+      "verdict_reason": "Use its single-dispatcher orchestration pattern and per-tenant threshold model as the design reference, and vendor only the specific sub-packages that are unique (multi-format and DICOM PII, NSFW image and video, Faker anonymisation) rather than standing up roughly 20 microservices."
+    },
+    {
+      "repo_folder": "hai-guardrails-main",
+      "integration_effort": "Medium",
+      "cost_model": "Mixed (free core + optional paid add-ons)",
+      "reliability_confidence": "Low",
+      "reliability_reason": "Only one test file exists and it covers message-scoping logic, not any detector; the PII and secret regexes are loose (no Luhn check) and the six content guards are LLM-judge with hard-coded few-shot prompts.",
+      "maintenance_burden": "Medium",
+      "verdict": "Combine with llm-guard-main",
+      "verdict_reason": "Do not run it as a Node sidecar; port its genuinely valuable healthcare PHI regex table (ICD-10, MRN, NPI, DEA) and entropy-gated secret patterns into Presidio custom recognisers inside the Python stack."
+    },
+    {
+      "repo_folder": "rebuff-main",
+      "integration_effort": "Low",
+      "cost_model": "Mixed (free core + optional paid add-ons)",
+      "reliability_confidence": "Low",
+      "reliability_reason": "The maintainers explicitly call it a prototype that cannot provide full protection, tests validate only a handful of hand-picked strings, and the vector tactic starts from an empty corpus on a fresh deployment.",
+      "maintenance_burden": "Medium",
+      "verdict": "Combine with Guardrails-develop",
+      "verdict_reason": "Reimplement its two best ideas as native NeMo rails (canary-token leak detection and the self-hardening attack-signature store) rather than taking on a prototype dependency plus a Pinecone bill."
+    },
+    {
+      "repo_folder": "safe-zone-main",
+      "integration_effort": "Medium",
+      "cost_model": "Mixed (free core + optional paid add-ons)",
+      "reliability_confidence": "Medium",
+      "reliability_reason": "55-plus Go tests across unit, integration and end-to-end tiers is solid engineering, but the confidence scoring is hand-tuned rather than calibrated and several regexes are self-documented as generic or potential.",
+      "maintenance_burden": "Medium",
+      "verdict": "Bench for later",
+      "verdict_reason": "Excellent gateway and streaming-firewall pattern worth copying, but it is a Go service needing Postgres and Redis, its regex catalogue is Turkey-centric, and its dashboard is dev-mode only, so NeMo in Python is the better fit for AFNI."
+    },
+    {
+      "repo_folder": "deepchecks-main",
+      "integration_effort": "Medium",
+      "cost_model": "Free / open-source",
+      "reliability_confidence": "Medium",
+      "reliability_reason": "Strong maturity signals (156 test files, 44 contributors, benchmark suite, established statistical drift methods) but its model-based NLP properties rely on third-party HuggingFace models with no in-repo accuracy numbers.",
+      "maintenance_burden": "Medium",
+      "verdict": "Bench for later",
+      "verdict_reason": "Its drift, data-integrity and weak-segment checks are genuinely useful, but AGPL-3.0 is a real constraint for a company shipping AI-enabled products to clients, so legal must clear it and usage must stay inside internal CI."
+    },
+    {
+      "repo_folder": "giskard-oss-main",
+      "integration_effort": "Medium",
+      "cost_model": "Mixed (free core + optional paid add-ons)",
+      "reliability_confidence": "Medium",
+      "reliability_reason": "Broad test coverage per package, but this is an unreleased 3.0.0rc1 Beta rewrite, the mature v2 is no longer maintained, and most of its vulnerability depth is delegated to garak and DeepTeam anyway.",
+      "maintenance_burden": "Medium",
+      "verdict": "Bench for later",
+      "verdict_reason": "Re-evaluate after 3.0 ships; today AFNI would get garak and DeepTeam coverage through an extra Beta abstraction layer, though its Rego policy check and knowledge-base sycophancy generators are worth revisiting."
+    },
+    {
+      "repo_folder": "agentic_security-main",
+      "integration_effort": "Medium",
+      "cost_model": "Mixed (free core + optional paid add-ons)",
+      "reliability_confidence": "Medium",
+      "reliability_reason": "A real 5000-line test suite with pre-commit, ruff and mypy discipline, but its own detectors are uncalibrated regex and phrase heuristics with no published accuracy.",
+      "maintenance_burden": "Medium",
+      "verdict": "Bench for later",
+      "verdict_reason": "Overlaps garak and PyRIT on fuzzing, and its RL and fine-tuned modules silently call a third-party hosted service with a hard-coded fallback bearer token, which is a security finding AFNI would have to disable before use."
+    },
+    {
+      "repo_folder": "FuzzyAI-main",
+      "integration_effort": "Medium",
+      "cost_model": "Mixed (free core + optional paid add-ons)",
+      "reliability_confidence": "Low",
+      "reliability_reason": "Clean plugin architecture from CyberArk, but test coverage is limited to CLI port logic and provider clients, several classifiers use hand-tuned magic thresholds, and no accuracy figures exist anywhere in the repo.",
+      "maintenance_burden": "Medium",
+      "verdict": "Bench for later",
+      "verdict_reason": "Its 20 attack techniques largely duplicate PyRIT and garak, but its Azure Content Safety, Bedrock Guardrails and OpenAI Moderation classifier adapters are the fastest way to benchmark cloud filters against open-source guards when AFNI needs that comparison."
+    },
+    {
+      "repo_folder": "evals-main",
+      "integration_effort": "High",
+      "cost_model": "Mixed (free core + optional paid add-ons)",
+      "reliability_confidence": "Medium",
+      "reliability_reason": "Mature and OpenAI-maintained with a modest test suite, but its model-graded checks are single unvalidated judge prompts and the maintainers document a known hang after the final report.",
+      "maintenance_burden": "Medium",
+      "verdict": "Bench for later",
+      "verdict_reason": "Its capability and RAG evals are superseded by promptfoo and DeepEval at far lower effort, but the deception, sandbagging, make-me-say and steganography evals are unique and worth running once before AFNI ships anything with agent autonomy."
+    },
+    {
+      "repo_folder": "guardrails-main",
+      "integration_effort": "Medium",
+      "cost_model": "Mixed (free core + optional paid add-ons)",
+      "reliability_confidence": "Low",
+      "reliability_reason": "Good CI, typing and a 93-file test suite, but the repo ships no detectors at all, is mid-migration off its hosted hub, and its own SECURITY_ADVISORY documents a malicious package published to PyPI after a maintainer token was stolen.",
+      "maintenance_burden": "Medium",
+      "verdict": "Skip",
+      "verdict_reason": "NeMo Guardrails covers the same orchestration role with detectors included and a stronger provenance story; copy Guardrails AI's error-span and Call/Iteration history design into the OpenGuardrails schema instead of depending on it."
+    },
+    {
+      "repo_folder": "JCB-main",
+      "integration_effort": "High",
+      "cost_model": "Mixed (free core + optional paid add-ons)",
+      "reliability_confidence": "Low",
+      "reliability_reason": "No test suite of any kind, self-reported paper numbers with no independent replication, hard-coded relative paths, and a judge fallback that silently scores unparseable output as a pass.",
+      "maintenance_burden": "High",
+      "verdict": "Skip",
+      "verdict_reason": "A single-paper research artefact needing an A100-class GPU and a 13B classifier to score properly; PyRIT's Crescendo, TAP and PAIR plus promptfoo's HarmBench dataset plugin deliver the same coverage at a fraction of the effort."
+    },
+    {
+      "repo_folder": "LLMFuzzer-main",
+      "integration_effort": "Low",
+      "cost_model": "Free / open-source",
+      "reliability_confidence": "Low",
+      "reliability_reason": "Roughly 90 lines of code, explicitly marked unmaintained, ships exactly two attack cases, no tests, and its promised HTML and CSV reporting is never actually implemented.",
+      "maintenance_burden": "Low",
+      "verdict": "Skip",
+      "verdict_reason": "Keep its two attack ideas (instruction-override and base64 token smuggling) as seed entries in AFNI's regression corpus and discard the code."
+    }
+  ],
+  "unified_architecture": {
+    "narrative": "AFNI should build one shared gateway rather than asking every project to wire up its own checks. Every AI-native application calls an internal Responsible AI gateway, a Python FastAPI service running NVIDIA NeMo Guardrails as the rail engine, and that gateway speaks a single fixed contract borrowed from the OpenGuardrails specification: an event goes in, a verdict comes back with findings, severity, scores and redaction spans. On the way in, the gateway runs the cheap deterministic checks first (invisible-text and unicode smuggling, secret patterns with an entropy floor, YARA injection rules, context-bloat heuristics, Presidio and NER-based PII detection with reversible vault redaction) and only escalates to a paid model call for input that scores near a threshold. The model call then happens, and on the way out a second set of rails runs (toxicity classification, NLI-based groundedness against the retrieved sources, PII re-check, OWASP insecure-output regex scorers, tool-call schema validation) before anything reaches the user, with streaming responses re-validated on each chunk so a bad answer can be cut off mid-flight. In parallel and completely offline, CI runs the red-team and evaluation layer on every change to prompts, rails, thresholds or model versions: a fast deterministic tier that must pass, a medium OWASP-mapped scan gated on a maximum attack-success rate, and a slow nightly tier of multi-turn attacks, agentic probes and drift checks. Every decision from every layer, live or offline, is written in the same verdict schema to a durable audit store with OpenTelemetry traces, so a red-team finding, a CI failure and a production block are the same record shape and can be trended, reported against OWASP and NIST, and handed to a client reviewer as evidence. Only two rules are non-negotiable: the gateway fails closed for client-facing traffic, and any check that could not run is reported as unjudged rather than silently passed.",
+    "per_tenet_stack": [
+      {
+        "tenet": "Privacy",
+        "stack": ["llm-guard-main (Presidio + DeBERTa NER + Vault redaction)", "Guardrails-develop (GLiNER zero-shot PII rail)", "Azure AI Language PII detection (optional client-facing service)", "garak-main (ProPILE leakage probes, offline)", "hai-guardrails-main PHI regexes ported into Presidio"],
+        "one_line": "Deterministic and NER-based redaction with reversible masking at runtime, proven by offline leakage probing."
+      },
+      {
+        "tenet": "Security",
+        "stack": ["llm-guard-main (DeBERTa-v3 prompt-injection classifier, Secrets, InvisibleText)", "Guardrails-develop (YARA injection rules, perplexity heuristics, context-bloat, tool-schema validation)", "Azure AI Content Safety Prompt Shields (third opinion on high-risk traffic)", "PyRIT-main (offline multi-turn attacks and OWASP output scorers)", "garak-main (second offline scanner and shields up/down guardrail audit)"],
+        "one_line": "Cheap deterministic screens first, a local classifier second, a cloud shield third, all continuously attacked offline."
+      },
+      {
+        "tenet": "Fairness & Bias",
+        "stack": ["fairlearn-main (group metrics, mitigation, intersectional analysis)", "AIF360-main (MDSS and FACTS subgroup discovery)", "promptfoo-main (LLM bias red-team plugins in CI)", "shap-master (feature-level decomposition of outcome gaps)"],
+        "one_line": "Measured in scheduled batch jobs and CI, never enforced on a single live response, because bias is a pattern not an event."
+      },
+      {
+        "tenet": "Explainability & Transparency",
+        "stack": ["shap-master (feature attribution for tabular and text models)", "deepeval-main (G-Eval and DAG policy rubrics with written reasons)", "OpenGuardrails Verdict schema (per-finding score, severity, detector, span)"],
+        "one_line": "Explain the model with SHAP, explain the guardrail with a structured verdict, explain policy judgments with a versioned rubric."
+      },
+      {
+        "tenet": "Profanity / Content Safety",
+        "stack": ["llm-guard-main (local toxicity classifier, BanTopics, BanSubstrings)", "Guardrails-develop routing to Llama Guard 3 or Azure AI Content Safety with custom blocklists", "promptfoo-main (HarmBench, BeaverTails, DoNotAnswer, XSTest corpora in CI)"],
+        "one_line": "Local classifier for volume, a dedicated guard model for borderline cases, a cloud filter for the audit trail, never one filter alone."
+      },
+      {
+        "tenet": "Hallucination / Reliability",
+        "stack": ["llm-guard-main (cross-encoder NLI FactualConsistency at runtime)", "deepeval-main (faithfulness, contextual precision/recall/relevancy offline)", "Azure AI Content Safety groundedness detection (regulated RAG flows)", "deepchecks-main drift suite in a scheduled job (subject to AGPL clearance)"],
+        "one_line": "One cheap local groundedness score on every response, with the diagnostic RAG metrics run offline where they are affordable."
+      },
+      {
+        "tenet": "Accountability",
+        "stack": ["openguardrails-main (GuardEvent and Verdict schema, taxonomy, fail-closed contract)", "PyRIT-main (memory persistence, harm taxonomy, scorer accuracy vs human labels)", "promptfoo-main (OWASP, NIST, EU AI Act mapped reports from CI)", "Azure Monitor and Application Insights for guardrail telemetry"],
+        "one_line": "One record shape for every decision, a named owner per tenet, and a measured accuracy figure per detector rather than a vendor claim."
+      }
+    ],
+    "orchestration_note": "The Infosys Responsible AI Toolkit has the right shape and the wrong implementation, and AFNI should copy the shape. Its moderationlayer service is genuinely close to what AFNI needs: one async dispatcher that fans a single input out to roughly 15 independently-thresholded checks and returns one pass or fail summary with per-check evidence, in both coupled and decoupled modes, with thresholds configured per account and per portfolio through a separate admin service. That fan-out plus per-tenant threshold pattern is the correct design and should be reproduced. What AFNI should not do is deploy it. Adopting it as designed means standing up roughly 20 independently-versioned FastAPI microservices plus an Angular micro-frontend, each with its own requirements file and several gigabytes of local model weights, and every service configured with every other service's URL. Its red-team modules are marked retired for release 2.2.1 while the frontend still ships orphaned red-teaming components pointing at nothing, no accuracy figures exist for any of its in-house fine-tuned models, and most importantly the core dispatcher wraps individual checks in broad try/except blocks that log and return None, so a single timeout or misconfigured threshold silently drops a check rather than failing loudly. That is precisely the failure mode a governance framework exists to prevent. The recommended backbone is therefore NeMo Guardrails (Guardrails-develop) as the runtime orchestration layer, for four concrete reasons: it is a single pip-installable Python package rather than a service mesh; its library directory is already a plugin architecture where each rail is a self-contained module with an actions file, a config schema and a manifest, so AFNI's own detectors and the other adopted repos plug in as first-class rails; it already ships adapters for roughly 20 managed safety vendors and for Azure services, so AFNI stays Azure-first without being locked in; and NVIDIA maintains it with a 383-file test suite and publishes honest weakness numbers. Layered on top, the OpenGuardrails Verdict and GuardEvent schemas become the contract between the gateway and every application, which is what lets AFNI swap a detector, add a vendor, or move a check from local to cloud without touching application code. Three things must be carried over from Infosys and built explicitly, because NeMo does not provide them: the per-tenant and per-project threshold configuration service, a single consolidated verdict summary rather than a raw list of rail outputs, and a loud-failure policy where any check that could not complete is reported as unjudged and, for client-facing traffic, fails closed."
+  },
+  "roadmap_phases": [
+    {
+      "phase": "Phase 1 (0-30 days)",
+      "actions": [
+        "Stand up a single internal Responsible AI gateway as a Python FastAPI service running NeMo Guardrails (Guardrails-develop), with the jailbreak rail's fail-open default explicitly flipped to fail-closed for client-facing traffic.",
+        "Adopt the OpenGuardrails GuardEvent and Verdict JSON schemas plus its safety/security/privacy taxonomy as AFNI's internal contract, and pin the protocol version since it is still pre-1.0.",
+        "Fork llm-guard-main into an AFNI-owned repository, pin every HuggingFace model revision, and enable the free deterministic tier first: Anonymize with the Vault, Secrets, InvisibleText, Regex, plus NeMo's YARA injection rules and context-bloat heuristics.",
+        "Name one accountable owner per tenet and record the seven tenets, their owners and their current thresholds in a single governance register.",
+        "Run a baseline red-team scan against one existing AFNI AI application using garak-main (CLI, low effort) and a promptfoo-main OWASP-mapped redteam run, and publish the results as the before picture.",
+        "Wire the fast CI tier on the pilot application: DeepEval and promptfoo deterministic assertions plus PyRIT's regex output scorers, running in under five minutes on every pull request.",
+        "Get legal to rule on deepchecks-main's AGPL-3.0 licence and on promptfoo's remote-only plugin data-residency question before either is embedded in a client deliverable.",
+        "Flag the two vendor-risk items found in the review for the record: Guardrails AI's documented PyPI supply-chain compromise, and agentic_security-main's hard-coded third-party bearer token."
+      ]
+    },
+    {
+      "phase": "Phase 2 (30-60 days)",
+      "actions": [
+        "Turn on the model-based runtime tier: LLM Guard's DeBERTa-v3 prompt-injection classifier and local toxicity classifier, plus its cross-encoder NLI FactualConsistency scanner on every RAG response.",
+        "Route Azure AI Content Safety in through NeMo as a second opinion on high-risk content and as the groundedness detector for regulated RAG flows, with an AFNI custom blocklist, explicitly as defence in depth rather than the primary filter.",
+        "Port hai-guardrails-main's healthcare PHI regexes (ICD-10, MRN, NPI, DEA) and entropy-gated secret patterns into Presidio custom recognisers inside the Python stack, and calibrate all thresholds on real AFNI traffic rather than shipping defaults.",
+        "Reimplement Rebuff's canary-token leak detection and its self-hardening attack-signature store as native NeMo rails, seeding the signature store from the Phase 1 baseline findings.",
+        "Build the medium CI tier: a promptfoo redteam run over the OWASP LLM Top 10 plugin set plus a garak probe subset on every merge to main, gated on a maximum attack-success rate rather than on zero findings.",
+        "Establish the versioned regression corpus in git: export every attack that succeeded in Phase 1, tag it by tenet and OWASP category, and make replay of previously-fixed attacks a hard gate in the fast tier.",
+        "Adopt fairlearn-main plus the AIF360-main MDSS and FACTS scanners for any AFNI application making decisions about people, and run them as a scheduled batch job, not a runtime check.",
+        "Adopt shap-master for tabular and text model explanations and expose an explain endpoint backed by a background job, since SHAP is too slow for synchronous request handling.",
+        "Ship the audit store and dashboard: every verdict from runtime and CI written in the same schema, with OpenTelemetry traces flowing into Azure Monitor."
+      ]
+    },
+    {
+      "phase": "Phase 3 (60-90 days)",
+      "actions": [
+        "Stand up the slow nightly and pre-release tier: PyRIT Crescendo, TAP and PAIR multi-turn attacks, DeepTeam agentic vulnerability probes, and Deepchecks drift suites where licensing allows.",
+        "Measure the guardrails rather than assuming them: run PyRIT's scorer_evaluation tooling with Krippendorff's alpha against a human-labelled sample of production traffic, and publish a real precision and recall figure per detector.",
+        "Point garak's shields up and shields down probes at AFNI's own gateway to prove the rails actually fire, and add that check to the release gate.",
+        "Build the per-tenant and per-project threshold configuration service modelled on the Infosys admin pattern, so each AFNI project can set its own strictness without forking the gateway.",
+        "Produce the standard client approval pack from CI artefacts: OWASP LLM Top 10, NIST AI RMF, MITRE ATLAS and EU AI Act mapped reports from promptfoo, plus the measured detector accuracy table and the audit-trail sample.",
+        "Vendor the specific unique Infosys modules if the business needs them: multi-format and DICOM PII scanning, NSFW image and video detection, and Faker-based anonymisation with differential privacy.",
+        "Run the evals-main deception, sandbagging and covert-persuasion suite once against any AFNI product claiming agent autonomy, before it ships.",
+        "Publish the AFNI Responsible AI Toolkit as an internal versioned package with a mandatory adoption gate: no AI-native application reaches production without routing through the gateway and passing the CI tiers.",
+        "Schedule quarterly re-benchmarking, because garak's own published detector metrics and the archived status of llm-guard-main both mean accuracy decays unless someone owns it."
+      ]
+    }
+  ],
+  "key_tradeoff_narrative": "AFNI should spend its money where the risk is highest and use free, deterministic checks everywhere else. In practice that means running the cheap local checks on every single request, calling a paid model or cloud service only for the small slice of traffic that looks borderline, and pushing the expensive, slow, thorough work into nightly and pre-release testing rather than the live request path. No single filter should ever be the whole defence, because the independent evidence is clear that cloud content filters weaken on unusual and adversarial input, so the design is layered on purpose and every layer is allowed to be imperfect. The two rules that matter more than any tool choice are: if a check cannot run, say so and block rather than quietly letting the request through; and measure how accurate each check really is against human-reviewed examples instead of trusting a vendor's claim. Maintenance is the hidden cost that sinks most governance programmes, so AFNI should standardise on one gateway, one verdict format and one audit trail, and accept a slightly less capable tool when it means one fewer thing to keep alive. Finally, the testing half is not optional polish: the red-team corpus AFNI builds is a durable company asset that outlives any tool, and it is the single most persuasive thing to put in front of a client's security reviewer."
+}
