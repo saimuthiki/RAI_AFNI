@@ -183,3 +183,55 @@ write-up was created and reverted).
 - `references/` — added (23 repos, minus 686 broken LFS pointer stub files)
 - Git: commit `972d4839` pushed to `main` (superseding two earlier local-only commits that were
   reset before ever reaching the remote)
+
+### 2026-08-24 (cont'd) — Context layer: graft + graphify wired in, and a hand-authored knowledge/ layer
+**Type:** New Build / Enhancement
+**Ask:** Three things in one sitting: (1) adopt the methodology from `nanonets/graft` to cut token
+consumption and make Claude Code usage more efficient on this project; (2) also adopt
+`Graphify-Labs/graphify` alongside it; (3) push the current state to the repo once both are
+integrated. Also a correction to record: this repo is **not** a document-generation pipeline — it is
+the Phase-0 analysis step toward a unified Responsible AI governance platform for AFNI, and the PPTX
+and HTML are the evidence base for that platform, not the product.
+**What was done:**
+- Read both tools at source level and assessed them against this repo rather than assuming the
+  marketing numbers. Measured on a throwaway copy: `graft map` 597 tokens vs 54,224 to read the
+  files (99% saved), `graft ask --source` 1,982 vs 22,791 (91%); `graphify benchmark` reported 5.2x
+  fewer tokens per query.
+- Found and recorded the honest limitation: **graft indexes code only**, so it skipped the `.pptx`,
+  the `.html`, the JSON and the markdown — i.e. everything where this project's actual knowledge
+  lives. graphify closes most of that gap (it covers `.md`, `.html`, `.json`), but nothing indexes a
+  PowerPoint. That is what the `knowledge/` layer below is for.
+- Wired graft into Claude Code (`graft init --agents claude`): statusline, hooks, skill file and the
+  MCP server registration. Built the full structural graph — 120,249 nodes / 282,953 edges over
+  12,828 files, deliberately including all 23 `references/` repos, since those are exactly the
+  sources we will be reading while building the platform. Verified with a real query against
+  LLM Guard's `Vault` class: answer returned with source inlined, 66% fewer tokens than reading it.
+- Installed graphify and mirrored its skill from the machine-wide install into the repo's `.claude/`
+  so the wiring is committed and teammates get it. Built the graph with the free local AST pass
+  (`extract --code-only` + `cluster-only --no-label`): 113 nodes, 332 edges, 10 communities. The
+  semantic pass over docs is still pending — it needs either an API key or subagent dispatch.
+- Added `.graphifyignore` to keep graphify scoped to AFNI's own material (a semantic pass over the
+  ~12,800 `references/` files would be expensive), and an `.ignore` file so the gitignored graph
+  outputs stay greppable by ripgrep.
+- Rewrote `.gitignore`: `.claude/` was ignoring the very wiring both tools expect to be committed,
+  so it now commits `.claude/settings.json`, `.claude/helpers/` and `.claude/skills/` while ignoring
+  `.claude/settings.local.json` and the two regenerable caches (`graft/`, `graphify-out/`).
+- Built `knowledge/` — 9 hand-authored markdown nodes (~6,200 words) distilling the whole Phase-0
+  analysis: locked decisions, the 23 frameworks with verdicts, the 7 tenets with per-tenet stacks,
+  the Infosys-vs-NeMo call, the request flow, the dev/test loop, the 90-day roadmap, and an honest
+  open-questions list. Factual tables were generated from `data/*.json` and `REPO_SLIDES` rather
+  than typed by hand. Reading one node costs ~600–1,500 tokens against ~35,000 to extract the deck.
+- Recorded in `knowledge/open-questions.md` that the deck's "August 2026" framing for the EU AI Act
+  and the Guardrails AI Hub deprecation is now past-tense and needs correcting before reuse with
+  the client.
+**Files created / changed:**
+- `.claude/settings.json`, `.claude/helpers/graft-hooks.cjs`, `.claude/helpers/graft-statusline.cjs`,
+  `.claude/skills/graft/SKILL.md` — new, written by `graft init`
+- `.claude/skills/graphify/` (SKILL.md + 8 reference docs) — new, mirrored from the graphify install
+- `.mcp.json` — new, registers the graft MCP server
+- `.gitignore` — rewritten to commit the wiring and ignore the caches
+- `.graphifyignore`, `.ignore` — new
+- `knowledge/INDEX.md`, `decisions.md`, `frameworks.md`, `tenets.md`, `infosys-vs-nemo.md`,
+  `request-flow.md`, `dev-vs-test-loop.md`, `roadmap.md`, `open-questions.md` — new
+- `MEMORY.md` — this entry
+- Not committed (regenerable caches, gitignored): `graft/` (722 MB), `graphify-out/`
