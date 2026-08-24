@@ -1,0 +1,2229 @@
+{
+  "Privacy": {
+    "columns": [
+      {
+        "code": "LG",
+        "name": "LLM Guard",
+        "kind": "repo",
+        "key": "llm-guard-main"
+      },
+      {
+        "code": "NeMo",
+        "name": "NeMo Guardrails",
+        "kind": "repo",
+        "key": "Guardrails-develop"
+      },
+      {
+        "code": "HAI",
+        "name": "hai-guardrails",
+        "kind": "repo",
+        "key": "hai-guardrails-main"
+      },
+      {
+        "code": "TSZ",
+        "name": "Safe Zone (TSZ)",
+        "kind": "repo",
+        "key": "safe-zone-main"
+      },
+      {
+        "code": "INF",
+        "name": "Infosys RAI Toolkit",
+        "kind": "repo",
+        "key": "Infosys-Responsible-AI-Toolkit-master"
+      },
+      {
+        "code": "AS",
+        "name": "Agentic Security",
+        "kind": "repo",
+        "key": "agentic_security-main"
+      },
+      {
+        "code": "GRK",
+        "name": "garak",
+        "kind": "repo",
+        "key": "garak-main"
+      },
+      {
+        "code": "DEv",
+        "name": "DeepEval",
+        "kind": "repo",
+        "key": "deepeval-main"
+      },
+      {
+        "code": "DTm",
+        "name": "DeepTeam",
+        "kind": "repo",
+        "key": "deepteam-main"
+      },
+      {
+        "code": "PF",
+        "name": "Promptfoo",
+        "kind": "repo",
+        "key": "promptfoo-main"
+      },
+      {
+        "code": "OGR",
+        "name": "OpenGuardrails",
+        "kind": "repo",
+        "key": "openguardrails-main"
+      },
+      {
+        "code": "GAI",
+        "name": "Guardrails AI",
+        "kind": "repo",
+        "key": "guardrails-main"
+      },
+      {
+        "code": "DCk",
+        "name": "Deepchecks",
+        "kind": "repo",
+        "key": "deepchecks-main"
+      },
+      {
+        "code": "PSD",
+        "name": "Presidio*",
+        "kind": "virtual",
+        "key": "PSD"
+      }
+    ],
+    "rows": [
+      {
+        "aspect": "PII entity detection & redaction",
+        "cells": {
+          "LG": "●",
+          "NeMo": "◐",
+          "HAI": "–",
+          "TSZ": "–",
+          "INF": "●",
+          "AS": "–",
+          "GRK": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "PF": "–",
+          "OGR": "–",
+          "GAI": "●",
+          "DCk": "–",
+          "PSD": "●"
+        },
+        "best": "Presidio via LLM Guard - free, most complete region…"
+      },
+      {
+        "aspect": "Region-specific ID recognizers",
+        "cells": {
+          "LG": "●",
+          "NeMo": "–",
+          "HAI": "–",
+          "TSZ": "●",
+          "INF": "●",
+          "AS": "–",
+          "GRK": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "PF": "–",
+          "OGR": "●",
+          "GAI": "–",
+          "DCk": "–",
+          "PSD": "●"
+        },
+        "best": "Presidio / Infosys - Aadhaar, PAN, SSN, IBAN packs built…"
+      },
+      {
+        "aspect": "Credit card detection (Luhn-checked)",
+        "cells": {
+          "LG": "●",
+          "NeMo": "–",
+          "HAI": "–",
+          "TSZ": "–",
+          "INF": "●",
+          "AS": "●",
+          "GRK": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "PF": "–",
+          "OGR": "–",
+          "GAI": "–",
+          "DCk": "–",
+          "PSD": "●"
+        },
+        "best": "Agentic Security / TSZ - Luhn-validated, low false…"
+      },
+      {
+        "aspect": "Healthcare PHI entities",
+        "cells": {
+          "LG": "–",
+          "NeMo": "–",
+          "HAI": "●",
+          "TSZ": "–",
+          "INF": "●",
+          "AS": "–",
+          "GRK": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "PF": "–",
+          "OGR": "–",
+          "GAI": "●",
+          "DCk": "–",
+          "PSD": "◐"
+        },
+        "best": "hai-guardrails - only dedicated PHI regex set found"
+      },
+      {
+        "aspect": "PII leakage detection (LLM judge)",
+        "cells": {
+          "LG": "–",
+          "NeMo": "–",
+          "HAI": "●",
+          "TSZ": "●",
+          "INF": "–",
+          "AS": "–",
+          "GRK": "–",
+          "DEv": "●",
+          "DTm": "●",
+          "PF": "●",
+          "OGR": "–",
+          "GAI": "–",
+          "DCk": "–",
+          "PSD": "–"
+        },
+        "best": "DeepTeam - purpose-built PII vulnerability metric"
+      },
+      {
+        "aspect": "System-prompt leakage detection",
+        "cells": {
+          "LG": "–",
+          "NeMo": "–",
+          "HAI": "●",
+          "TSZ": "–",
+          "INF": "–",
+          "AS": "–",
+          "GRK": "●",
+          "DEv": "–",
+          "DTm": "●",
+          "PF": "–",
+          "OGR": "–",
+          "GAI": "–",
+          "DCk": "–",
+          "PSD": "–"
+        },
+        "best": "DeepTeam + LLM Guard secrets scan as backstop"
+      },
+      {
+        "aspect": "PII leakage red-team probing",
+        "cells": {
+          "LG": "–",
+          "NeMo": "–",
+          "HAI": "–",
+          "TSZ": "–",
+          "INF": "–",
+          "AS": "–",
+          "GRK": "●",
+          "DEv": "–",
+          "DTm": "●",
+          "PF": "●",
+          "OGR": "–",
+          "GAI": "–",
+          "DCk": "–",
+          "PSD": "–"
+        },
+        "best": "garak's ProPILE probes - fuzzy + exact matching"
+      },
+      {
+        "aspect": "Reversible anonymisation (vault)",
+        "cells": {
+          "LG": "●",
+          "NeMo": "–",
+          "HAI": "–",
+          "TSZ": "–",
+          "INF": "–",
+          "AS": "–",
+          "GRK": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "PF": "–",
+          "OGR": "–",
+          "GAI": "–",
+          "DCk": "–",
+          "PSD": "●"
+        },
+        "best": "LLM Guard's Vault - only reversible redaction found"
+      },
+      {
+        "aspect": "Multi-format PII scanning",
+        "cells": {
+          "LG": "–",
+          "NeMo": "–",
+          "HAI": "–",
+          "TSZ": "–",
+          "INF": "●",
+          "AS": "–",
+          "GRK": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "PF": "–",
+          "OGR": "–",
+          "GAI": "–",
+          "DCk": "–",
+          "PSD": "◐"
+        },
+        "best": "Infosys - PDF/Office/OCR/DICOM/video, unmatched breadth"
+      }
+    ]
+  },
+  "Security": {
+    "columns": [
+      {
+        "code": "NeMo",
+        "name": "NeMo Guardrails",
+        "kind": "repo",
+        "key": "Guardrails-develop"
+      },
+      {
+        "code": "LG",
+        "name": "LLM Guard",
+        "kind": "repo",
+        "key": "llm-guard-main"
+      },
+      {
+        "code": "PyR",
+        "name": "PyRIT",
+        "kind": "repo",
+        "key": "PyRIT-main"
+      },
+      {
+        "code": "GRK",
+        "name": "garak",
+        "kind": "repo",
+        "key": "garak-main"
+      },
+      {
+        "code": "DTm",
+        "name": "DeepTeam",
+        "kind": "repo",
+        "key": "deepteam-main"
+      },
+      {
+        "code": "PF",
+        "name": "Promptfoo",
+        "kind": "repo",
+        "key": "promptfoo-main"
+      },
+      {
+        "code": "RB",
+        "name": "Rebuff",
+        "kind": "repo",
+        "key": "rebuff-main"
+      },
+      {
+        "code": "TSZ",
+        "name": "Safe Zone (TSZ)",
+        "kind": "repo",
+        "key": "safe-zone-main"
+      },
+      {
+        "code": "HAI",
+        "name": "hai-guardrails",
+        "kind": "repo",
+        "key": "hai-guardrails-main"
+      },
+      {
+        "code": "AS",
+        "name": "Agentic Security",
+        "kind": "repo",
+        "key": "agentic_security-main"
+      },
+      {
+        "code": "FZ",
+        "name": "FuzzyAI",
+        "kind": "repo",
+        "key": "FuzzyAI-main"
+      },
+      {
+        "code": "JCB",
+        "name": "JCB",
+        "kind": "repo",
+        "key": "JCB-main"
+      },
+      {
+        "code": "LMF",
+        "name": "LLMFuzzer",
+        "kind": "repo",
+        "key": "LLMFuzzer-main"
+      },
+      {
+        "code": "GSK",
+        "name": "Giskard",
+        "kind": "repo",
+        "key": "giskard-oss-main"
+      },
+      {
+        "code": "OGR",
+        "name": "OpenGuardrails",
+        "kind": "repo",
+        "key": "openguardrails-main"
+      },
+      {
+        "code": "INF",
+        "name": "Infosys RAI Toolkit",
+        "kind": "repo",
+        "key": "Infosys-Responsible-AI-Toolkit-master"
+      },
+      {
+        "code": "OAE",
+        "name": "OpenAI Evals",
+        "kind": "repo",
+        "key": "evals-main"
+      },
+      {
+        "code": "AzPS",
+        "name": "Azure Prompt Shields",
+        "kind": "virtual",
+        "key": "AzPS"
+      },
+      {
+        "code": "AWSB",
+        "name": "AWS Bedrock GR",
+        "kind": "virtual",
+        "key": "AWSB"
+      }
+    ],
+    "rows": [
+      {
+        "aspect": "Prompt injection (regex/heuristic)",
+        "cells": {
+          "NeMo": "–",
+          "LG": "–",
+          "PyR": "●",
+          "GRK": "–",
+          "DTm": "–",
+          "PF": "–",
+          "RB": "–",
+          "TSZ": "●",
+          "HAI": "●",
+          "AS": "–",
+          "FZ": "–",
+          "JCB": "–",
+          "LMF": "–",
+          "GSK": "–",
+          "OGR": "●",
+          "INF": "–",
+          "OAE": "–",
+          "AzPS": "◐",
+          "AWSB": "◐"
+        },
+        "best": "LLM Guard / TSZ - free, zero-latency first pass"
+      },
+      {
+        "aspect": "Prompt injection (ML classifier)",
+        "cells": {
+          "NeMo": "–",
+          "LG": "●",
+          "PyR": "–",
+          "GRK": "–",
+          "DTm": "–",
+          "PF": "–",
+          "RB": "–",
+          "TSZ": "–",
+          "HAI": "–",
+          "AS": "–",
+          "FZ": "–",
+          "JCB": "–",
+          "LMF": "–",
+          "GSK": "–",
+          "OGR": "–",
+          "INF": "●",
+          "OAE": "–",
+          "AzPS": "●",
+          "AWSB": "●"
+        },
+        "best": "LLM Guard's DeBERTa-v3 classifier - free, self-hosted"
+      },
+      {
+        "aspect": "Prompt injection (LLM judge)",
+        "cells": {
+          "NeMo": "◐",
+          "LG": "–",
+          "PyR": "–",
+          "GRK": "–",
+          "DTm": "●",
+          "PF": "–",
+          "RB": "●",
+          "TSZ": "●",
+          "HAI": "●",
+          "AS": "–",
+          "FZ": "–",
+          "JCB": "–",
+          "LMF": "–",
+          "GSK": "–",
+          "OGR": "–",
+          "INF": "–",
+          "OAE": "–",
+          "AzPS": "●",
+          "AWSB": "◐"
+        },
+        "best": "Azure Prompt Shields if Azure-native; else PyRIT/DeepTeam"
+      },
+      {
+        "aspect": "Multi-turn jailbreak attacks",
+        "cells": {
+          "NeMo": "–",
+          "LG": "–",
+          "PyR": "●",
+          "GRK": "●",
+          "DTm": "●",
+          "PF": "●",
+          "RB": "–",
+          "TSZ": "–",
+          "HAI": "–",
+          "AS": "–",
+          "FZ": "●",
+          "JCB": "–",
+          "LMF": "–",
+          "GSK": "●",
+          "OGR": "–",
+          "INF": "–",
+          "OAE": "–",
+          "AzPS": "◐",
+          "AWSB": "◐"
+        },
+        "best": "PyRIT - deepest coverage (Crescendo/TAP/PAIR/GOAT), free"
+      },
+      {
+        "aspect": "Encoding / obfuscation attacks",
+        "cells": {
+          "NeMo": "–",
+          "LG": "–",
+          "PyR": "●",
+          "GRK": "●",
+          "DTm": "●",
+          "PF": "●",
+          "RB": "–",
+          "TSZ": "–",
+          "HAI": "–",
+          "AS": "●",
+          "FZ": "●",
+          "JCB": "–",
+          "LMF": "–",
+          "GSK": "●",
+          "OGR": "–",
+          "INF": "–",
+          "OAE": "–",
+          "AzPS": "◐",
+          "AWSB": "◐"
+        },
+        "best": "garak - 20 distinct encodings in one probe family"
+      },
+      {
+        "aspect": "Secrets / credential leakage",
+        "cells": {
+          "NeMo": "–",
+          "LG": "●",
+          "PyR": "●",
+          "GRK": "●",
+          "DTm": "–",
+          "PF": "–",
+          "RB": "–",
+          "TSZ": "●",
+          "HAI": "●",
+          "AS": "–",
+          "FZ": "–",
+          "JCB": "–",
+          "LMF": "–",
+          "GSK": "–",
+          "OGR": "●",
+          "INF": "–",
+          "OAE": "–",
+          "AzPS": "–",
+          "AWSB": "–"
+        },
+        "best": "LLM Guard - free, gateway-ready"
+      },
+      {
+        "aspect": "Invisible-text smuggling",
+        "cells": {
+          "NeMo": "–",
+          "LG": "●",
+          "PyR": "●",
+          "GRK": "●",
+          "DTm": "–",
+          "PF": "●",
+          "RB": "–",
+          "TSZ": "–",
+          "HAI": "–",
+          "AS": "–",
+          "FZ": "–",
+          "JCB": "–",
+          "LMF": "–",
+          "GSK": "–",
+          "OGR": "–",
+          "INF": "●",
+          "OAE": "–",
+          "AzPS": "–",
+          "AWSB": "–"
+        },
+        "best": "LLM Guard / PyRIT - only native detectors found for this…"
+      },
+      {
+        "aspect": "Indirect / document injection",
+        "cells": {
+          "NeMo": "–",
+          "LG": "–",
+          "PyR": "–",
+          "GRK": "●",
+          "DTm": "●",
+          "PF": "●",
+          "RB": "–",
+          "TSZ": "–",
+          "HAI": "–",
+          "AS": "–",
+          "FZ": "–",
+          "JCB": "–",
+          "LMF": "–",
+          "GSK": "–",
+          "OGR": "–",
+          "INF": "–",
+          "OAE": "–",
+          "AzPS": "●",
+          "AWSB": "◐"
+        },
+        "best": "Azure Prompt Shields - most mature named capability"
+      },
+      {
+        "aspect": "Insecure code / SQLi / XSS output",
+        "cells": {
+          "NeMo": "–",
+          "LG": "–",
+          "PyR": "●",
+          "GRK": "–",
+          "DTm": "●",
+          "PF": "●",
+          "RB": "–",
+          "TSZ": "–",
+          "HAI": "–",
+          "AS": "–",
+          "FZ": "–",
+          "JCB": "–",
+          "LMF": "–",
+          "GSK": "–",
+          "OGR": "–",
+          "INF": "–",
+          "OAE": "–",
+          "AzPS": "–",
+          "AWSB": "–"
+        },
+        "best": "PyRIT for scoring; Guardrails AI validators for…"
+      }
+    ]
+  },
+  "Fairness & Bias": {
+    "columns": [
+      {
+        "code": "FLn",
+        "name": "Fairlearn",
+        "kind": "repo",
+        "key": "fairlearn-main"
+      },
+      {
+        "code": "AIF",
+        "name": "AIF360",
+        "kind": "repo",
+        "key": "AIF360-main"
+      },
+      {
+        "code": "DCk",
+        "name": "Deepchecks",
+        "kind": "repo",
+        "key": "deepchecks-main"
+      },
+      {
+        "code": "PF",
+        "name": "Promptfoo",
+        "kind": "repo",
+        "key": "promptfoo-main"
+      },
+      {
+        "code": "DEv",
+        "name": "DeepEval",
+        "kind": "repo",
+        "key": "deepeval-main"
+      },
+      {
+        "code": "DTm",
+        "name": "DeepTeam",
+        "kind": "repo",
+        "key": "deepteam-main"
+      },
+      {
+        "code": "HAI",
+        "name": "hai-guardrails",
+        "kind": "repo",
+        "key": "hai-guardrails-main"
+      },
+      {
+        "code": "GSK",
+        "name": "Giskard",
+        "kind": "repo",
+        "key": "giskard-oss-main"
+      },
+      {
+        "code": "SHAP",
+        "name": "SHAP",
+        "kind": "repo",
+        "key": "shap-master"
+      },
+      {
+        "code": "PyR",
+        "name": "PyRIT",
+        "kind": "repo",
+        "key": "PyRIT-main"
+      },
+      {
+        "code": "GRK",
+        "name": "garak",
+        "kind": "repo",
+        "key": "garak-main"
+      },
+      {
+        "code": "INF",
+        "name": "Infosys RAI Toolkit",
+        "kind": "repo",
+        "key": "Infosys-Responsible-AI-Toolkit-master"
+      },
+      {
+        "code": "AzML",
+        "name": "Azure ML RAI",
+        "kind": "virtual",
+        "key": "AzML"
+      },
+      {
+        "code": "Fid",
+        "name": "Fiddler AI",
+        "kind": "virtual",
+        "key": "Fid"
+      }
+    ],
+    "rows": [
+      {
+        "aspect": "Bias detection (generative)",
+        "cells": {
+          "FLn": "–",
+          "AIF": "–",
+          "DCk": "–",
+          "PF": "●",
+          "DEv": "●",
+          "DTm": "●",
+          "HAI": "●",
+          "GSK": "◐",
+          "SHAP": "–",
+          "PyR": "–",
+          "GRK": "–",
+          "INF": "–",
+          "AzML": "◐",
+          "Fid": "●"
+        },
+        "best": "LLM Guard - free, inline; pair with Fairlearn for tabular"
+      },
+      {
+        "aspect": "Group fairness metrics",
+        "cells": {
+          "FLn": "●",
+          "AIF": "●",
+          "DCk": "–",
+          "PF": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "HAI": "–",
+          "GSK": "–",
+          "SHAP": "–",
+          "PyR": "–",
+          "GRK": "–",
+          "INF": "●",
+          "AzML": "●",
+          "Fid": "●"
+        },
+        "best": "Fairlearn - Azure-aligned, lower overhead"
+      },
+      {
+        "aspect": "Pre-processing mitigation",
+        "cells": {
+          "FLn": "●",
+          "AIF": "●",
+          "DCk": "–",
+          "PF": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "HAI": "–",
+          "GSK": "–",
+          "SHAP": "–",
+          "PyR": "–",
+          "GRK": "–",
+          "INF": "●",
+          "AzML": "◐",
+          "Fid": "–"
+        },
+        "best": "AIF360 - widest algorithm variety"
+      },
+      {
+        "aspect": "Post-processing mitigation",
+        "cells": {
+          "FLn": "●",
+          "AIF": "●",
+          "DCk": "–",
+          "PF": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "HAI": "–",
+          "GSK": "–",
+          "SHAP": "–",
+          "PyR": "–",
+          "GRK": "–",
+          "INF": "●",
+          "AzML": "◐",
+          "Fid": "–"
+        },
+        "best": "Fairlearn's ThresholdOptimizer - simple, well-tested"
+      },
+      {
+        "aspect": "In-processing mitigation",
+        "cells": {
+          "FLn": "●",
+          "AIF": "●",
+          "DCk": "–",
+          "PF": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "HAI": "–",
+          "GSK": "–",
+          "SHAP": "–",
+          "PyR": "–",
+          "GRK": "–",
+          "INF": "–",
+          "AzML": "–",
+          "Fid": "–"
+        },
+        "best": "AIF360 - only source with adversarial debiasing built in"
+      },
+      {
+        "aspect": "Automated subgroup discovery",
+        "cells": {
+          "FLn": "–",
+          "AIF": "●",
+          "DCk": "●",
+          "PF": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "HAI": "–",
+          "GSK": "–",
+          "SHAP": "–",
+          "PyR": "–",
+          "GRK": "–",
+          "INF": "–",
+          "AzML": "–",
+          "Fid": "◐"
+        },
+        "best": "AIF360's MDSS/FACTS - finds the group for you"
+      },
+      {
+        "aspect": "Bias red-team probe packs",
+        "cells": {
+          "FLn": "–",
+          "AIF": "–",
+          "DCk": "–",
+          "PF": "●",
+          "DEv": "–",
+          "DTm": "–",
+          "HAI": "–",
+          "GSK": "–",
+          "SHAP": "–",
+          "PyR": "●",
+          "GRK": "●",
+          "INF": "–",
+          "AzML": "–",
+          "Fid": "–"
+        },
+        "best": "DeepTeam / promptfoo - CI-ready bias attack packs"
+      },
+      {
+        "aspect": "Local bias classifier (text)",
+        "cells": {
+          "FLn": "–",
+          "AIF": "–",
+          "DCk": "–",
+          "PF": "–",
+          "DEv": "●",
+          "DTm": "–",
+          "HAI": "–",
+          "GSK": "–",
+          "SHAP": "–",
+          "PyR": "–",
+          "GRK": "–",
+          "INF": "–",
+          "AzML": "–",
+          "Fid": "◐"
+        },
+        "best": "LLM Guard's bias scanner - fast, no training needed"
+      },
+      {
+        "aspect": "Bias benchmark harnesses",
+        "cells": {
+          "FLn": "–",
+          "AIF": "–",
+          "DCk": "–",
+          "PF": "–",
+          "DEv": "●",
+          "DTm": "–",
+          "HAI": "–",
+          "GSK": "–",
+          "SHAP": "–",
+          "PyR": "–",
+          "GRK": "–",
+          "INF": "●",
+          "AzML": "–",
+          "Fid": "–"
+        },
+        "best": "DeepEval - BBQ/EquityMedQA out of the box"
+      }
+    ]
+  },
+  "Explainability & Transparency": {
+    "columns": [
+      {
+        "code": "SHAP",
+        "name": "SHAP",
+        "kind": "repo",
+        "key": "shap-master"
+      },
+      {
+        "code": "INF",
+        "name": "Infosys RAI Toolkit",
+        "kind": "repo",
+        "key": "Infosys-Responsible-AI-Toolkit-master"
+      },
+      {
+        "code": "AIF",
+        "name": "AIF360",
+        "kind": "repo",
+        "key": "AIF360-main"
+      },
+      {
+        "code": "GAI",
+        "name": "Guardrails AI",
+        "kind": "repo",
+        "key": "guardrails-main"
+      },
+      {
+        "code": "DEv",
+        "name": "DeepEval",
+        "kind": "repo",
+        "key": "deepeval-main"
+      },
+      {
+        "code": "PF",
+        "name": "Promptfoo",
+        "kind": "repo",
+        "key": "promptfoo-main"
+      },
+      {
+        "code": "GSK",
+        "name": "Giskard",
+        "kind": "repo",
+        "key": "giskard-oss-main"
+      },
+      {
+        "code": "OGR",
+        "name": "OpenGuardrails",
+        "kind": "repo",
+        "key": "openguardrails-main"
+      },
+      {
+        "code": "TSZ",
+        "name": "Safe Zone (TSZ)",
+        "kind": "repo",
+        "key": "safe-zone-main"
+      },
+      {
+        "code": "LG",
+        "name": "LLM Guard",
+        "kind": "repo",
+        "key": "llm-guard-main"
+      },
+      {
+        "code": "DCk",
+        "name": "Deepchecks",
+        "kind": "repo",
+        "key": "deepchecks-main"
+      },
+      {
+        "code": "AzML",
+        "name": "Azure ML RAI",
+        "kind": "virtual",
+        "key": "AzML"
+      },
+      {
+        "code": "AIX",
+        "name": "IBM AIX360",
+        "kind": "virtual",
+        "key": "AIX"
+      }
+    ],
+    "rows": [
+      {
+        "aspect": "Structured-output / schema validity",
+        "cells": {
+          "SHAP": "–",
+          "INF": "–",
+          "AIF": "–",
+          "GAI": "●",
+          "DEv": "●",
+          "PF": "–",
+          "GSK": "●",
+          "OGR": "–",
+          "TSZ": "●",
+          "LG": "●",
+          "DCk": "–",
+          "AzML": "–",
+          "AIX": "–"
+        },
+        "best": "Guardrails AI - purpose-built, its core strength"
+      },
+      {
+        "aspect": "Ban-topics / on-topic scope",
+        "cells": {
+          "SHAP": "–",
+          "INF": "–",
+          "AIF": "–",
+          "GAI": "●",
+          "DEv": "●",
+          "PF": "–",
+          "GSK": "–",
+          "OGR": "–",
+          "TSZ": "–",
+          "LG": "●",
+          "DCk": "–",
+          "AzML": "–",
+          "AIX": "–"
+        },
+        "best": "NeMo topic rails or LLM Guard BanTopics - zero-shot, no…"
+      },
+      {
+        "aspect": "Custom rubric judges (G-Eval)",
+        "cells": {
+          "SHAP": "–",
+          "INF": "●",
+          "AIF": "–",
+          "GAI": "–",
+          "DEv": "●",
+          "PF": "●",
+          "GSK": "●",
+          "OGR": "–",
+          "TSZ": "–",
+          "LG": "–",
+          "DCk": "–",
+          "AzML": "◐",
+          "AIX": "–"
+        },
+        "best": "DeepEval G-Eval/DAG - versioned, CI-runnable"
+      },
+      {
+        "aspect": "Feature attribution (SHAP)",
+        "cells": {
+          "SHAP": "●",
+          "INF": "●",
+          "AIF": "–",
+          "GAI": "–",
+          "DEv": "–",
+          "PF": "–",
+          "GSK": "–",
+          "OGR": "–",
+          "TSZ": "–",
+          "LG": "–",
+          "DCk": "–",
+          "AzML": "●",
+          "AIX": "●"
+        },
+        "best": "SHAP - broadest family, most actively maintained"
+      },
+      {
+        "aspect": "Token-level attribution",
+        "cells": {
+          "SHAP": "●",
+          "INF": "●",
+          "AIF": "–",
+          "GAI": "–",
+          "DEv": "–",
+          "PF": "–",
+          "GSK": "–",
+          "OGR": "–",
+          "TSZ": "–",
+          "LG": "–",
+          "DCk": "–",
+          "AzML": "◐",
+          "AIX": "◐"
+        },
+        "best": "Infosys LLM-Explain (prompt-based); SHAP for real models"
+      },
+      {
+        "aspect": "Per-check confidence breakdown",
+        "cells": {
+          "SHAP": "–",
+          "INF": "–",
+          "AIF": "–",
+          "GAI": "–",
+          "DEv": "–",
+          "PF": "–",
+          "GSK": "–",
+          "OGR": "●",
+          "TSZ": "●",
+          "LG": "–",
+          "DCk": "–",
+          "AzML": "◐",
+          "AIX": "–"
+        },
+        "best": "TSZ / OpenGuardrails verdict schema - explicit per-layer…"
+      },
+      {
+        "aspect": "LIME local explanations",
+        "cells": {
+          "SHAP": "–",
+          "INF": "●",
+          "AIF": "–",
+          "GAI": "–",
+          "DEv": "–",
+          "PF": "–",
+          "GSK": "–",
+          "OGR": "–",
+          "TSZ": "–",
+          "LG": "–",
+          "DCk": "–",
+          "AzML": "◐",
+          "AIX": "●"
+        },
+        "best": "Infosys explainability module (SHAP+LIME combo)"
+      },
+      {
+        "aspect": "Counterfactual / recourse analysis",
+        "cells": {
+          "SHAP": "●",
+          "INF": "–",
+          "AIF": "●",
+          "GAI": "–",
+          "DEv": "–",
+          "PF": "–",
+          "GSK": "–",
+          "OGR": "–",
+          "TSZ": "–",
+          "LG": "–",
+          "DCk": "–",
+          "AzML": "●",
+          "AIX": "●"
+        },
+        "best": "AIF360's FACTS / SHAP's action optimizer"
+      },
+      {
+        "aspect": "Deterministic format validators",
+        "cells": {
+          "SHAP": "–",
+          "INF": "–",
+          "AIF": "–",
+          "GAI": "●",
+          "DEv": "●",
+          "PF": "●",
+          "GSK": "●",
+          "OGR": "–",
+          "TSZ": "●",
+          "LG": "–",
+          "DCk": "–",
+          "AzML": "–",
+          "AIX": "–"
+        },
+        "best": "Guardrails AI / TSZ - regex/length/range, no ML needed"
+      }
+    ]
+  },
+  "Profanity / Content Safety": {
+    "columns": [
+      {
+        "code": "LG",
+        "name": "LLM Guard",
+        "kind": "repo",
+        "key": "llm-guard-main"
+      },
+      {
+        "code": "NeMo",
+        "name": "NeMo Guardrails",
+        "kind": "repo",
+        "key": "Guardrails-develop"
+      },
+      {
+        "code": "PF",
+        "name": "Promptfoo",
+        "kind": "repo",
+        "key": "promptfoo-main"
+      },
+      {
+        "code": "DTm",
+        "name": "DeepTeam",
+        "kind": "repo",
+        "key": "deepteam-main"
+      },
+      {
+        "code": "GRK",
+        "name": "garak",
+        "kind": "repo",
+        "key": "garak-main"
+      },
+      {
+        "code": "GSK",
+        "name": "Giskard",
+        "kind": "repo",
+        "key": "giskard-oss-main"
+      },
+      {
+        "code": "HAI",
+        "name": "hai-guardrails",
+        "kind": "repo",
+        "key": "hai-guardrails-main"
+      },
+      {
+        "code": "DEv",
+        "name": "DeepEval",
+        "kind": "repo",
+        "key": "deepeval-main"
+      },
+      {
+        "code": "DCk",
+        "name": "Deepchecks",
+        "kind": "repo",
+        "key": "deepchecks-main"
+      },
+      {
+        "code": "INF",
+        "name": "Infosys RAI Toolkit",
+        "kind": "repo",
+        "key": "Infosys-Responsible-AI-Toolkit-master"
+      },
+      {
+        "code": "PyR",
+        "name": "PyRIT",
+        "kind": "repo",
+        "key": "PyRIT-main"
+      },
+      {
+        "code": "FZ",
+        "name": "FuzzyAI",
+        "kind": "repo",
+        "key": "FuzzyAI-main"
+      },
+      {
+        "code": "OGR",
+        "name": "OpenGuardrails",
+        "kind": "repo",
+        "key": "openguardrails-main"
+      },
+      {
+        "code": "JCB",
+        "name": "JCB",
+        "kind": "repo",
+        "key": "JCB-main"
+      },
+      {
+        "code": "TSZ",
+        "name": "Safe Zone (TSZ)",
+        "kind": "repo",
+        "key": "safe-zone-main"
+      },
+      {
+        "code": "AzCS",
+        "name": "Azure Content Safety",
+        "kind": "virtual",
+        "key": "AzCS"
+      },
+      {
+        "code": "OAIM",
+        "name": "OpenAI Moderation",
+        "kind": "virtual",
+        "key": "OAIM"
+      }
+    ],
+    "rows": [
+      {
+        "aspect": "Toxicity / hate-speech (model)",
+        "cells": {
+          "LG": "●",
+          "NeMo": "–",
+          "PF": "–",
+          "DTm": "–",
+          "GRK": "●",
+          "GSK": "–",
+          "HAI": "–",
+          "DEv": "●",
+          "DCk": "●",
+          "INF": "●",
+          "PyR": "–",
+          "FZ": "–",
+          "OGR": "–",
+          "JCB": "–",
+          "TSZ": "–",
+          "AzCS": "●",
+          "OAIM": "●"
+        },
+        "best": "LLM Guard / Detoxify - free, self-hosted"
+      },
+      {
+        "aspect": "Toxicity (LLM judge)",
+        "cells": {
+          "LG": "–",
+          "NeMo": "–",
+          "PF": "–",
+          "DTm": "●",
+          "GRK": "–",
+          "GSK": "●",
+          "HAI": "●",
+          "DEv": "●",
+          "DCk": "–",
+          "INF": "–",
+          "PyR": "●",
+          "FZ": "–",
+          "OGR": "–",
+          "JCB": "–",
+          "TSZ": "–",
+          "AzCS": "●",
+          "OAIM": "◐"
+        },
+        "best": "Azure Content Safety for managed/graded severity"
+      },
+      {
+        "aspect": "Managed safety-model routing",
+        "cells": {
+          "LG": "–",
+          "NeMo": "●",
+          "PF": "●",
+          "DTm": "–",
+          "GRK": "●",
+          "GSK": "–",
+          "HAI": "–",
+          "DEv": "–",
+          "DCk": "–",
+          "INF": "–",
+          "PyR": "●",
+          "FZ": "●",
+          "OGR": "–",
+          "JCB": "–",
+          "TSZ": "–",
+          "AzCS": "●",
+          "OAIM": "●"
+        },
+        "best": "NeMo Guardrails - routes to Llama Guard or Azure in one…"
+      },
+      {
+        "aspect": "Multi-category harm taxonomy",
+        "cells": {
+          "LG": "–",
+          "NeMo": "–",
+          "PF": "●",
+          "DTm": "●",
+          "GRK": "–",
+          "GSK": "●",
+          "HAI": "–",
+          "DEv": "–",
+          "DCk": "–",
+          "INF": "–",
+          "PyR": "●",
+          "FZ": "–",
+          "OGR": "●",
+          "JCB": "–",
+          "TSZ": "–",
+          "AzCS": "●",
+          "OAIM": "●"
+        },
+        "best": "garak / DeepTeam - broadest category coverage"
+      },
+      {
+        "aspect": "Profanity / banned-word filter",
+        "cells": {
+          "LG": "●",
+          "NeMo": "–",
+          "PF": "–",
+          "DTm": "–",
+          "GRK": "●",
+          "GSK": "–",
+          "HAI": "–",
+          "DEv": "–",
+          "DCk": "–",
+          "INF": "●",
+          "PyR": "–",
+          "FZ": "–",
+          "OGR": "●",
+          "JCB": "–",
+          "TSZ": "–",
+          "AzCS": "●",
+          "OAIM": "●"
+        },
+        "best": "Commodity - free in 5+ tools; don't overpay for this one"
+      },
+      {
+        "aspect": "Zero-shot restricted-topic filter",
+        "cells": {
+          "LG": "●",
+          "NeMo": "●",
+          "PF": "–",
+          "DTm": "–",
+          "GRK": "–",
+          "GSK": "–",
+          "HAI": "–",
+          "DEv": "–",
+          "DCk": "–",
+          "INF": "–",
+          "PyR": "–",
+          "FZ": "–",
+          "OGR": "–",
+          "JCB": "–",
+          "TSZ": "–",
+          "AzCS": "–",
+          "OAIM": "–"
+        },
+        "best": "LLM Guard - only dedicated zero-shot NER beyond fixed…"
+      },
+      {
+        "aspect": "Adult / explicit content",
+        "cells": {
+          "LG": "–",
+          "NeMo": "–",
+          "PF": "–",
+          "DTm": "●",
+          "GRK": "–",
+          "GSK": "●",
+          "HAI": "●",
+          "DEv": "–",
+          "DCk": "–",
+          "INF": "–",
+          "PyR": "–",
+          "FZ": "–",
+          "OGR": "–",
+          "JCB": "–",
+          "TSZ": "–",
+          "AzCS": "●",
+          "OAIM": "●"
+        },
+        "best": "hai-guardrails / Azure Content Safety"
+      },
+      {
+        "aspect": "NSFW image/video detection",
+        "cells": {
+          "LG": "–",
+          "NeMo": "–",
+          "PF": "–",
+          "DTm": "–",
+          "GRK": "–",
+          "GSK": "–",
+          "HAI": "–",
+          "DEv": "–",
+          "DCk": "–",
+          "INF": "●",
+          "PyR": "–",
+          "FZ": "–",
+          "OGR": "–",
+          "JCB": "–",
+          "TSZ": "–",
+          "AzCS": "●",
+          "OAIM": "–"
+        },
+        "best": "Infosys's NudeNet integration - only one found in this…"
+      },
+      {
+        "aspect": "Harmful-content red-team sets",
+        "cells": {
+          "LG": "–",
+          "NeMo": "–",
+          "PF": "●",
+          "DTm": "●",
+          "GRK": "–",
+          "GSK": "●",
+          "HAI": "–",
+          "DEv": "–",
+          "DCk": "–",
+          "INF": "–",
+          "PyR": "–",
+          "FZ": "●",
+          "OGR": "–",
+          "JCB": "●",
+          "TSZ": "–",
+          "AzCS": "–",
+          "OAIM": "–"
+        },
+        "best": "promptfoo - widest dataset-plugin bundle (HarmBench,…"
+      }
+    ]
+  },
+  "Hallucination / Reliability": {
+    "columns": [
+      {
+        "code": "LG",
+        "name": "LLM Guard",
+        "kind": "repo",
+        "key": "llm-guard-main"
+      },
+      {
+        "code": "DEv",
+        "name": "DeepEval",
+        "kind": "repo",
+        "key": "deepeval-main"
+      },
+      {
+        "code": "NeMo",
+        "name": "NeMo Guardrails",
+        "kind": "repo",
+        "key": "Guardrails-develop"
+      },
+      {
+        "code": "GSK",
+        "name": "Giskard",
+        "kind": "repo",
+        "key": "giskard-oss-main"
+      },
+      {
+        "code": "DCk",
+        "name": "Deepchecks",
+        "kind": "repo",
+        "key": "deepchecks-main"
+      },
+      {
+        "code": "PF",
+        "name": "Promptfoo",
+        "kind": "repo",
+        "key": "promptfoo-main"
+      },
+      {
+        "code": "DTm",
+        "name": "DeepTeam",
+        "kind": "repo",
+        "key": "deepteam-main"
+      },
+      {
+        "code": "INF",
+        "name": "Infosys RAI Toolkit",
+        "kind": "repo",
+        "key": "Infosys-Responsible-AI-Toolkit-master"
+      },
+      {
+        "code": "GRK",
+        "name": "garak",
+        "kind": "repo",
+        "key": "garak-main"
+      },
+      {
+        "code": "GAI",
+        "name": "Guardrails AI",
+        "kind": "repo",
+        "key": "guardrails-main"
+      },
+      {
+        "code": "OAE",
+        "name": "OpenAI Evals",
+        "kind": "repo",
+        "key": "evals-main"
+      },
+      {
+        "code": "PyR",
+        "name": "PyRIT",
+        "kind": "repo",
+        "key": "PyRIT-main"
+      },
+      {
+        "code": "AS",
+        "name": "Agentic Security",
+        "kind": "repo",
+        "key": "agentic_security-main"
+      },
+      {
+        "code": "FZ",
+        "name": "FuzzyAI",
+        "kind": "repo",
+        "key": "FuzzyAI-main"
+      },
+      {
+        "code": "JCB",
+        "name": "JCB",
+        "kind": "repo",
+        "key": "JCB-main"
+      },
+      {
+        "code": "TSZ",
+        "name": "Safe Zone (TSZ)",
+        "kind": "repo",
+        "key": "safe-zone-main"
+      },
+      {
+        "code": "AzGD",
+        "name": "Azure Groundedness",
+        "kind": "virtual",
+        "key": "AzGD"
+      },
+      {
+        "code": "Ptr",
+        "name": "Patronus Lynx",
+        "kind": "virtual",
+        "key": "Ptr"
+      }
+    ],
+    "rows": [
+      {
+        "aspect": "Groundedness (LLM judge)",
+        "cells": {
+          "LG": "–",
+          "DEv": "●",
+          "NeMo": "–",
+          "GSK": "●",
+          "DCk": "–",
+          "PF": "●",
+          "DTm": "●",
+          "INF": "●",
+          "GRK": "–",
+          "GAI": "●",
+          "OAE": "●",
+          "PyR": "–",
+          "AS": "–",
+          "FZ": "–",
+          "JCB": "–",
+          "TSZ": "–",
+          "AzGD": "●",
+          "Ptr": "●"
+        },
+        "best": "DeepEval / Giskard - versioned, CI-gateable rubrics"
+      },
+      {
+        "aspect": "Groundedness (NLI/entailment)",
+        "cells": {
+          "LG": "●",
+          "DEv": "●",
+          "NeMo": "●",
+          "GSK": "–",
+          "DCk": "–",
+          "PF": "–",
+          "DTm": "–",
+          "INF": "–",
+          "GRK": "–",
+          "GAI": "–",
+          "OAE": "–",
+          "PyR": "–",
+          "AS": "–",
+          "FZ": "–",
+          "JCB": "–",
+          "TSZ": "–",
+          "AzGD": "◐",
+          "Ptr": "●"
+        },
+        "best": "LLM Guard's FactualConsistency - free, no judge-LLM call"
+      },
+      {
+        "aspect": "Refusal / over-refusal detection",
+        "cells": {
+          "LG": "●",
+          "DEv": "–",
+          "NeMo": "–",
+          "GSK": "–",
+          "DCk": "–",
+          "PF": "–",
+          "DTm": "–",
+          "INF": "–",
+          "GRK": "●",
+          "GAI": "–",
+          "OAE": "–",
+          "PyR": "●",
+          "AS": "●",
+          "FZ": "●",
+          "JCB": "●",
+          "TSZ": "–",
+          "AzGD": "–",
+          "Ptr": "–"
+        },
+        "best": "LLM Guard's NoRefusal + DeepEval role-adherence"
+      },
+      {
+        "aspect": "RAG retrieval-quality metrics",
+        "cells": {
+          "LG": "–",
+          "DEv": "●",
+          "NeMo": "–",
+          "GSK": "●",
+          "DCk": "–",
+          "PF": "●",
+          "DTm": "–",
+          "INF": "–",
+          "GRK": "–",
+          "GAI": "–",
+          "OAE": "–",
+          "PyR": "–",
+          "AS": "–",
+          "FZ": "–",
+          "JCB": "–",
+          "TSZ": "–",
+          "AzGD": "◐",
+          "Ptr": "◐"
+        },
+        "best": "DeepEval - contextual precision/recall/relevancy built in"
+      },
+      {
+        "aspect": "Deterministic regression checks",
+        "cells": {
+          "LG": "–",
+          "DEv": "●",
+          "NeMo": "–",
+          "GSK": "●",
+          "DCk": "–",
+          "PF": "●",
+          "DTm": "–",
+          "INF": "–",
+          "GRK": "–",
+          "GAI": "–",
+          "OAE": "●",
+          "PyR": "–",
+          "AS": "–",
+          "FZ": "–",
+          "JCB": "–",
+          "TSZ": "–",
+          "AzGD": "–",
+          "Ptr": "–"
+        },
+        "best": "promptfoo / OpenAI Evals - free, zero API cost"
+      },
+      {
+        "aspect": "Structured-output validation",
+        "cells": {
+          "LG": "●",
+          "DEv": "–",
+          "NeMo": "–",
+          "GSK": "–",
+          "DCk": "–",
+          "PF": "–",
+          "DTm": "–",
+          "INF": "–",
+          "GRK": "–",
+          "GAI": "●",
+          "OAE": "–",
+          "PyR": "–",
+          "AS": "–",
+          "FZ": "–",
+          "JCB": "–",
+          "TSZ": "●",
+          "AzGD": "–",
+          "Ptr": "–"
+        },
+        "best": "Guardrails AI - reask loop guarantees the output shape"
+      },
+      {
+        "aspect": "Truthfulness benchmarks",
+        "cells": {
+          "LG": "–",
+          "DEv": "●",
+          "NeMo": "–",
+          "GSK": "–",
+          "DCk": "–",
+          "PF": "–",
+          "DTm": "–",
+          "INF": "●",
+          "GRK": "–",
+          "GAI": "–",
+          "OAE": "●",
+          "PyR": "–",
+          "AS": "–",
+          "FZ": "–",
+          "JCB": "–",
+          "TSZ": "–",
+          "AzGD": "–",
+          "Ptr": "–"
+        },
+        "best": "DeepEval - 17 benchmark harnesses bundled"
+      },
+      {
+        "aspect": "Fabrication probes (fake facts)",
+        "cells": {
+          "LG": "–",
+          "DEv": "–",
+          "NeMo": "–",
+          "GSK": "●",
+          "DCk": "–",
+          "PF": "–",
+          "DTm": "●",
+          "INF": "–",
+          "GRK": "–",
+          "GAI": "–",
+          "OAE": "–",
+          "PyR": "–",
+          "AS": "–",
+          "FZ": "–",
+          "JCB": "–",
+          "TSZ": "–",
+          "AzGD": "◐",
+          "Ptr": "●"
+        },
+        "best": "DeepTeam's HallucinationGuard - fake…"
+      },
+      {
+        "aspect": "Package hallucination check",
+        "cells": {
+          "LG": "–",
+          "DEv": "–",
+          "NeMo": "–",
+          "GSK": "–",
+          "DCk": "–",
+          "PF": "–",
+          "DTm": "–",
+          "INF": "–",
+          "GRK": "●",
+          "GAI": "–",
+          "OAE": "–",
+          "PyR": "●",
+          "AS": "–",
+          "FZ": "–",
+          "JCB": "–",
+          "TSZ": "–",
+          "AzGD": "–",
+          "Ptr": "–"
+        },
+        "best": "garak / PyRIT - catches slopsquatting risk in generated…"
+      },
+      {
+        "aspect": "Dedicated hallucination models",
+        "cells": {
+          "LG": "–",
+          "DEv": "●",
+          "NeMo": "●",
+          "GSK": "–",
+          "DCk": "–",
+          "PF": "–",
+          "DTm": "–",
+          "INF": "–",
+          "GRK": "–",
+          "GAI": "–",
+          "OAE": "–",
+          "PyR": "–",
+          "AS": "–",
+          "FZ": "–",
+          "JCB": "–",
+          "TSZ": "–",
+          "AzGD": "◐",
+          "Ptr": "●"
+        },
+        "best": "DeepEval's Vectara model wrapper - no LLM cost"
+      }
+    ]
+  },
+  "Accountability": {
+    "columns": [
+      {
+        "code": "OGR",
+        "name": "OpenGuardrails",
+        "kind": "repo",
+        "key": "openguardrails-main"
+      },
+      {
+        "code": "PyR",
+        "name": "PyRIT",
+        "kind": "repo",
+        "key": "PyRIT-main"
+      },
+      {
+        "code": "PF",
+        "name": "Promptfoo",
+        "kind": "repo",
+        "key": "promptfoo-main"
+      },
+      {
+        "code": "GAI",
+        "name": "Guardrails AI",
+        "kind": "repo",
+        "key": "guardrails-main"
+      },
+      {
+        "code": "TSZ",
+        "name": "Safe Zone (TSZ)",
+        "kind": "repo",
+        "key": "safe-zone-main"
+      },
+      {
+        "code": "DCk",
+        "name": "Deepchecks",
+        "kind": "repo",
+        "key": "deepchecks-main"
+      },
+      {
+        "code": "GSK",
+        "name": "Giskard",
+        "kind": "repo",
+        "key": "giskard-oss-main"
+      },
+      {
+        "code": "DEv",
+        "name": "DeepEval",
+        "kind": "repo",
+        "key": "deepeval-main"
+      },
+      {
+        "code": "DTm",
+        "name": "DeepTeam",
+        "kind": "repo",
+        "key": "deepteam-main"
+      },
+      {
+        "code": "NeMo",
+        "name": "NeMo Guardrails",
+        "kind": "repo",
+        "key": "Guardrails-develop"
+      },
+      {
+        "code": "RB",
+        "name": "Rebuff",
+        "kind": "repo",
+        "key": "rebuff-main"
+      },
+      {
+        "code": "OAE",
+        "name": "OpenAI Evals",
+        "kind": "repo",
+        "key": "evals-main"
+      },
+      {
+        "code": "AS",
+        "name": "Agentic Security",
+        "kind": "repo",
+        "key": "agentic_security-main"
+      },
+      {
+        "code": "INF",
+        "name": "Infosys RAI Toolkit",
+        "kind": "repo",
+        "key": "Infosys-Responsible-AI-Toolkit-master"
+      },
+      {
+        "code": "AIF",
+        "name": "AIF360",
+        "kind": "repo",
+        "key": "AIF360-main"
+      },
+      {
+        "code": "SHAP",
+        "name": "SHAP",
+        "kind": "repo",
+        "key": "shap-master"
+      },
+      {
+        "code": "LG",
+        "name": "LLM Guard",
+        "kind": "repo",
+        "key": "llm-guard-main"
+      },
+      {
+        "code": "JCB",
+        "name": "JCB",
+        "kind": "repo",
+        "key": "JCB-main"
+      },
+      {
+        "code": "LMF",
+        "name": "LLMFuzzer",
+        "kind": "repo",
+        "key": "LLMFuzzer-main"
+      },
+      {
+        "code": "HAI",
+        "name": "hai-guardrails",
+        "kind": "repo",
+        "key": "hai-guardrails-main"
+      },
+      {
+        "code": "AzMon",
+        "name": "Azure Monitor",
+        "kind": "virtual",
+        "key": "AzMon"
+      },
+      {
+        "code": "Mon",
+        "name": "Monitaur/Fiddler",
+        "kind": "virtual",
+        "key": "Mon"
+      }
+    ],
+    "rows": [
+      {
+        "aspect": "Compliance-framework mapping",
+        "cells": {
+          "OGR": "–",
+          "PyR": "●",
+          "PF": "●",
+          "GAI": "–",
+          "TSZ": "–",
+          "DCk": "–",
+          "GSK": "●",
+          "DEv": "–",
+          "DTm": "●",
+          "NeMo": "–",
+          "RB": "–",
+          "OAE": "–",
+          "AS": "–",
+          "INF": "–",
+          "AIF": "–",
+          "SHAP": "–",
+          "LG": "–",
+          "JCB": "–",
+          "LMF": "–",
+          "HAI": "–",
+          "AzMon": "◐",
+          "Mon": "●"
+        },
+        "best": "DeepTeam - uniquely useful for governance reporting"
+      },
+      {
+        "aspect": "CI/CD test-gating",
+        "cells": {
+          "OGR": "–",
+          "PyR": "–",
+          "PF": "●",
+          "GAI": "–",
+          "TSZ": "–",
+          "DCk": "●",
+          "GSK": "●",
+          "DEv": "●",
+          "DTm": "–",
+          "NeMo": "–",
+          "RB": "–",
+          "OAE": "–",
+          "AS": "–",
+          "INF": "–",
+          "AIF": "–",
+          "SHAP": "–",
+          "LG": "–",
+          "JCB": "–",
+          "LMF": "–",
+          "HAI": "–",
+          "AzMon": "–",
+          "Mon": "–"
+        },
+        "best": "DeepEval - the only genuine first-party pytest11 plugin"
+      },
+      {
+        "aspect": "On-fail remediation actions",
+        "cells": {
+          "OGR": "●",
+          "PyR": "–",
+          "PF": "–",
+          "GAI": "●",
+          "TSZ": "●",
+          "DCk": "–",
+          "GSK": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "NeMo": "●",
+          "RB": "–",
+          "OAE": "–",
+          "AS": "–",
+          "INF": "–",
+          "AIF": "–",
+          "SHAP": "–",
+          "LG": "–",
+          "JCB": "–",
+          "LMF": "–",
+          "HAI": "–",
+          "AzMon": "–",
+          "Mon": "–"
+        },
+        "best": "Guardrails AI - 7 named on-fail actions plus custom"
+      },
+      {
+        "aspect": "Audit trail / call history",
+        "cells": {
+          "OGR": "–",
+          "PyR": "●",
+          "PF": "–",
+          "GAI": "●",
+          "TSZ": "●",
+          "DCk": "–",
+          "GSK": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "NeMo": "–",
+          "RB": "–",
+          "OAE": "–",
+          "AS": "–",
+          "INF": "–",
+          "AIF": "–",
+          "SHAP": "–",
+          "LG": "–",
+          "JCB": "–",
+          "LMF": "–",
+          "HAI": "–",
+          "AzMon": "●",
+          "Mon": "●"
+        },
+        "best": "Guardrails AI / Infosys - full call/iteration history"
+      },
+      {
+        "aspect": "OpenTelemetry tracing",
+        "cells": {
+          "OGR": "–",
+          "PyR": "–",
+          "PF": "●",
+          "GAI": "●",
+          "TSZ": "–",
+          "DCk": "–",
+          "GSK": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "NeMo": "●",
+          "RB": "–",
+          "OAE": "–",
+          "AS": "–",
+          "INF": "–",
+          "AIF": "–",
+          "SHAP": "–",
+          "LG": "–",
+          "JCB": "–",
+          "LMF": "–",
+          "HAI": "–",
+          "AzMon": "●",
+          "Mon": "◐"
+        },
+        "best": "NeMo Guardrails / Infosys telemetry pipeline"
+      },
+      {
+        "aspect": "Governance dashboards",
+        "cells": {
+          "OGR": "●",
+          "PyR": "–",
+          "PF": "●",
+          "GAI": "–",
+          "TSZ": "–",
+          "DCk": "–",
+          "GSK": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "NeMo": "–",
+          "RB": "–",
+          "OAE": "–",
+          "AS": "●",
+          "INF": "●",
+          "AIF": "–",
+          "SHAP": "–",
+          "LG": "–",
+          "JCB": "–",
+          "LMF": "–",
+          "HAI": "–",
+          "AzMon": "●",
+          "Mon": "●"
+        },
+        "best": "Infosys - only option with one UI spanning all 7 tenets"
+      },
+      {
+        "aspect": "Fail-closed / unjudged policy",
+        "cells": {
+          "OGR": "●",
+          "PyR": "–",
+          "PF": "–",
+          "GAI": "–",
+          "TSZ": "–",
+          "DCk": "–",
+          "GSK": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "NeMo": "●",
+          "RB": "–",
+          "OAE": "–",
+          "AS": "–",
+          "INF": "–",
+          "AIF": "–",
+          "SHAP": "–",
+          "LG": "–",
+          "JCB": "–",
+          "LMF": "–",
+          "HAI": "–",
+          "AzMon": "–",
+          "Mon": "–"
+        },
+        "best": "OpenGuardrails - the only repo that names this contract…"
+      },
+      {
+        "aspect": "Detector accuracy self-eval",
+        "cells": {
+          "OGR": "–",
+          "PyR": "●",
+          "PF": "–",
+          "GAI": "–",
+          "TSZ": "–",
+          "DCk": "–",
+          "GSK": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "NeMo": "–",
+          "RB": "–",
+          "OAE": "–",
+          "AS": "–",
+          "INF": "–",
+          "AIF": "–",
+          "SHAP": "–",
+          "LG": "–",
+          "JCB": "–",
+          "LMF": "–",
+          "HAI": "–",
+          "AzMon": "–",
+          "Mon": "◐"
+        },
+        "best": "PyRIT's scorer_evaluation - Krippendorff's alpha vs…"
+      },
+      {
+        "aspect": "Per-tenant threshold config",
+        "cells": {
+          "OGR": "–",
+          "PyR": "–",
+          "PF": "–",
+          "GAI": "–",
+          "TSZ": "●",
+          "DCk": "–",
+          "GSK": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "NeMo": "–",
+          "RB": "–",
+          "OAE": "–",
+          "AS": "–",
+          "INF": "●",
+          "AIF": "–",
+          "SHAP": "–",
+          "LG": "–",
+          "JCB": "–",
+          "LMF": "–",
+          "HAI": "–",
+          "AzMon": "◐",
+          "Mon": "●"
+        },
+        "best": "Infosys's admin service - the pattern to copy, not the…"
+      },
+      {
+        "aspect": "Self-hardening attack corpus",
+        "cells": {
+          "OGR": "–",
+          "PyR": "–",
+          "PF": "–",
+          "GAI": "–",
+          "TSZ": "–",
+          "DCk": "–",
+          "GSK": "–",
+          "DEv": "–",
+          "DTm": "–",
+          "NeMo": "–",
+          "RB": "●",
+          "OAE": "–",
+          "AS": "–",
+          "INF": "–",
+          "AIF": "–",
+          "SHAP": "–",
+          "LG": "–",
+          "JCB": "–",
+          "LMF": "–",
+          "HAI": "–",
+          "AzMon": "–",
+          "Mon": "–"
+        },
+        "best": "Rebuff - the only self-learning attack corpus found"
+      }
+    ]
+  }
+}
