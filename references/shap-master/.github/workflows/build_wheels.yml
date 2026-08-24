@@ -1,0 +1,188 @@
+name: Build wheels
+
+on:
+  release:
+    types: [published]
+
+  # Enable manual run
+  workflow_dispatch:
+
+jobs:
+  # we need this test since we run into 403 errors on MacOS, see GH #4179
+  prepare_data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Install dependencies for dataset download
+        run: |
+          uv pip install --system . --group download-datasets
+      - name: Pre-download datasets
+        run: python tests/datasets_to_cache.py
+      - name: Create unified cache directory
+        run: |
+          mkdir -p /tmp/test_data_cache
+          cp -r ~/scikit_learn_data /tmp/test_data_cache/ || true
+          cp -r shap/cached_data /tmp/test_data_cache/ || true
+          ls -la /tmp/test_data_cache/
+      - name: Upload cached datasets
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-data-cache
+          path: /tmp/test_data_cache
+          retention-days: 1
+
+  build_wheels:
+    name: Build ${{ matrix.os }} wheels
+    needs: [prepare_data]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-14, macos-15-intel, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      # Ensure all git tags are present so version number is extracted.
+      # https://github.com/actions/checkout/issues/1471
+      # Careful: the "fetch-tags" option to the checkout action is broken
+      # when the workflow is triggered by a tag!
+      # https://github.com/actions/checkout/issues/1467
+      - name: Check out the repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch all tags
+        run: git fetch --tags
+
+      - name: Download pre-cached datasets
+        uses: actions/download-artifact@v4
+        with:
+          name: test-data-cache
+          path: ${{ runner.temp }}/test_data_cache
+
+      - name: Install libomp (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install libomp
+          # Set DYLD_LIBRARY_PATH to avoid OpenMP conflicts, see https://github.com/unit8co/darts/pull/3050
+          _libomp_path=$(brew --prefix libomp 2>/dev/null)/lib
+          echo "DYLD_LIBRARY_PATH=$_libomp_path:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
+          unset _libomp_path
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v7
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v3.2.1
+        env:
+          CIBW_ARCHS_LINUX: ${{ contains(matrix.os, '-arm') && 'aarch64' || 'x86_64' }}
+          CIBW_ARCHS_MACOS: ${{ matrix.os == 'macos-14' && 'arm64' || 'x86_64' }}
+          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
+          CIBW_MUSLLINUX_AARCH64_IMAGE: musllinux_1_2
+          # Pass the cache location to cibuildwheel tests
+          CIBW_BEFORE_TEST: |
+            python -c "import os, shutil; cache_path = os.environ.get('CACHE_PATH', '${{ runner.temp }}/test_data_cache'); home = os.path.expanduser('~'); sklearn_cache = os.path.join(home, 'scikit_learn_data'); os.makedirs(sklearn_cache, exist_ok=True); shutil.copytree(os.path.join(cache_path, 'scikit_learn_data'), sklearn_cache, dirs_exist_ok=True) if os.path.exists(os.path.join(cache_path, 'scikit_learn_data')) else None"
+          CIBW_TEST_COMMAND_MACOS: |
+            python -c "import shap, os, shutil; cache_path = '${{ runner.temp }}/test_data_cache'; shap_cache = os.path.join(os.path.dirname(shap.__file__), 'cached_data'); os.makedirs(shap_cache, exist_ok=True); shutil.copytree(os.path.join(cache_path, 'cached_data'), shap_cache, dirs_exist_ok=True) if os.path.exists(os.path.join(cache_path, 'cached_data')) else None" && pytest -v {project}/tests --import-mode=append
+          CIBW_TEST_COMMAND_LINUX: |
+            python -c "import shap, os, shutil; cache_path = '${{ runner.temp }}/test_data_cache'; shap_cache = os.path.join(os.path.dirname(shap.__file__), 'cached_data'); os.makedirs(shap_cache, exist_ok=True); shutil.copytree(os.path.join(cache_path, 'cached_data'), shap_cache, dirs_exist_ok=True) if os.path.exists(os.path.join(cache_path, 'cached_data')) else None" && pytest -v {project}/tests --import-mode=append
+          CIBW_TEST_COMMAND_WINDOWS: |
+            python -c "import shap, os, shutil; cache_path = r'${{ runner.temp }}\test_data_cache'; shap_cache = os.path.join(os.path.dirname(shap.__file__), 'cached_data'); os.makedirs(shap_cache, exist_ok=True); shutil.copytree(os.path.join(cache_path, 'cached_data'), shap_cache, dirs_exist_ok=True) if os.path.exists(os.path.join(cache_path, 'cached_data')) else None" && pytest -v {project}/tests --import-mode=append
+
+      - uses: actions/upload-artifact@v4
+        with:
+          path: ./wheelhouse/*.whl
+          name: bdist_files_${{ matrix.os }}
+
+  build_sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    steps:
+      # Ensure all git tags are present so version number is extracted.
+      # https://github.com/actions/checkout/issues/1471
+      # Careful: the "fetch-tags" option to the checkout action is broken
+      # when the workflow is triggered by a tag!
+      # https://github.com/actions/checkout/issues/1467
+      - name: Check out the repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch all tags
+        run: git fetch --tags
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Build sdist (pep517)
+        run: |
+          uv build --sdist
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist_files
+          path: dist/*.tar.gz
+
+  publish_test_pypi:
+    name: Publish wheels to TestPyPI
+    needs: [build_wheels, build_sdist]
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/shap
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: bdist_files_*
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist_files
+          path: dist
+
+      - name: Publish package to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          verbose: true
+          repository-url: https://test.pypi.org/legacy/
+
+  publish_pypi:
+    name: Publish wheels to PyPI
+    needs: [build_wheels, build_sdist]
+    runs-on: ubuntu-latest
+    # Only publish tagged releases to PyPI
+    if: startsWith(github.ref, 'refs/tags')
+    environment:
+      name: pypi
+      url: https://pypi.org/p/shap
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: bdist_files_*
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist_files
+          path: dist
+
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

@@ -1,0 +1,156 @@
+# ----------------------------------------------------------------------------
+# Copyright (C) 2021-2023 Deepchecks (https://www.deepchecks.com)
+#
+# This file is part of Deepchecks.
+# Deepchecks is distributed under the terms of the GNU Affero General
+# Public License (version 3 or later).
+# You should have received a copy of the GNU Affero General Public License
+# along with Deepchecks.  If not, see <http://www.gnu.org/licenses/>.
+# ----------------------------------------------------------------------------
+#
+history/
+
+*catboost_info*
+
+.vscode/
+.idea/
+.DS_Store
+*.pdf
+
+test/AutogluonModels
+test/.agModels
+
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Requirements Logs
+.*.log
+
+# Unit test / coverage reports
+default.coveragerc
+.tox/
+
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Environments
+venv/
+.venv
+venv.bak/
+.env
+env/
+env.bak/
+ENV/
+.win_venv
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Sphinx Docs
+_autosummary/
+generated/
+
+#other
+lychee.output
+docs.error.log
+*.pt
+*.zip
+__MACOSX
+
+# Automatically downloaded files
+*coco128*
+*euroSAT*
+*MNIST*
+*yolov5-6.1*
+*wolves_vs_dogs_mini*
+*hymenoptera_data*
+*tomato-detection*
+tweet_emotion_*.csv
+
+# docs build files
+docs/source/_build
+docs/html
+docs/doctrees
+
+# build folders of sphinx gallery
+docs/source/general/usage/customizations/auto_examples/
+docs/source/general/usage/exporting_results/auto_examples/
+
+docs/source/tabular/auto_checks
+docs/source/nlp/auto_checks
+docs/source/vision/auto_checks
+
+docs/source/tabular/auto_tutorials
+docs/source/nlp/auto_tutorials
+docs/source/vision/auto_tutorials
+
+docs/source/user-guide/tabular/auto_quickstarts
+docs/source/user-guide/vision/auto_quickstarts
+
+docs/source/checks_gallery
+
+# build artificats from running docs (vision, nlp, wandb export)
+docs/source/vision/tutorials/quickstarts/*.html
+
+# (old, update paths for relevant) build artifacts from running docs (vision and wandb export)
+docs/source/tutorials/vision/deepchecks_formatted_image*.jpg
+docs/source/user-guide/general/exporting_results/wandb
+deepchecks/vision/datasets/classification/models/
+
+# ignore benchmark results
+benchmarks/results
+
+# ignore user_id
+.user_id
+
+# nlp models
+deepchecks/nlp/utils/.nlp-models
+
+# embedding files
+tests/nlp/utils/embeddings.csv
+embeddings.csv.npy
+embeddings.npy
+deepchecks/nlp/datasets/assets/tweet_emotion/tweet_emotion_embeddings.npy
+
+# nlp datasets
+deepchecks/nlp/datasets/assets/just_dance_comment_analysis
+deepchecks/nlp/datasets/assets/scierc
+
+# nlp test properties
+metadata.csv
+test_properties.csv

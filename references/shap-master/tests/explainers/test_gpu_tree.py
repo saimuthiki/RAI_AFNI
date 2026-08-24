@@ -1,0 +1,385 @@
+"""Test gpu accelerated tree functions."""
+
+import numpy as np
+import pandas as pd
+import pytest
+import sklearn
+
+import shap
+from shap.explainers._tree import SingleTree, TreeEnsemble
+from shap.utils import assert_import
+
+try:
+    assert_import("cext_gpu")
+except ImportError:
+    pytestmark = pytest.mark.skip("cuda module not built")
+
+
+def test_front_page_xgboost():
+    xgboost = pytest.importorskip("xgboost")
+
+    # load JS visualization code to notebook
+    shap.initjs()
+
+    # train XGBoost model
+    X, y = shap.datasets.california(n_points=500)
+    model = xgboost.train({"learning_rate": 0.01}, xgboost.DMatrix(X, label=y), 100)
+
+    # explain the model's predictions using SHAP values
+    explainer = shap.GPUTreeExplainer(model)
+    shap_values = explainer.shap_values(X)
+
+    # visualize the first prediction's explanation
+    shap.force_plot(explainer.expected_value, shap_values[0, :], X.iloc[0, :])
+
+    # visualize the training set predictions
+    shap.force_plot(explainer.expected_value, shap_values, X)
+
+    # create a SHAP dependence plot to show the effect of a single feature across the whole dataset
+    shap.dependence_plot(5, shap_values, X, show=False)
+    shap.dependence_plot("Longitude", shap_values, X, show=False)
+
+    # summarize the effects of all the features
+    shap.summary_plot(shap_values, X, show=False)
+
+
+rs = np.random.RandomState(15921)
+n = 100
+m = 4
+datasets = {
+    "regression": (rs.randn(n, m), rs.randn(n)),
+    "binary": (rs.randn(n, m), rs.binomial(1, 0.5, n)),
+    "multiclass": (rs.randn(n, m), rs.randint(0, 5, n)),
+}
+
+
+def task_xfail(func):
+    def inner():
+        return pytest.param(func(), marks=pytest.mark.xfail)
+
+    return inner
+
+
+def xgboost_base():
+    try:
+        import xgboost
+    except ImportError:
+        return pytest.param("xgboost.XGBRegressor", marks=pytest.mark.skip)
+    X, y = datasets["regression"]
+
+    model = xgboost.XGBRegressor(tree_method="hist")
+    model.fit(X, y)
+    return model.get_booster(), X, model.predict(X)
+
+
+def xgboost_regressor():
+    try:
+        import xgboost
+    except ImportError:
+        return pytest.param("xgboost.XGBRegressor", marks=pytest.mark.skip)
+
+    X, y = datasets["regression"]
+
+    model = xgboost.XGBRegressor()
+    model.fit(X, y)
+    return model, X, model.predict(X)
+
+
+def xgboost_binary_classifier():
+    try:
+        import xgboost
+    except ImportError:
+        return pytest.param("xgboost.XGBClassifier", marks=pytest.mark.skip)
+
+    X, y = datasets["binary"]
+
+    model = xgboost.XGBClassifier(eval_metric="error")
+    model.fit(X, y)
+    return model, X, model.predict(X, output_margin=True)
+
+
+def xgboost_multiclass_classifier():
+    try:
+        import xgboost
+    except ImportError:
+        return pytest.param("xgboost.XGBClassifier", marks=pytest.mark.skip)
+
+    X, y = datasets["multiclass"]
+
+    model = xgboost.XGBClassifier()
+    model.fit(X, y)
+    return model, X, model.predict(X, output_margin=True)
+
+
+def test_xgboost_cat_unsupported() -> None:
+    xgboost = pytest.importorskip("xgboost")
+    X, y = shap.datasets.adult()
+    X["Workclass"] = X["Workclass"].astype("category")
+
+    clf = xgboost.XGBClassifier(n_estimators=2, enable_categorical=True, device="cuda")
+    clf.fit(X, y)
+
+    # Tests for both CPU and GPU in one place
+
+    # Prefer an explict error over silent invalid values.
+    gpu_ex = shap.GPUTreeExplainer(clf, X, feature_perturbation="interventional")
+    with pytest.raises(NotImplementedError, match="Categorical"):
+        gpu_ex.shap_values(X)
+
+    ex = shap.TreeExplainer(clf, X, feature_perturbation="interventional")
+    with pytest.raises(NotImplementedError, match="Categorical"):
+        ex.shap_values(X)
+
+
+def lightgbm_base():
+    try:
+        import lightgbm
+    except ImportError:
+        return pytest.param("lightgbm.LGBMRegressor", marks=pytest.mark.skip)
+    X, y = datasets["regression"]
+
+    model = lightgbm.LGBMRegressor(n_jobs=1)
+    model.fit(X, y)
+    return model.booster_, X, model.predict(X)
+
+
+def lightgbm_regression():
+    try:
+        import lightgbm
+    except ImportError:
+        return pytest.param("lightgbm.LGBMRegressor", marks=pytest.mark.skip)
+    X, y = datasets["regression"]
+
+    model = lightgbm.LGBMRegressor(n_jobs=1)
+    model.fit(X, y)
+    return model, X, model.predict(X)
+
+
+def lightgbm_binary_classifier():
+    try:
+        import lightgbm
+    except ImportError:
+        return pytest.param("lightgbm.LGBMClassifier", marks=pytest.mark.skip)
+    X, y = datasets["binary"]
+
+    model = lightgbm.LGBMClassifier(n_jobs=1)
+    model.fit(X, y)
+    return model, X, model.predict(X, raw_score=True)
+
+
+def lightgbm_multiclass_classifier():
+    try:
+        import lightgbm
+    except ImportError:
+        return pytest.param("lightgbm.LGBMClassifier", marks=pytest.mark.skip)
+    X, y = datasets["multiclass"]
+
+    model = lightgbm.LGBMClassifier(n_jobs=1)
+    model.fit(X, y)
+    return model, X, model.predict(X, raw_score=True)
+
+
+def rf_regressor():
+    X, y = datasets["regression"]
+    model = sklearn.ensemble.RandomForestRegressor()
+    model.fit(X, y)
+    return model, X, model.predict(X)
+
+
+def rf_binary_classifier():
+    X, y = datasets["binary"]
+    model = sklearn.ensemble.RandomForestClassifier()
+    model.fit(X, y)
+    return model, X, model.predict_proba(X)
+
+
+def rf_multiclass_classifier():
+    X, y = datasets["multiclass"]
+    model = sklearn.ensemble.RandomForestClassifier()
+    model.fit(X, y)
+    return model, X, model.predict_proba(X)
+
+
+tasks = [
+    xgboost_base(),
+    xgboost_regressor(),
+    xgboost_binary_classifier(),
+    xgboost_multiclass_classifier(),
+    lightgbm_base(),
+    lightgbm_regression(),
+    lightgbm_binary_classifier(),
+    lightgbm_multiclass_classifier(),
+    rf_binary_classifier(),
+    rf_regressor(),
+    rf_multiclass_classifier(),
+]
+
+
+# pretty print tasks
+def idfn(task):
+    if isinstance(task, str):
+        return task
+    model, _, _ = task
+    return type(model).__module__ + "." + type(model).__qualname__
+
+
+def assert_gpu_matches_cpu(task, feature_perturbation, X=None):
+    model, background, _ = task
+    if X is None:
+        X = background
+
+    gpu_ex = shap.GPUTreeExplainer(model, background, feature_perturbation=feature_perturbation)
+    ex = shap.TreeExplainer(model, background, feature_perturbation=feature_perturbation)
+    host_shap = ex.shap_values(X, check_additivity=True)
+    gpu_shap = gpu_ex.shap_values(X, check_additivity=True)
+
+    # todo: this should actually happen in the GPUTreeExplainer
+    if np.array(gpu_shap).ndim == 3:
+        gpu_shap = np.moveaxis(np.array(gpu_shap), [0, 1, 2], [2, 0, 1])
+    else:
+        gpu_shap = np.array(gpu_shap, copy=False)
+    # Check outputs roughly the same as CPU algorithm
+    assert np.allclose(ex.expected_value, gpu_ex.expected_value, 1e-3, 1e-3)
+    assert np.allclose(host_shap, gpu_shap, 1e-3, 1e-3)
+
+
+@pytest.mark.parametrize("task", tasks, ids=idfn)
+@pytest.mark.parametrize("feature_perturbation", ["interventional", "tree_path_dependent"])
+def test_gpu_tree_explainer_shap(task, feature_perturbation):
+    assert_gpu_matches_cpu(task, feature_perturbation)
+
+
+def test_gpu_tree_explainer_shap_with_missing_values():
+    task = xgboost_base()
+    X = task[1].copy()
+    rows = np.arange(0, X.shape[0], 10)
+    X[rows, 0] = np.nan
+
+    for feature_perturbation in ["interventional", "tree_path_dependent"]:
+        assert_gpu_matches_cpu(task, feature_perturbation, X)
+
+
+@pytest.mark.parametrize("task", tasks, ids=idfn)
+@pytest.mark.parametrize("feature_perturbation", ["tree_path_dependent"])
+def test_gpu_tree_explainer_shap_interactions(task, feature_perturbation):
+    model, X, margin = task
+    ex = shap.GPUTreeExplainer(model, X, feature_perturbation=feature_perturbation)
+    shap_values = np.array(ex.shap_interaction_values(X), copy=False)
+
+    assert np.allclose(np.sum(shap_values, axis=(1, 2)) + ex.expected_value, margin, atol=1e-4)
+
+
+@pytest.mark.parametrize("use_interactions", [False, True])
+def test_lightgbm_categorical_split(use_interactions):
+    # GH 480
+    """Checks that shap interaction values are computed without error when the LightGBM model has categorical splits."""
+    lightgbm = pytest.importorskip("lightgbm")
+    X, y = shap.datasets.california(n_points=10000)
+    # Add HouseAgeGroup categorical variable
+    target_variable = "HouseAge"
+    X["HouseAgeGroup"] = pd.cut(
+        X[target_variable],
+        bins=[-float("inf"), 17, 27, 37, float("inf")],
+        labels=[0, 1, 2, 3],
+        right=False,
+    ).astype(int)
+    model = lightgbm.LGBMRegressor(n_estimators=400, max_cat_to_onehot=1)
+    model.fit(
+        X, y, categorical_feature=[X.columns.get_loc("HouseAgeGroup")]
+    )  # Set HouseAgeGroup as categorical variable
+    preds = model.predict(X, raw_score=True)
+
+    explainer = shap.GPUTreeExplainer(model)
+
+    if use_interactions:
+        # Check SHAP interaction values sum to model output
+        shap_interaction_values = explainer.shap_interaction_values(X.iloc[:10, :])
+        assert np.allclose(shap_interaction_values.sum(axis=(1, 2)) + explainer.expected_value, preds[:10], atol=1e-4)
+    else:
+        shap_values = explainer.shap_values(X.iloc[:10, :])
+        assert np.allclose(shap_values.sum(axis=1) + explainer.expected_value, preds[:10], atol=1e-4)
+
+
+def test_categorical_split_cpu_gpu_equivalence():
+    """
+    Check consistency with a dummy tree that a single categorical split yields the same results on GPU and CPU.
+    """
+    tree = {
+        "children_left": np.array([1, -1, -1], dtype=np.int32),
+        "children_right": np.array([2, -1, -1], dtype=np.int32),
+        "children_default": np.array([1, -1, -1], dtype=np.int32),
+        "features": np.array([0, -1, -1], dtype=np.int32),
+        "thresholds": np.array([2.0, 0.0, 0.0], dtype=np.float64),
+        "values": np.array([[0.8], [2.0], [-1.0]], dtype=np.float64),
+        "node_sample_weight": np.array([100.0, 60.0, 40.0], dtype=np.float64),
+    }
+    single_tree = SingleTree(tree)
+    single_tree.threshold_types = np.array([1, 0, 0], dtype=np.int32)
+    ensemble = TreeEnsemble([single_tree], model_output="raw")
+    ensemble.tree_output = "raw_value"
+    ensemble.objective = "squared_error"
+
+    X = np.array([[0.0], [1.0], [2.0], [3.0]])
+    cpu_explainer = shap.TreeExplainer(ensemble, feature_perturbation="tree_path_dependent")
+    gpu_explainer = shap.GPUTreeExplainer(ensemble)
+    shap_values_cpu = cpu_explainer.shap_values(X, check_additivity=False)
+    shap_values_gpu = gpu_explainer.shap_values(X, check_additivity=False)
+    np.testing.assert_allclose(shap_values_gpu, shap_values_cpu, atol=1e-5)
+
+
+def test_categorical_split_matches_binary_feature():
+    """
+    Tests that using the categorical feature for SHAP value computation gives the same result as using a binary feature that routes the same way. We compare values computed on gpu and cpu here to check consistency.
+    """
+    children_left = np.array([1, -1, -1], dtype=np.int32)
+    children_right = np.array([2, -1, -1], dtype=np.int32)
+    children_default = np.array([1, -1, -1], dtype=np.int32)
+    features = np.array([0, -1, -1], dtype=np.int32)
+    values = np.array([[0.8], [2.0], [-1.0]], dtype=np.float64)
+    node_sample_weight = np.array([100.0, 60.0, 40.0], dtype=np.float64)
+
+    cat_tree = {
+        "children_left": children_left,
+        "children_right": children_right,
+        "children_default": children_default,
+        "features": features,
+        "thresholds": np.array([1.0, 0.0, 0.0], dtype=np.float64),
+        "values": values,
+        "node_sample_weight": node_sample_weight,
+    }
+    cat_single = SingleTree(cat_tree)
+    cat_single.threshold_types = np.array([1, 0, 0], dtype=np.int32)
+    cat_ensemble = TreeEnsemble([cat_single], model_output="raw")
+    cat_ensemble.tree_output = "raw_value"
+    cat_ensemble.objective = "squared_error"
+
+    bin_tree = {
+        "children_left": children_left,
+        "children_right": children_right,
+        "children_default": children_default,
+        "features": features,
+        "thresholds": np.array([0.5, 0.0, 0.0], dtype=np.float64),
+        "values": values,
+        "node_sample_weight": node_sample_weight,
+    }
+    bin_single = SingleTree(bin_tree)
+    bin_ensemble = TreeEnsemble([bin_single], model_output="raw")
+    bin_ensemble.tree_output = "raw_value"
+    bin_ensemble.objective = "squared_error"
+
+    X_cat = np.array([[1.0], [2.0], [1.0], [2.0]])
+    X_bin = X_cat - 1.0
+
+    cat_cpu = shap.TreeExplainer(cat_ensemble, feature_perturbation="tree_path_dependent").shap_values(
+        X_cat, check_additivity=False
+    )
+    cat_gpu = shap.GPUTreeExplainer(cat_ensemble).shap_values(X_cat, check_additivity=False)
+    np.testing.assert_allclose(cat_gpu, cat_cpu, atol=1e-5)
+
+    bin_cpu = shap.TreeExplainer(bin_ensemble, feature_perturbation="tree_path_dependent").shap_values(
+        X_bin, check_additivity=False
+    )
+    bin_gpu = shap.GPUTreeExplainer(bin_ensemble).shap_values(X_bin, check_additivity=False)
+    np.testing.assert_allclose(bin_gpu, bin_cpu, atol=1e-5)
+    np.testing.assert_allclose(cat_gpu, bin_gpu, atol=1e-5)
+    np.testing.assert_allclose(cat_cpu, cat_gpu, atol=1e-5)

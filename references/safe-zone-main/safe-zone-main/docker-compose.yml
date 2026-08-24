@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: thyris-sz:local
+    container_name: thyris_api
+    environment:
+      - DB_DSN=postgres://postgres:postgres@db:5432/thyris?sslmode=disable&TimeZone=Europe/Istanbul
+      - REDIS_URL=redis://:thyrisredis@redis:6379/0
+      - SERVER_PORT=8080
+      - AI_PROVIDER=OPENAI_COMPATIBLE
+      - AI_MODEL_URL=http://host.docker.internal:11434/v1
+      - AI_API_KEY=ollama
+      - AI_MODEL=llama3.1:8b
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+    
+  db:
+    image: postgres:15-alpine
+    container_name: thyris_db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=thyris
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: thyris_redis
+    command: redis-server --requirepass thyrisredis
+    ports:
+      - "6379:6379"
+    restart: always
+
+volumes:
+  postgres_data:

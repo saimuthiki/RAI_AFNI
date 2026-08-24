@@ -1,0 +1,9 @@
+from deepteam.attacks.multi_turn.constants import MULTI_TURN_ATTACK_INFO_MAP
+from deepteam.attacks.single_turn.constants import SINGLE_TURN_ATTACK_INFO_MAP
+from deepteam.frameworks.constants import FRAMEWORK_RISK_CATEGORY_MAPPING
+from deepteam.vulnerabilities.constants import VULNERABILITY_INFO_MAP
+
+print(MULTI_TURN_ATTACK_INFO_MAP)
+print(SINGLE_TURN_ATTACK_INFO_MAP)
+print(FRAMEWORK_RISK_CATEGORY_MAPPING)
+print(VULNERABILITY_INFO_MAP)

@@ -1,0 +1,480 @@
+{
+  "info": {
+    "name": "TSZ – Thyris Safe Zone API (Enterprise – FULL)",
+    "description": "Complete Postman collection for TSZ. Includes detection, guardrails, LLM gateway, templates and system endpoints. For protected APIs, set `tsz_bearer_token` and enable `AUTH_ENABLED=true` in TSZ.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{tsz_bearer_token}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8080" },
+    { "key": "tsz_bearer_token", "value": "token_admin" },
+    { "key": "admin_api_key", "value": "change-me-admin-key" }
+  ],
+  "item": [
+    {
+      "name": "Detect",
+      "description": "Primary detection and guardrail execution endpoint with realistic scenarios.",
+      "item": [
+        {
+          "name": "Detect – Clean Input (Minimal)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/detect",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Hello this is a normal sentence with no sensitive data.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Detect – Single EMAIL (Full Fields)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/detect",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"You can reach me at john.doe@company.com for details.\",\n  \"rid\": \"RID-EMAIL-001\",\n  \"expected_format\": \"FREE_TEXT\",\n  \"guardrails\": []\n}"
+            }
+          }
+        },
+        {
+          "name": "Detect – Multiple PII (Phone + Email)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/detect",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Email admin@company.com or call +905551234567 for support.\",\n  \"rid\": \"RID-MULTI-PII-001\",\n  \"expected_format\": \"FREE_TEXT\",\n  \"guardrails\": []\n}"
+            }
+          }
+        },
+        {
+          "name": "Detect – AI Guardrail (Toxic Language) + PII",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/detect",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"You are an idiot, contact at abuse@company.com\",\n  \"rid\": \"RID-TOXIC-001\",\n  \"expected_format\": \"FREE_TEXT\",\n  \"guardrails\": [\"TOXIC_LANGUAGE\"]\n}"
+            }
+          }
+        },
+        {
+          "name": "Detect – High Confidence Block (Credit Card)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/detect",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"My credit card number is 4111 1111 1111 1111 and expires soon.\",\n  \"rid\": \"RID-CC-001\",\n  \"expected_format\": \"FREE_TEXT\",\n  \"guardrails\": []\n}"
+            }
+          }
+        },
+        {
+          "name": "Detect – Structured JSON Output Validation",
+          "description": "Example using expected_format to indicate a structured JSON response. Assumes a validator is configured for this format.",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/detect",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"{\\\"order_id\\\": 123, \\\"email\\\": \\\"john@example.com\\\"}\",\n  \"rid\": \"RID-STRUCT-001\",\n  \"expected_format\": \"ORDER_JSON_V1\",\n  \"guardrails\": [\"ORDER_JSON_V1\"]\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "LLM Gateway (OpenAI-Compatible)",
+      "description": "OpenAI-compatible /v1/chat/completions gateway that applies TSZ guardrails before forwarding to the upstream LLM.",
+      "item": [
+        {
+          "name": "Chat – Safe Prompt via Gateway",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"llama3.1:8b\",\n  \"messages\": [\n    {\"role\": \"user\", \"content\": \"Hello, this is a safe prompt.\"}\n  ],\n  \"stream\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Chat – PII + Toxic Language (Should Block or Mask)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-TSZ-RID", "value": "RID-GW-001" },
+              { "key": "X-TSZ-Guardrails", "value": "TOXIC_LANGUAGE" }
+            ],
+            "url": "{{base_url}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"llama3.1:8b\",\n  \"messages\": [\n    {\"role\": \"user\", \"content\": \"My credit card is 4111 1111 1111 1111, you are an idiot\"}\n  ],\n  \"stream\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Chat – Streaming (Baseline, No Guardrails)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-TSZ-RID", "value": "RID-GW-STREAM-BASE" }
+            ],
+            "url": "{{base_url}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"llama3.1:8b\",\n  \"messages\": [\n    {\"role\": \"user\", \"content\": \"Stream a short response about TSZ gateway\"}\n  ],\n  \"stream\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Chat – Streaming (stream-sync, on_fail=filter)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-TSZ-RID", "value": "RID-GW-STREAM-FILTER" },
+              { "key": "X-TSZ-Guardrails", "value": "TOXIC_LANGUAGE,PII" },
+              { "key": "X-TSZ-Guardrails-Mode", "value": "stream-sync" },
+              { "key": "X-TSZ-Guardrails-OnFail", "value": "filter" }
+            ],
+            "url": "{{base_url}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"llama3.1:8b\",\n  \"messages\": [\n    {\"role\": \"user\", \"content\": \"Please stream a short answer that includes an insult and a fake credit card number like 4111 1111 1111 1111.\"}\n  ],\n  \"stream\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Chat – Streaming (stream-sync, on_fail=halt)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-TSZ-RID", "value": "RID-GW-STREAM-HALT" },
+              { "key": "X-TSZ-Guardrails", "value": "TOXIC_LANGUAGE,PII" },
+              { "key": "X-TSZ-Guardrails-Mode", "value": "stream-sync" },
+              { "key": "X-TSZ-Guardrails-OnFail", "value": "halt" }
+            ],
+            "url": "{{base_url}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"llama3.1:8b\",\n  \"messages\": [\n    {\"role\": \"user\", \"content\": \"Stream a response that is clearly toxic and unsafe.\"}\n  ],\n  \"stream\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Chat – Streaming (stream-async, audit only)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-TSZ-RID", "value": "RID-GW-STREAM-ASYNC" },
+              { "key": "X-TSZ-Guardrails", "value": "TOXIC_LANGUAGE,PII" },
+              { "key": "X-TSZ-Guardrails-Mode", "value": "stream-async" }
+            ],
+            "url": "{{base_url}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"llama3.1:8b\",\n  \"messages\": [\n    {\"role\": \"user\", \"content\": \"Stream a long response that might contain sensitive content.\"}\n  ],\n  \"stream\": true\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Patterns",
+      "item": [
+        {
+          "name": "Create Pattern – EMAIL with Thresholds",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/patterns",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Name\": \"EMAIL\",\n  \"Regex\": \"[a-z0-9._%+-]+@[a-z0-9.-]+\\\\.[a-z]{2,}\",\n  \"Description\": \"Standard email address\",\n  \"Category\": \"PII\",\n  \"IsActive\": true,\n  \"BlockThreshold\": 0.9,\n  \"AllowThreshold\": 0.3\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Pattern – PHONE_NUMBER",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/patterns",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Name\": \"PHONE_NUMBER\",\n  \"Regex\": \"\\\\+?[0-9]{10,13}\",\n  \"Description\": \"International phone numbers\",\n  \"Category\": \"PII\",\n  \"IsActive\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "List Patterns",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/patterns"
+          }
+        },
+        {
+          "name": "Delete Pattern – by ID",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/patterns/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Allowlist",
+      "item": [
+        {
+          "name": "Create Allowlist Item – Support Mailbox",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/allowlist",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"value\": \"support@company.com\",\n  \"description\": \"Official support mailbox\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Allowlist Item – Internal Domain",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/allowlist",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"value\": \"@internal.company.com\",\n  \"description\": \"Internal corporate domain\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Allowlist",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/allowlist"
+          }
+        },
+        {
+          "name": "Delete Allowlist – by ID",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/allowlist/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Blocklist",
+      "item": [
+        {
+          "name": "Create Blocklist Item – Confidential Keyword",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/blacklist",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"value\": \"confidential_keyword\",\n  \"description\": \"Internal classified term\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Blocklist Item – Competitor Name",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/blacklist",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"value\": \"acme-competitor\",\n  \"description\": \"Explicitly forbidden competitor mention\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Blocklist",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/blacklist"
+          }
+        },
+        {
+          "name": "Delete Blocklist – by ID",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/blacklist/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Validators",
+      "item": [
+        {
+          "name": "Create AI Validator – TOXIC_LANGUAGE",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/validators",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"TOXIC_LANGUAGE\",\n  \"type\": \"AI_PROMPT\",\n  \"rule\": \"Is this text toxic or abusive? Answer YES or NO.\",\n  \"description\": \"Blocks abusive language\",\n  \"expected_response\": \"NO\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Schema Validator – ORDER_JSON_V1",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/validators",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"ORDER_JSON_V1\",\n  \"type\": \"SCHEMA\",\n  \"rule\": \"JSON schema for order v1 (see API docs)\",\n  \"description\": \"Validates order JSON structure\",\n  \"expected_response\": \"VALID\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Validators",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/validators"
+          }
+        },
+        {
+          "name": "Delete Validator – by ID",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/validators/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Templates",
+      "description": "Preconfigured guardrail packs customers can import to instantly enable protection policies.",
+      "item": [
+        {
+          "name": "Import PII Starter Pack",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/templates/import",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"template\": {\n    \"name\": \"PII Starter Pack\",\n    \"description\": \"Detects basic PII and blocks abusive language\",\n    \"patterns\": [\n      {\n        \"Name\": \"EMAIL\",\n        \"Regex\": \"[a-z0-9._%+-]+@[a-z0-9.-]+\\\\.[a-z]{2,}\",\n        \"Category\": \"PII\",\n        \"IsActive\": true\n      },\n      {\n        \"Name\": \"PHONE_NUMBER\",\n        \"Regex\": \"\\\\+?[0-9]{10,13}\",\n        \"Category\": \"PII\",\n        \"IsActive\": true\n      }\n    ],\n    \"validators\": [\n      {\n        \"name\": \"TOXIC_LANGUAGE\",\n        \"type\": \"AI_PROMPT\",\n        \"rule\": \"Is this text toxic or abusive? Reply YES or NO\"\n      }\n    ]\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Import Compliance Pack (PCI/GDPR)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/templates/import",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"template\": {\n    \"name\": \"Compliance Pack\",\n    \"description\": \"PCI/GDPR oriented strict protection\",\n    \"patterns\": [\n      {\n        \"Name\": \"EMAIL\",\n        \"Regex\": \"[a-z0-9._%+-]+@[a-z0-9.-]+\\\\.[a-z]{2,}\",\n        \"Category\": \"PII\",\n        \"IsActive\": true\n      },\n      {\n        \"Name\": \"CREDIT_CARD\",\n        \"Regex\": \"\\\\b(?:\\\\d[ -]*?){13,16}\\\\b\",\n        \"Category\": \"PII\",\n        \"IsActive\": true\n      }\n    ],\n    \"validators\": []\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Import AI Safety Pack",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/templates/import",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"template\": {\n    \"name\": \"AI Safety Pack\",\n    \"description\": \"Blocks toxic and unsafe language\",\n    \"patterns\": [],\n    \"validators\": [\n      {\n        \"name\": \"TOXIC_LANGUAGE\",\n        \"type\": \"AI_PROMPT\",\n        \"rule\": \"Is this text toxic or abusive? Reply YES or NO\"\n      }\n    ]\n  }\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "System",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/healthz"
+          }
+        },
+        {
+          "name": "Ready",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/ready"
+          }
+        },
+        {
+          "name": "Reload Cache",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/admin/reload"
+          }
+        }
+      ]
+    }
+  ]
+}
