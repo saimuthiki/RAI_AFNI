@@ -115,19 +115,48 @@ for this part.
 - `AFNI_Responsible_AI_Framework.pptx` — grew to 79 slides
 - `qa_matrix.py` — new: overflow QA specifically for table-cell content
 
-### 2026-08-24 — Set up this tracker file, and move the project into a git repo
+### 2026-08-24 — Tracker file setup, repo reorganization, and git migration
 **Type:** New Build / Modification
-**Ask:** Two requests: (1) set up a strict, standing rule to log every future ask/modification —
-same session or a new one — into a dated tracker file with date, heading, ask type, what was done,
-and files changed. (2) Move everything currently under `D:\Afni` into `D:\Afni\RAI_AFNI-main` (a new
-GitHub repository the user created for their account) and push it, so the project is under version
-control.
+**Ask:** Several requests in one sitting: (1) set up a strict, standing rule to log every future
+ask/modification — same session or a new one — into a dated tracker file with date, heading, ask
+type, what was done, and files changed. (2) Move everything under `D:\Afni` into
+`D:\Afni\RAI_AFNI-main` (a new GitHub repo the user created) and push it, so the project is under
+version control — but explicitly leaving the 2GB `references/` folder (23 downloaded third-party
+repos) out, since that's just research material, not AFNI's own code. (3) Mid-task correction: don't
+scatter helper scripts at the repo root — group generation helpers, QA scripts, and entry-point
+scripts into their own folders to reduce noise. (4) Mid-task correction: stop over-engineering the
+move into a heavier refactor than needed, and don't add unrequested content (an unrequested README
+write-up was created and reverted).
 **What was done:**
-- Created this file (`MEMORY.md`) with the entry format above and backfilled it with every prior
-  milestone in the project, reconstructed from file timestamps and conversation history.
-- Saved a standing feedback memory (in the assistant's cross-session auto-memory system, separate
-  from this file) instructing that every future substantive ask in this project must be logged here
-  before the turn ends.
-- (Git migration: see the next entry once the remote is confirmed and the push completes.)
+- Created this file (`MEMORY.md`) with the entry format above and backfilled prior milestones from
+  file timestamps and conversation history.
+- Saved two standing feedback memories in the assistant's cross-session auto-memory system (separate
+  from this file): (a) always log AFNI-project work here, (b) never add unrequested files/content
+  without explicit instruction.
+- Fixed a latent bug: `build_capability_matrix_data.py` depended on a throwaway intermediate JSON
+  file that had already been deleted; inlined the capability-selection data as a constant instead so
+  the script is reproducible on its own.
+- Reorganized the project into `data/` (JSON research data), `helpers/` (reusable generation
+  modules), `qa/` (overflow/coverage checks), and `scripts/` (the two entry points,
+  `build_deck.py`/`build_html.py`) — updating hardcoded absolute paths to be portable
+  (`__file__`-relative) and adding a `sys.path` bootstrap in each entry point so the flat
+  cross-imports between helper modules keep working.
+- Verified both entry points and all three QA scripts still produce identical output (79 slides, 0
+  layout issues, full 23-repo/7-tenet coverage) after each stage of the reorg.
+- Initialized git in `RAI_AFNI-main`, added the `origin` remote, reconciled with the repo's existing
+  initial README commit (identical content, no conflict), committed all 25 project files, and pushed
+  to `main`. Left the `references/` folder at its original `D:\Afni\references` location, untouched
+  and outside the repo.
 **Files created / changed:**
 - `MEMORY.md` — new, this file
+- `.gitignore` — new (`__pycache__/`, `*.pyc`, `.claude/`)
+- `helpers/build_capability_matrix_data.py` — inlined the selection data; fixed to `__file__`-relative paths
+- `helpers/build_pptx.py`, `helpers/build_deck_matrix.py` — fixed to `__file__`-relative paths
+- `scripts/build_deck.py`, `scripts/build_html.py` — fixed to `__file__`-relative paths + `sys.path` bootstrap
+- `qa/qa_deck.py`, `qa/qa_matrix.py`, `qa/verify_deck.py` — fixed to `__file__`-relative paths (+ bootstrap for `verify_deck.py`)
+- Moved (no content change): `build_deck_flow.py`, `build_deck_synthesis.py`, `build_deck_tenetcards.py`,
+  `html_css.py`, `html_js.py`, `html_diagram.py`, `repo_slide_content.py`, `patch_repo_slides.py`,
+  `patch_repo_slides_2.py` → `helpers/`; `RAI_Repo_Reports.json`, `RAI_Synthesis.json`,
+  `capability_matrix_data.json` → `data/`
+- Git: initialized `D:\Afni\RAI_AFNI-main` as a repo, remote `origin` = `https://github.com/saimuthiki/RAI_AFNI.git`,
+  pushed commit `286eaa4` to `main`
