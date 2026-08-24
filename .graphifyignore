@@ -1,0 +1,6 @@
+# references/ holds 23 third-party repos kept purely as research material.
+# They are not AFNI code, and a semantic pass over ~12,800 files would be
+# expensive, so graphify indexes AFNI's own analysis and platform code only.
+references/
+graft/
+*.pptx
