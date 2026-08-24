@@ -1,0 +1,6 @@
+# graft's and graphify's outputs are gitignored but should stay greppable:
+# ripgrep reads .ignore before .gitignore, so this re-admits them to search.
+!graft/
+!graphify-out/
+graft/.cache/
+graft/.graph/
