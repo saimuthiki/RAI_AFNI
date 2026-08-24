@@ -1,3 +1,10 @@
 __pycache__/
 *.pyc
-.claude/
+
+# Local, machine-specific Claude Code settings (the shared wiring in
+# .claude/settings.json, .claude/helpers/ and .claude/skills/ IS committed)
+.claude/settings.local.json
+
+# Regenerable context caches — each dev builds their own (like node_modules)
+graft/
+graphify-out/
