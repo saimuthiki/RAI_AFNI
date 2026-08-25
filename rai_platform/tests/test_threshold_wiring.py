@@ -199,5 +199,131 @@ class TestConsumerCount(unittest.TestCase):
                 self.assertIn("ctx.threshold(", inspect.getsource(cls.check))
 
 
+
+
+class TestTheResolvedThresholdReachesItsConsumer(unittest.TestCase):
+    """Per rail, prove the resolved value reaches whatever actually decides.
+
+    This class exists because of a real miss. The first version of this file
+    proved a tenant override changed the outcome for exactly one rail
+    (SystemPromptLeakageRail, which compares `score >= threshold` in its own
+    body) and I generalised from it. An automated review then found three rails
+    where the resolved threshold was computed, logged, and ignored:
+
+      ToxicityClassifier and ZeroShotTopics  - llm-guard takes the threshold at
+        CONSTRUCTION, and `scan()` returns a threshold-RELATIVE risk, so the
+        local variable could never affect `valid`
+      PresidioPiiRail - AnalyzerEngine was built with the constructor default and
+        `analyze()` was called without a threshold, so no entity was ever dropped
+
+    All three were the Safe Zone bug again, in the very commit that claimed to
+    have fixed that class of bug. So the bar here is per-rail and mechanical: the
+    threshold must demonstrably reach the consumer, for every rail that has one.
+    """
+
+    def store_with(self, key, value):
+        store = ThresholdStore()
+        store.put_tenant(TenantConfig(tenant="t", thresholds={key: value}))
+        return store
+
+    def ctx_for(self, rail, value):
+        store = self.store_with(rail.THRESHOLD_KEY, value)
+        return CheckContext(tenant="t", resolve=store.resolve_value)
+
+    # -- the two llm-guard scanners: the threshold must reach the CONSTRUCTOR ---
+    def test_llm_guard_scanners_build_with_the_resolved_threshold(self):
+        from afni_rai.tenets.content_safety import ToxicityClassifier, ZeroShotTopics
+        for rail in (ToxicityClassifier(), ZeroShotTopics(topics=("weapons",))):
+            with self.subTest(rail=rail.name):
+                seen = []
+
+                class Fake:
+                    def scan(self, text):
+                        return text, True, -1.0
+
+                def fake_load(threshold=None, _seen=seen):
+                    _seen.append(threshold)
+                    return Fake()
+
+                rail._load = fake_load
+                rail.check("payload.text", "some text", self.ctx_for(rail, 0.23))
+                self.assertEqual(
+                    seen, [0.23],
+                    f"{rail.name} did not pass the resolved threshold to its "
+                    "scanner constructor - the tenant's value is decorative")
+
+    # -- presidio: the threshold must reach analyze() AND drop entities ---------
+    def test_presidio_passes_the_threshold_and_drops_low_scoring_entities(self):
+        from afni_rai.tenets.privacy import PresidioPiiRail
+
+        class Res:
+            def __init__(self, score):
+                self.entity_type, self.start, self.end, self.score = "US_SSN", 0, 11, score
+
+        captured = {}
+
+        class FakeEngine:
+            def analyze(self, text, language, entities, score_threshold=None):
+                captured["score_threshold"] = score_threshold
+                # Deliberately ignores its own argument, so the per-finding
+                # filter is what has to work.
+                return [Res(0.40), Res(0.95)]
+
+        rail = PresidioPiiRail()
+        rail._engine = lambda: FakeEngine()
+
+        loose = rail.check("payload.text", "123-45-6789", self.ctx_for(rail, 0.10))
+        self.assertEqual(captured["score_threshold"], 0.10,
+                         "the resolved threshold never reached analyze()")
+        self.assertEqual(len(loose.findings), 2)
+
+        strict = rail.check("payload.text", "123-45-6789", self.ctx_for(rail, 0.90))
+        self.assertEqual(len(strict.findings), 1,
+                         "tightening the threshold dropped no entity, so the "
+                         "threshold is decorative")
+
+    # -- the judge rails: score vs threshold decides the finding ----------------
+    def test_judge_rails_respect_the_resolved_threshold(self):
+        from afni_rai.tenets.content_safety import ToxicityJudge
+        from afni_rai.tenets.privacy import PiiLeakageJudgeRail
+        for rail in (ToxicityJudge(judge=lambda text: 0.55),
+                     PiiLeakageJudgeRail(judge=lambda text: 0.55)):
+            with self.subTest(rail=rail.name):
+                lax = rail.check("payload.text", "x", self.ctx_for(rail, 0.90))
+                strict = rail.check("payload.text", "x", self.ctx_for(rail, 0.10))
+                self.assertEqual(
+                    len(lax.findings), 0,
+                    f"{rail.name}: a 0.55 score fired against a 0.90 threshold")
+                self.assertGreater(
+                    len(strict.findings), 0,
+                    f"{rail.name}: a 0.55 score did not fire against a 0.10 "
+                    "threshold, so the threshold is not consulted")
+
+    # -- structural sweep: nothing may resolve a threshold and then ignore it ---
+    def test_no_rail_resolves_a_threshold_it_then_ignores(self):
+        """The generalisation guard.
+
+        A rail that computes `threshold` and never mentions it again is the
+        signature of the bug this class was written for. Requiring at least two
+        references - the assignment plus one use - catches it without needing to
+        understand each rail's internals.
+        """
+        offenders = []
+        for rail in all_rails():
+            key = getattr(type(rail), "THRESHOLD_KEY", None)
+            if not key:
+                continue
+            src = inspect.getsource(type(rail).check)
+            if "ctx.threshold(" not in src:
+                continue
+            uses = src.count("threshold")
+            # assignment mentions it twice (local + ctx.threshold(...)), plus the
+            # THRESHOLD_KEY reference; anything at or below that never used it.
+            if uses <= 3:
+                offenders.append((rail.name, uses))
+        self.assertEqual(offenders, [],
+                         f"these rails resolve a threshold and never use it: {offenders}")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

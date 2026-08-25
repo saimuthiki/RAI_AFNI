@@ -1093,14 +1093,34 @@ class PresidioPiiRail:
         if engine is None:
             return RailResult.unjudged(self._unavailable or "presidio unavailable")
         try:
+            # Presidio takes the threshold PER CALL, so unlike the llm-guard
+            # scanners no rebuild is needed - the engine's
+            # `default_score_threshold` is only a fallback for calls that omit it.
             results = engine.analyze(text=text, language=self.language,
-                                     entities=list(self.entities))
+                                     entities=list(self.entities),
+                                     score_threshold=threshold)
+        except TypeError:
+            # An older analyzer without the per-call argument. Fall back to the
+            # engine default and rely on the filter below, rather than silently
+            # ignoring the tenant's threshold.
+            try:
+                results = engine.analyze(text=text, language=self.language,
+                                         entities=list(self.entities))
+            except Exception as exc:                      # noqa: BLE001
+                return RailResult.unjudged(f"presidio analyze failed: {exc}")
         except Exception as exc:                          # noqa: BLE001
             return RailResult.unjudged(f"presidio analyze failed: {exc}")
 
         findings: list[Finding] = []
         spans: list[Span] = []
         for res in results:
+            # Belt and braces. Passing score_threshold above should already have
+            # dropped these, but a tenant tightening the threshold must drop
+            # entities even if the engine ignored the argument - otherwise the
+            # threshold is decorative, which is the whole failure mode being
+            # fixed here.
+            if float(getattr(res, "score", 0.0)) < threshold:
+                continue
             entity = getattr(res, "entity_type", "") or ""
             category = PRESIDIO_TO_CATEGORY.get(entity, "privacy.pii")
             subject = text[res.start:res.end]

@@ -476,10 +476,14 @@ class TestDependencyAbsence(unittest.TestCase):
                          "importing content_safety pulled a heavy dependency")
 
     def test_availability_probe_does_not_construct_a_scanner(self):
-        rail = cs.ToxicityClassifier()
-        rail.available()
-        self.assertIsNone(rail._scanner,
-                          "available() must not download weights")
+        # `_scanners` is keyed by threshold rather than a single `_scanner`,
+        # because llm-guard takes the threshold at construction and a per-tenant
+        # value has to reach the constructor to have any effect.
+        for rail in (cs.ToxicityClassifier(), cs.ZeroShotTopics(topics=("x",))):
+            with self.subTest(rail=rail.name):
+                rail.available()
+                self.assertEqual(rail._scanners, {},
+                                 "available() must not download weights")
 
 
 # ----------------------------------------------------- findings discipline ---
