@@ -1,12 +1,10 @@
 # -*- coding: utf-8 -*-
-"""7 tenet 'cheat sheet' slides: Open-Source / Cloud & Paid / AFNI Recommendation / Principle."""
-from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
-from build_pptx import (
-    blank_slide, add_rect, add_rounded, add_text, add_header, badge,
-    NAVY, TEAL, BG_LIGHT, CARD_BG, WHITE, TEXT_DARK, TEXT_MUTED, TEXT_SOFT_ON_NAVY,
-    AMBER, GREEN, RED_SOFT, LINE_GREY, TENET_COLORS, FONT_HEAD, FONT_BODY,
-)
+"""Per-tenet prose: open-source lead, cloud lead, recommendation and principle.
 
+Data only. The slide renderers that used to live here were retired when the two
+overlapping recommendation sets were merged - build_deck_tenetmerged.py now reads
+TENET_CARDS and is the single renderer for this section.
+"""
 TENET_CARDS = [
     {
         "tenet": "Privacy",
@@ -136,44 +134,3 @@ TENET_CARDS = [
             "passed, and the gateway fails closed on client-facing traffic.",
     },
 ]
-
-
-def add_tenet_card_slide(prs, card, idx, total, finish_slide_fn):
-    slide = blank_slide(prs)
-    color = TENET_COLORS.get(card["tenet"], TEAL)
-    add_header(slide, f"Tenet {idx} of {total}", card["title"], accent=color)
-
-    full_x, full_w = 0.55, 12.2
-    rows = [
-        ("OPEN-SOURCE", card["open_source_name"], card["open_source_text"], TEAL),
-        ("CLOUD & PAID", card["cloud_name"], card["cloud_text"], NAVY),
-        ("AFNI RECOMMENDATION", None, card["recommendation"], GREEN),
-    ]
-    y = 1.48
-    heights = [1.62, 1.5, 1.35]
-    for (label, name, text, accent), h in zip(rows, heights):
-        add_rect(slide, full_x, y, 0.09, h, accent)
-        badge(slide, full_x + 0.22, y + 0.02, label, accent, w=1.9 if label != "AFNI RECOMMENDATION" else 2.6,
-              h=0.28, size=9.5)
-        ty = y + 0.36
-        if name:
-            add_text(slide, full_x + 0.22, ty, full_w - 0.4, 0.28, name, size=13, color=NAVY, bold=True,
-                      font=FONT_HEAD)
-            ty += 0.32
-        add_text(slide, full_x + 0.22, ty, full_w - 0.4, h - (ty - y), text, size=10.6, color=TEXT_DARK,
-                  font=FONT_BODY, line_spacing=1.15)
-        y += h + 0.09
-
-    band_h = 0.5
-    add_rounded(slide, full_x, y, full_w, band_h, NAVY, radius=0.12)
-    add_text(slide, full_x + 0.25, y, full_w - 0.5, band_h, card["principle"], size=10.8, color=WHITE,
-              bold=True, italic=True, anchor=MSO_ANCHOR.MIDDLE, align=PP_ALIGN.CENTER, font=FONT_BODY,
-              line_spacing=1.1)
-
-    finish_slide_fn(slide, f"Tenet Cheat Sheet - {card['tenet']}")
-
-
-def add_all_tenet_cards(prs, finish_slide_fn):
-    total = len(TENET_CARDS)
-    for i, card in enumerate(TENET_CARDS, start=1):
-        add_tenet_card_slide(prs, card, i, total, finish_slide_fn)
