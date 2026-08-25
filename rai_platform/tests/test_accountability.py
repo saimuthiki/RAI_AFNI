@@ -1068,9 +1068,9 @@ class TestRegistration(unittest.TestCase):
     def test_the_statuses_are_the_honest_ones(self):
         expected = {
             "Fail-closed / unjudged policy": Coverage.IMPLEMENTED,
-            # DEPENDENCY, not IMPLEMENTED: the store works, but only one
-            # consumer reads it. See TestThresholdWiringHonesty.
-            "Per-tenant threshold config": Coverage.DEPENDENCY,
+            # IMPLEMENTED again, on the strength of an outcome difference -
+            # see tests/test_threshold_wiring.py.
+            "Per-tenant threshold config": Coverage.IMPLEMENTED,
             "Audit trail / call history": Coverage.IMPLEMENTED,
             "On-fail remediation actions": Coverage.IMPLEMENTED,
             "Compliance-framework mapping": Coverage.IMPLEMENTED,
@@ -1222,44 +1222,10 @@ if __name__ == "__main__":
     unittest.main(verbosity=2)
 
 
-class TestThresholdWiringHonesty(unittest.TestCase):
-    """Pins the gap between "the threshold store works" and "the gateway uses it".
-
-    The store resolves and logs correctly, but almost nothing consults it yet.
-    That is the same shape as the Safe Zone bug it was built to avoid, so the
-    count is asserted here: if a rail is wired up, this test fails and whoever
-    did the wiring updates the registration note in the same commit.
-    """
-
-    def _consumers(self):
-        import pathlib
-        root = pathlib.Path(__file__).resolve().parents[1] / "afni_rai"
-        hits = []
-        for path in root.rglob("*.py"):
-            text = path.read_text(encoding="utf-8")
-            for i, line in enumerate(text.splitlines(), 1):
-                if "thresholds.resolve(" in line or ".resolve(self.tenant" in line:
-                    hits.append(f"{path.relative_to(root)}:{i}")
-        return hits
-
-    def test_thresholds_have_exactly_one_consumer_today(self):
-        consumers = self._consumers()
-        self.assertEqual(
-            len(consumers), 1,
-            "the number of ThresholdStore consumers changed - update the "
-            "'Per-tenant threshold config' registration note and this count "
-            f"together. Found: {consumers}")
-        self.assertIn("corpus.py", consumers[0])
-
-    def test_the_capability_is_not_registered_as_implemented(self):
-        from afni_rai.registry.capabilities import CapabilityRegistry, Coverage
-        from afni_rai.contract.models import Tenet
-        from afni_rai.tenets.accountability import register
-        registry = CapabilityRegistry()
-        register(registry)
-        rows = {r.capability: r for r in registry.report().by_tenet[Tenet.ACCOUNTABILITY]}
-        row = rows["Per-tenant threshold config"]
-        self.assertIs(row.status, Coverage.DEPENDENCY,
-                      "a threshold service the rails do not consult is not "
-                      "implemented cover")
-        self.assertIn("PARTIAL", row.note)
+# TestThresholdWiringHonesty lived here. It asserted the store had exactly one
+# consumer, because at the time it was write-only - stored, admin-exposed, and
+# unable to change a decision. It did its job: it failed the moment the wiring
+# began, and forced this note. All 11 threshold-bearing rails now resolve through
+# the store, so the assertion is obsolete and its successor lives in
+# tests/test_threshold_wiring.py, where the bar is an OUTCOME difference rather
+# than a consumer count.

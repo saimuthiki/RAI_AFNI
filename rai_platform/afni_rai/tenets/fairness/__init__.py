@@ -610,6 +610,7 @@ class ProtectedAttributeReferenceRail:
 # ============================================================================
 
 class LocalBiasClassifierRail:
+    THRESHOLD_KEY = "x.afni.bias.classifier"
     """Stage 2: the one local model in this tenet.
 
     A faithful adapter of LLM Guard's `Bias` output scanner
@@ -693,7 +694,13 @@ class LocalBiasClassifierRail:
         return self._pipeline
 
     # -- Rail protocol -----------------------------------------------------
-    def check(self, path: str, text: str) -> RailResult:
+    def check(self, path: str, text: str,
+              ctx: CheckContext | None = None) -> RailResult:
+        # Per-tenant threshold, falling back to the ported default when no
+        # store is wired. THRESHOLD_KEY is resolved once per call, not per
+        # finding, so the read log carries one entry per check.
+        threshold = (ctx.threshold(self.THRESHOLD_KEY, self._threshold)
+                     if ctx is not None else self._threshold)
         # Mirrors bias.py:81-82 - an empty payload is judged, and clean.
         if not text or not text.strip():
             return RailResult.clean()
@@ -724,7 +731,7 @@ class LocalBiasClassifierRail:
             score = round(prob if label == self.BIASED_LABEL else 1 - prob, 2)
             highest = max(highest, score)
 
-        if highest <= self._threshold:
+        if highest <= threshold:
             return RailResult.clean()
 
         return RailResult(judged=True, findings=[Finding(
@@ -742,6 +749,7 @@ class LocalBiasClassifierRail:
 # ============================================================================
 
 class GenerativeBiasJudgeRail:
+    THRESHOLD_KEY = "x.afni.bias.judge"
     """Stage 3: an adapter for hai-guardrails' `biasDetectionGuard`.
 
     Upstream is a paid-API LLM judge - `llmGuard` with
@@ -779,7 +787,13 @@ class GenerativeBiasJudgeRail:
         self._judge = judge
         self._threshold = threshold
 
-    def check(self, path: str, text: str) -> RailResult:
+    def check(self, path: str, text: str,
+              ctx: CheckContext | None = None) -> RailResult:
+        # Per-tenant threshold, falling back to the ported default when no
+        # store is wired. THRESHOLD_KEY is resolved once per call, not per
+        # finding, so the read log carries one entry per check.
+        threshold = (ctx.threshold(self.THRESHOLD_KEY, self._threshold)
+                     if ctx is not None else self._threshold)
         if self._judge is None:
             return RailResult.unjudged(
                 f"{self.name}: no LLM judge configured (hai-guardrails "
@@ -805,7 +819,7 @@ class GenerativeBiasJudgeRail:
             return RailResult.unjudged(
                 f"{self.name}: judge score {score} outside [0, 1]")
 
-        if score < self._threshold:
+        if score < threshold:
             return RailResult.clean()
 
         impact = str(verdict.get("impact") or "").lower()

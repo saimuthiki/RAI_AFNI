@@ -15,6 +15,7 @@ the vendored source. A rail declares its stage; it does not get to invent one.
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Protocol, runtime_checkable
@@ -67,6 +68,57 @@ class RailResult:
         return cls(judged=False, reason=reason)
 
 
+@dataclass
+class CheckContext:
+    """Per-request state a rail may need but cannot get from `(path, text)`.
+
+    This exists because thresholds are per-tenant and `check(path, text)` has no
+    idea which tenant it is serving. Without it a threshold service is
+    write-only - stored, exposed through an admin API, and never consulted on the
+    decision path. That is not hypothetical: it is exactly what Safe Zone does
+    (`admin.go:66` writes BlockThreshold/AllowThreshold, `guardrails.go:287`
+    reads env globals instead), and what the Infosys toolkit does with its
+    per-account ModerationCheckThreshold.
+
+    `resolve` is injected rather than the store itself, so a rail cannot reach
+    past the context to read or mutate configuration it has no business touching,
+    and so tests can supply a plain lambda.
+    """
+
+    tenant: str | None = None
+    portfolio: str | None = None
+    client_facing: bool = True
+    resolve: Callable[[str | None, str], float] | None = None
+    # Every (key, value, source) actually consulted this request. The audit
+    # record needs to show which threshold produced a decision, not merely that
+    # some threshold did.
+    reads: list[tuple[str, float, str]] = field(default_factory=list)
+
+    def threshold(self, key: str, default: float) -> float:
+        """Resolve `key` for this tenant, falling back to the rail's own value.
+
+        The fallback is the threshold the rail was ported with, so a gateway
+        constructed without a store behaves exactly as it did before this
+        context existed. A resolver that raises falls back too, rather than
+        failing the check - a misconfigured threshold must not become an
+        unjudged path, because unjudged fails closed and a config typo would
+        take client traffic down.
+        """
+        if self.resolve is None:
+            self.reads.append((key, default, "rail-default"))
+            return default
+        try:
+            value = self.resolve(self.tenant, key)
+        except Exception:  # noqa: BLE001 - a bad config must not break the check
+            self.reads.append((key, default, "rail-default-after-resolver-error"))
+            return default
+        if value is None:
+            self.reads.append((key, default, "rail-default"))
+            return default
+        self.reads.append((key, float(value), "resolved"))
+        return float(value)
+
+
 @runtime_checkable
 class Rail(Protocol):
     """Structural, not inherited - a rail is anything with these members, so an
@@ -80,6 +132,13 @@ class Rail(Protocol):
         """Judge one payload string. Must not raise for an expected failure -
         return `RailResult.unjudged(reason)` instead. The engine catches
         exceptions as a backstop, but a rail that knows it failed should say so.
+
+        A rail with a tunable threshold takes an optional third parameter,
+        `ctx: CheckContext | None`, and resolves through `ctx.threshold(key,
+        default)`. The engine decides once, at construction, which rails accept
+        it - never per request. Rails with nothing to tune (a regex either
+        matches or it does not) keep the two-argument form, and that is not a
+        gap: 20 of the 31 rails have no threshold at all.
         """
         ...
 

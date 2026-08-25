@@ -990,6 +990,7 @@ _ZEROSHOT_REVISION = "d825e740e0c59881cf0b0b1481ccf726b6d65341"
 
 
 class ToxicityClassifier:
+    THRESHOLD_KEY = "safety.toxicity.classifier"
     """llm-guard's `Toxicity` scanner, Stage 2.
 
     Model id and pinned revision from
@@ -1033,7 +1034,13 @@ class ToxicityClassifier:
             self._unavailable = f"{type(exc).__name__}: {exc}"
         return self._scanner
 
-    def check(self, path: str, text: str) -> RailResult:
+    def check(self, path: str, text: str,
+              ctx: CheckContext | None = None) -> RailResult:
+        # Per-tenant threshold, falling back to the ported default when no
+        # store is wired. THRESHOLD_KEY is resolved once per call, not per
+        # finding, so the read log carries one entry per check.
+        threshold = (ctx.threshold(self.THRESHOLD_KEY, self.threshold)
+                     if ctx is not None else self.threshold)
         if not text or not text.strip():
             return RailResult.clean()
         scanner = self._load()
@@ -1061,6 +1068,7 @@ class ToxicityClassifier:
 
 
 class ZeroShotTopics:
+    THRESHOLD_KEY = "safety.topic_violation.zeroshot"
     """llm-guard's `BanTopics` scanner, Stage 2.
 
     Model id and pinned revision from
@@ -1104,7 +1112,13 @@ class ZeroShotTopics:
             self._unavailable = f"{type(exc).__name__}: {exc}"
         return self._scanner
 
-    def check(self, path: str, text: str) -> RailResult:
+    def check(self, path: str, text: str,
+              ctx: CheckContext | None = None) -> RailResult:
+        # Per-tenant threshold, falling back to the ported default when no
+        # store is wired. THRESHOLD_KEY is resolved once per call, not per
+        # finding, so the read log carries one entry per check.
+        threshold = (ctx.threshold(self.THRESHOLD_KEY, self.threshold)
+                     if ctx is not None else self.threshold)
         if not self.topics:
             return RailResult.clean()
         if not text or not text.strip():
@@ -1134,6 +1148,7 @@ class ZeroShotTopics:
 
 @dataclass
 class ToxicityJudge:
+    THRESHOLD_KEY = "safety.toxicity.judge"
     """LLM-judge toxicity rail, Stage 3.
 
     The shape is taken from hai-guardrails, whose `toxic`, `hateSpeech`,
@@ -1159,12 +1174,18 @@ class ToxicityJudge:
     def available(self) -> bool:
         return self.judge is not None
 
-    def check(self, path: str, text: str) -> RailResult:
+    def check(self, path: str, text: str,
+              ctx: CheckContext | None = None) -> RailResult:
+        # Per-tenant threshold, falling back to the ported default when no
+        # store is wired. THRESHOLD_KEY is resolved once per call, not per
+        # finding, so the read log carries one entry per check.
+        threshold = (ctx.threshold(self.THRESHOLD_KEY, self.threshold)
+                     if ctx is not None else self.threshold)
         if self.judge is None:
             return RailResult.unjudged(
                 "no LLM judge configured for content_safety.toxicity_judge "
                 "(hai-guardrails-style prompt judge, threshold "
-                f"{self.threshold})")
+                f"{threshold})")
         if not text or not text.strip():
             return RailResult.clean()
         try:
@@ -1173,7 +1194,7 @@ class ToxicityJudge:
             return RailResult.unjudged(
                 f"{self.name} judge call failed: {type(exc).__name__}: {exc}")
         score = max(0.0, min(1.0, score))
-        if score < self.threshold:
+        if score < threshold:
             return RailResult.clean()
         return RailResult(findings=[Finding(
             category="safety.toxicity",

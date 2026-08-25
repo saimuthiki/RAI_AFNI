@@ -271,22 +271,28 @@ def register(registry) -> None:
              "closed, internal open - and fail_mode=open never suppresses the "
              "report.")
     registry.register(
-        TENET, "Per-tenant threshold config", Coverage.DEPENDENCY,
+        TENET, "Per-tenant threshold config", Coverage.IMPLEMENTED,
         THRESHOLD_ATTRIBUTION,
-        note="PARTIAL, and deliberately not registered IMPLEMENTED. The store "
-             "itself works: ThresholdStore resolves account -> portfolio -> "
-             "global -> last resort, logs every read, and a value outside [0, 1] "
-             "yields unjudged rather than a silent default. But only ONE "
-             "consumer reads it today (corpus.AttackCorpus, for the similarity "
-             "threshold). The other 31 rails across the six detector tenets "
-             "still carry the hardcoded defaults they were ported with and never "
-             "consult the store. That is structurally the same shape as the Safe "
-             "Zone bug this was built to avoid - admin.go:66 writes a threshold "
-             "that guardrails.go:287 never reads - so calling it IMPLEMENTED "
-             "would be exactly the overstatement the coverage report exists to "
-             "prevent. Wiring the rails to the store is the next piece of work; "
-             "test_thresholds_have_exactly_one_consumer_today pins the count so "
-             "this note cannot quietly go stale.")
+        note="ThresholdStore resolves account -> portfolio -> global -> rail "
+             "default -> last resort, logs every read, and all 11 "
+             "threshold-bearing rails now consult it through "
+             "CheckContext.threshold(). Earlier this was registered DEPENDENCY "
+             "because exactly one consumer read the store - the same shape as "
+             "the Safe Zone bug it was built to avoid, where admin.go:66 writes "
+             "a threshold guardrails.go:287 never reads. The bar for this "
+             "registration is an OUTCOME difference, not a read: "
+             "test_threshold_wiring.py drives one identical payload through one "
+             "rail for two tenants and asserts it blocks for one and passes for "
+             "the other. Keys are mechanism-specific (…toxicity.classifier vs "
+             "…toxicity.judge) because a classifier probability and a judge's "
+             "self-report are not one scale, and a shared knob would let an "
+             "operator tighten one while loosening the other. Each default is "
+             "the value its rail was ported with, so wiring changed no detection "
+             "behaviour. A misconfigured value falls back to that default rather "
+             "than becoming unjudged - unjudged fails closed, so one typo would "
+             "take a tenant's traffic down - and the read is labelled "
+             "rail-default-after-resolver-error so it stays distinguishable from "
+             "a value nobody set.")
     registry.register(
         TENET, "Audit trail / call history", Coverage.IMPLEMENTED,
         AUDIT_ATTRIBUTION,
