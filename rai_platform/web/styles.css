@@ -139,7 +139,7 @@
     --s1: #0d6f88; --s1-ink: #094f61; --s1-bed: #e0f0f5;
     --s2: #4b40b8; --s2-ink: #372e8c; --s2-bed: #e9e7fa;
     --s3: #a81552; --s3-ink: #83103f; --s3-bed: #fbe4ed;
-    --soff: #5b6478; --soff-ink: #454d5e; --soff-bed: #ecEFF2;
+    --soff: #5b6478; --soff-ink: #454d5e; --soff-bed: #eceff2;
 
     --hazard: #8a5f00; --hazard-deep: #fff4d1; --hazard-ink: #6b4a00;
 
@@ -190,6 +190,10 @@
 /* ============================ base ======================================= */
 
 *, *::before, *::after { box-sizing: border-box; }
+
+/* Author `display` rules outrank the UA's [hidden] { display: none }, and this
+   console hides several flex containers. Make hidden mean hidden. */
+[hidden] { display: none !important; }
 
 html { -webkit-text-size-adjust: 100%; }
 
@@ -267,6 +271,8 @@ a:hover { text-decoration-thickness: 2px; }
 .conn__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); flex: none; }
 .conn--live { border-color: color-mix(in oklab, var(--allow) 45%, var(--line)); color: var(--allow-ink); }
 .conn--live .conn__dot { background: var(--allow); box-shadow: 0 0 0 3px color-mix(in oklab, var(--allow) 22%, transparent); }
+.conn--degraded { border-color: color-mix(in oklab, var(--cov-2) 50%, var(--line)); color: var(--cov-2-ink); }
+.conn--degraded .conn__dot { background: var(--cov-2); box-shadow: 0 0 0 3px color-mix(in oklab, var(--cov-2) 20%, transparent); }
 .conn--fixtures { border-color: color-mix(in oklab, var(--hazard) 55%, var(--line)); color: var(--hazard-ink); }
 .conn--fixtures .conn__dot { background: var(--hazard); }
 .conn--unknown { color: var(--ink-3); }
@@ -300,6 +306,31 @@ a:hover { text-decoration-thickness: 2px; }
   font: 500 var(--t-micro)/1.4 var(--mono); cursor: pointer;
 }
 .banner__btn:hover { background: color-mix(in oklab, var(--hazard) 18%, transparent); }
+
+/* ============================ gateway health ============================= */
+/* A live-but-degraded gateway is its own claim, and it is not the same claim as
+   "no gateway". Amber, matching the dependency-missing step of the coverage ramp,
+   because that is literally what a rail that cannot load is. */
+
+.health {
+  padding: var(--sp-3) var(--sp-5);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  border-left: 3px solid var(--cov-2);
+  font-size: var(--t-small);
+}
+.health__top { display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap; }
+.health__word {
+  font: 700 var(--t-eyebrow)/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--cov-2-ink); background: var(--cov-2-bed);
+  border: 1px solid color-mix(in oklab, var(--cov-2) 45%, transparent);
+  border-radius: var(--r-sm); padding: 0.28rem 0.45rem;
+}
+.health summary { cursor: pointer; color: var(--ink-2); font-size: var(--t-small); margin-top: var(--sp-2); }
+.health__lists { display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); margin-top: var(--sp-3); }
+.health__lists dt { font: 500 var(--t-eyebrow)/1.4 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+.health__lists dd { margin-top: 2px; }
+.health__lists li { font: 400 var(--t-micro)/1.7 var(--mono); color: var(--ink-2); }
 
 /* ============================ shell / nav ================================ */
 
@@ -548,7 +579,7 @@ textarea:focus, select:focus, input:focus { border-color: var(--accent); }
 .rung__track { position: relative; display: grid; justify-items: center; }
 .rung__track::before {
   content: ""; position: absolute; top: 1.7rem; bottom: -1.4rem; width: 2px;
-  background: var(--line);
+  background: linear-gradient(var(--line), var(--line-soft));
 }
 .rung:last-child .rung__track::before { display: none; }
 .rung__node {
@@ -572,13 +603,13 @@ textarea:focus, select:focus, input:focus { border-color: var(--accent); }
 }
 
 /* stage-1 node: square, hard edges */
-.rung--s1 .rung__node { color: var(--s1-ink); background: var(--s1-bed); border-radius: var(--r-sm); }
-.rung--s2 .rung__node {
+.rung--1 .rung__node { color: var(--s1-ink); background: var(--s1-bed); border-radius: var(--r-sm); }
+.rung--2 .rung__node {
   color: var(--s2-ink); border-radius: 999px;
   background: repeating-linear-gradient(135deg,
     color-mix(in oklab, var(--s2) 32%, transparent) 0 2px, transparent 2px 5px), var(--s2-bed);
 }
-.rung--s3 .rung__node {
+.rung--3 .rung__node {
   color: var(--s3-ink); border-radius: 999px;
   background: radial-gradient(circle at 30% 25%, color-mix(in oklab, var(--s3) 45%, transparent), var(--s3-bed) 70%);
 }
@@ -607,6 +638,24 @@ textarea:focus, select:focus, input:focus { border-color: var(--accent); }
 .rung[data-state="skipped"] .rung__node { border-style: dashed; background: none; }
 .rung[data-state="skipped"] .rung__name { color: var(--ink-3); text-decoration: line-through; text-decoration-thickness: 1px; }
 .rung[data-state="skipped"] .rung__stat { color: var(--ink-3); }
+
+/* the escalation decision, shown in the stage that made it */
+.escalated {
+  display: flex; align-items: center; gap: var(--sp-3);
+  margin-top: var(--sp-3); padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--surface-2); border-left: 2px solid var(--line);
+  font: 400 var(--t-small)/1.45 var(--sans); color: var(--ink-2);
+}
+.escalated__mark {
+  font: 700 var(--t-eyebrow)/1 var(--mono); letter-spacing: 0.12em;
+  padding: 0.22rem 0.4rem; border: 1px solid currentColor; border-radius: var(--r-sm);
+  flex: none; color: var(--ink-3);
+}
+.rung--1 .escalated { border-left-color: var(--s2); }
+.rung--1 .escalated__mark { color: var(--s2-ink); background: var(--s2-bed); }
+.rung--2 .escalated { border-left-color: var(--s3); }
+.rung--2 .escalated__mark { color: var(--s3-ink); background: var(--s3-bed); }
 
 /* the hard stop — where the cascade short-circuited and the saving happened */
 .stopbar {
@@ -786,6 +835,16 @@ textarea:focus, select:focus, input:focus { border-color: var(--accent); }
 .railrow:first-child { border-top: 0; }
 .railrow__name { font: 500 var(--t-small)/1.4 var(--mono); }
 .railrow__mech { font-size: var(--t-micro); color: var(--ink-3); margin-top: 2px; }
+
+.cannotrun {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  font: 700 var(--t-eyebrow)/1.4 var(--mono); letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 0.14rem 0.42rem; border-radius: var(--r-sm);
+  color: var(--hazard-ink); background: var(--hazard-deep);
+  border: 1px solid var(--hazard);
+}
+.railrow--dead .railrow__name { color: var(--hazard-ink); }
+.railrow__why { font: 400 var(--t-micro)/1.6 var(--mono); color: var(--hazard-ink); margin-top: 2px; }
 
 /* ============================ roadmap =================================== */
 

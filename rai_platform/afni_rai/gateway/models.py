@@ -369,6 +369,12 @@ class HealthResponse(BaseModel):
     judge_rails_without_a_judge: list[str] = Field(description=(
         "Each of these reports unjudged for every string, which blocks "
         "client-facing traffic that reaches its stage."))
+    judge_providers_skipped: list[str] = Field(default_factory=list, description=(
+        "Providers named in AFNI_JUDGE_PROVIDER that contributed no usable link - "
+        "an empty key list, an unset base URL. Skipped rather than fatal, because "
+        "a missing paid credential must not take Stage 1 and Stage 2 offline; the "
+        "rest of the chain still serves and the judge rails fail closed if none "
+        "of it does."))
     dependencies_absent: list[DependencyStatus]
     judge_provider: dict[str, Any] | None = Field(default=None, description=(
         "Never contains a credential. `model_id_verified: false` means the model "

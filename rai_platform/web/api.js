@@ -99,21 +99,31 @@ function unwrap(body, keys) {
   return body;
 }
 
-/** -> [{ tenet, counts, total, capabilities: [{name, status, note, rail, repo, tool, stage}] }] */
+/** -> { tenets: [{ tenet, counts, total, capabilities }], totals, live }
+ *
+ *  The gateway's own shape is `{totals, tenets: [{tenet, counts, rows}]}`; the
+ *  branches below also accept a tenet-keyed object and a bare row list, because
+ *  a console that renders blank when a key is renamed is worse than one that
+ *  reads two shapes.
+ */
 export async function coverage() {
   const { data, live } = await fetchOrFixture('/v1/coverage', 'coverage');
   const block = unwrap(data, ['tenets', 'by_tenet', 'coverage']);
-  const tenets = [];
 
-  for (const [tenet, raw] of Object.entries(block)) {
+  // Normalise both containers to [[name, block], ...].
+  const pairs = Array.isArray(block)
+    ? block.map((b) => [b.tenet ?? b.name ?? '(unnamed tenet)', b])
+    : Object.entries(block);
+
+  const tenets = [];
+  for (const [tenet, raw] of pairs) {
     if (!raw || typeof raw !== 'object') continue;
     let rows = null;
-    let counts = null;
-
     if (Array.isArray(raw)) rows = raw;
-    else if (Array.isArray(raw.capabilities)) rows = raw.capabilities;
     else if (Array.isArray(raw.rows)) rows = raw.rows;
+    else if (Array.isArray(raw.capabilities)) rows = raw.capabilities;
 
+    let counts = null;
     const rawCounts = raw.counts && typeof raw.counts === 'object' ? raw.counts : null;
     if (rawCounts) {
       counts = zeroCounts();
@@ -148,7 +158,7 @@ export async function coverage() {
   }
 
   if (!tenets.length) throw new Error('/v1/coverage carried no tenets this console could read');
-  return { tenets, live };
+  return { tenets, totals: data?.totals ?? null, live };
 }
 
 /** -> [{ name, tenet, stage, repo, tool, mechanism, confidence_kind, evidence, capability }] */
@@ -173,6 +183,12 @@ export async function rails() {
         confidence_kind: a.confidence_kind ?? r.confidence_kind ?? null,
         evidence: a.evidence ?? r.evidence ?? null,
         capability: a.capability ?? r.capability ?? null,
+        stage_label: r.stage_label ?? null,
+        // `available: null` means the gateway did not say. Only an explicit
+        // false is treated as "cannot run" — absence of news is not good news,
+        // but it is also not evidence of failure.
+        available: r.available === undefined ? null : r.available,
+        unavailable_reason: r.unavailable_reason ?? null,
       };
     }),
   };
@@ -244,43 +260,78 @@ export function classify(obj) {
 export function normalizeStage(obj) {
   const src = obj?.stage_trace ?? obj?.trace ?? obj;
   const stage = Number(src.stage ?? src.stage_number ?? obj.stage ?? 0) || 0;
-  const railsRun = [].concat(src.rails_run ?? src.ran ?? []);
+  const railsRun = [].concat(src.rails_run ?? src.ran_rails ?? []);
   const railsSkipped = [].concat(src.rails_skipped ?? src.skipped ?? []);
-  const unjudged = [].concat(src.unjudged_paths ?? src.unjudged ?? []);
-  const findings = Number(src.findings ?? src.finding_count ?? 0) || 0;
+  const unjudged = [].concat(src.unjudged ?? src.unjudged_paths ?? []);
+
+  // The gateway sends `stage_findings` as the count and `findings` as the list
+  // accumulated so far. Reading the list as a count would print NaN, and reading
+  // it as this stage's own count would over-report every stage after the first.
+  const findings = Number(
+    src.stage_findings ?? src.finding_count
+    ?? (Array.isArray(src.findings) ? src.findings.length : src.findings)
+    ?? 0,
+  ) || 0;
+
   return {
     stage,
     railsRun,
     railsSkipped,
     unjudged,
     findings,
-    latency_ms: src.latency_ms ?? null,
+    latency_ms: src.stage_latency_ms ?? src.latency_ms ?? null,
+    elapsed_ms: src.elapsed_ms ?? null,
     short_circuited: Boolean(src.short_circuited ?? src.short_circuit),
-    // A stage with no rails run either was never reached or had nothing mounted.
-    ran: railsRun.length > 0,
+    // Whether this stage asked for the next one. This is the escalation decision
+    // itself, so it is worth showing rather than inferring from what ran next.
+    will_escalate: src.will_escalate === undefined ? null : Boolean(src.will_escalate),
+    // Prefer the gateway's own word for it; fall back to "did any rail run".
+    ran: src.ran === undefined ? railsRun.length > 0 : Boolean(src.ran),
   };
 }
 
 export function normalizeVerdict(obj) {
   const verdict = obj?.verdict ?? obj?.result ?? {};
   const ex = obj?.explanation ?? verdict?.explanation ?? {};
-  const findings = (list) => [].concat(list ?? []).map((f) => ({
-    entity: f.entity ?? f.category ?? 'unknown',
-    category: f.category ?? null,
-    action: f.action ?? null,
-    score: f.score ?? null,
-    location: f.location ?? null,
-    sentence: f.sentence ?? '',
-    attr: f.attributed_to ?? f.attribution ?? null,
-    fp: f.fp ?? null,
-  }));
+
+  // The fingerprint lives on the wire verdict's findings, not on the
+  // explanation's. Join them so the UI can show the fingerprint instead of
+  // asking for the matched value — which it must never do. The key is the same
+  // identity the engine dedupes on: category + path + span + detector.
+  const fpByKey = new Map();
+  for (const f of [].concat(verdict.findings ?? [])) {
+    if (!f || !f.fp) continue;
+    fpByKey.set(`${f.category}|${f.path}|${f.start}|${f.end}|${f.detector}`, f.fp);
+  }
+  const LOC = /^(.*?)\s+chars\s+(\d+)-(\d+)$/;
+
+  const findings = (list) => [].concat(list ?? []).map((f) => {
+    const m = f.location ? LOC.exec(f.location) : null;
+    const rail = f.attributed_to?.rail ?? f.attribution?.rail ?? null;
+    const key = m ? `${f.category}|${m[1]}|${m[2]}|${m[3]}|${rail}` : null;
+    return {
+      entity: f.entity ?? f.category ?? 'unknown',
+      category: f.category ?? null,
+      action: f.action ?? null,
+      score: f.score ?? null,
+      location: f.location ?? null,
+      sentence: f.sentence ?? '',
+      attr: f.attributed_to ?? f.attribution ?? null,
+      fp: f.fp ?? (key ? fpByKey.get(key) ?? null : null),
+    };
+  });
+
+  const blocked_by = findings(ex.blocked_by);
+  const also_flagged = findings(ex.also_flagged);
+  const could_not_judge = [].concat(ex.could_not_judge ?? verdict.unjudged ?? []);
+
   return {
     decision: ex.decision ?? verdict.decision ?? 'unknown',
     stages_run: ex.stages_run ?? null,
     latency_ms: ex.latency_ms ?? verdict.latency_ms ?? null,
-    could_not_judge: [].concat(ex.could_not_judge ?? verdict.unjudged ?? []),
-    blocked_by: findings(ex.blocked_by),
-    also_flagged: findings(ex.also_flagged),
+    could_not_judge,
+    blocked_by,
+    also_flagged,
     modifications: verdict.modifications?.spans ?? verdict.modifications ?? [],
     event_id: verdict.event_id ?? null,
     provider: verdict.provider ?? null,

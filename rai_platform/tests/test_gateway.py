@@ -494,11 +494,15 @@ class TestIntrospectionEndpoints(unittest.TestCase):
 
     def test_healthz_never_reports_a_credential(self):
         app_client = TestClient(create_app(env={
-            "AFNI_JUDGE_PROVIDER": "openai", "OPENAI_API_KEY": "sk-secret-value"}))
+            "AFNI_JUDGE_PROVIDER": "openai,gemini",
+            "OPENAI_API_KEYS": "sk-secret-one,sk-secret-two",
+            "GOOGLE_API_KEYS": "goog-secret"}))
         text = app_client.get("/healthz").text
-        self.assertNotIn("sk-secret-value", text)
-        self.assertEqual(app_client.app.state.gateway.health()
-                         ["judge_provider"]["provider"], "openai")
+        for secret in ("sk-secret-one", "sk-secret-two", "goog-secret"):
+            self.assertNotIn(secret, text)
+        judge = app_client.get("/healthz").json()["judge_provider"]
+        # Key INDEXES, never keys.
+        self.assertEqual(judge["chain"], ["openai[0]", "openai[1]", "gemini[0]"])
 
     def test_healthz_names_the_judge_rails_that_cannot_judge(self):
         payload = self.client.get("/healthz").json()
@@ -570,6 +574,18 @@ class TestRequestContract(unittest.TestCase):
         self.assertIn("fields", error["details"])
         self.assertEqual(error["request_id"], response.headers["x-request-id"])
 
+    def test_a_422_does_not_echo_the_payload_back(self):
+        """Pydantic puts the offending `input` in every error, which here is the
+        caller's prompt. The field name makes the error debuggable; the value
+        would only put the SSN into an error body and every log downstream."""
+        payload = body(f"my ssn is {SSN}")
+        del payload["step_id"]
+        response = self.client.post("/v1/guard", json=payload)
+        self.assertEqual(response.status_code, 422)
+        self.assertNotIn(SSN, response.text)
+        first = response.json()["details"]["fields"][0]
+        self.assertEqual(sorted(first), ["loc", "msg", "type"])
+
     def test_an_unknown_field_is_rejected_rather_than_ignored(self):
         response = self.client.post("/v1/guard", json=body(client_facng=False))
         self.assertEqual(response.status_code, 422)
@@ -628,25 +644,74 @@ class TestJudgeProviders(unittest.TestCase):
         with self.assertRaises(ValueError):
             providers.from_env({"AFNI_JUDGE_PROVIDER": "magic"})
 
-    def test_a_named_provider_without_its_credential_refuses_to_boot(self):
-        for env in ({"AFNI_JUDGE_PROVIDER": "openai"},
-                    {"AFNI_JUDGE_PROVIDER": "gemini"},
-                    {"AFNI_JUDGE_PROVIDER": "local"}):
-            with self.subTest(env=env):
-                with self.assertRaises(ValueError):
-                    providers.from_env(env)
+    def test_an_uncredentialed_provider_is_skipped_not_fatal(self):
+        """A missing paid key must not take Stage 1 and Stage 2 down with it. No
+        gateway is strictly worse than a gateway with no judge: one degradation
+        is documented and fails closed, the other fails open by absence."""
+        skipped = []
+        chain = providers.from_env({"AFNI_JUDGE_PROVIDER": "openai,gemini",
+                                    "GOOGLE_API_KEYS": "g"}, skipped)
+        self.assertEqual(chain.links, ["gemini[0]"])
+        self.assertEqual(len(skipped), 1)
+        self.assertIn("OPENAI_API_KEYS", skipped[0])
+
+    def test_a_wholly_unusable_chain_degrades_to_no_judge(self):
+        skipped = []
+        self.assertIsNone(providers.from_env(
+            {"AFNI_JUDGE_PROVIDER": "openai,gemini,local"}, skipped))
+        self.assertEqual(len(skipped), 3)
+
+    def test_the_gateway_still_serves_with_an_unusable_chain(self):
+        app_client = TestClient(create_app(
+            env={"AFNI_JUDGE_PROVIDER": "openai,gemini"}))
+        health = app_client.get("/healthz").json()
+        self.assertEqual(health["status"], "degraded")
+        self.assertEqual(len(health["judge_providers_skipped"]), 2)
+        # Still guarding: Stage 1 is untouched by a missing judge credential.
+        self.assertEqual(app_client.post("/v1/guard", json=body()).status_code, 200)
+
+    def test_an_unusable_provider_never_names_a_key_in_what_it_reports(self):
+        skipped = []
+        providers.from_env({"AFNI_JUDGE_PROVIDER": "openai,gemini",
+                            "OPENAI_API_KEYS": "sk-secret-value"}, skipped)
+        self.assertNotIn("sk-secret-value", " ".join(skipped))
 
     def test_selecting_each_provider_builds_an_adapter_without_a_network_call(self):
-        openai = providers.from_env({"AFNI_JUDGE_PROVIDER": "openai",
-                                     "OPENAI_API_KEY": "k"})
-        gemini = providers.from_env({"AFNI_JUDGE_PROVIDER": "gemini",
-                                     "GOOGLE_API_KEY": "k"})
-        local = providers.from_env({"AFNI_JUDGE_PROVIDER": "local",
-                                    "LOCAL_BASE_URL": "http://127.0.0.1:11434/v1"})
-        self.assertEqual([p.name for p in (openai, gemini, local)],
-                         ["openai", "gemini", "local"])
-        for provider in (openai, gemini, local):
-            self.assertFalse(provider.describe()["model_id_verified"])
+        chains = [
+            providers.from_env({"AFNI_JUDGE_PROVIDER": "openai",
+                                "OPENAI_API_KEYS": "k"}),
+            providers.from_env({"AFNI_JUDGE_PROVIDER": "gemini",
+                                "GOOGLE_API_KEYS": "k"}),
+            providers.from_env({"AFNI_JUDGE_PROVIDER": "local",
+                                "LOCAL_BASE_URL": "http://127.0.0.1:11434/v1"}),
+        ]
+        self.assertEqual([c.links for c in chains],
+                         [["openai[0]"], ["gemini[0]"], ["local[nokey]"]])
+        for chain in chains:
+            # No model id in this platform has been checked against a live
+            # endpoint, and /healthz says so rather than implying otherwise.
+            self.assertFalse(chain.describe()["model_id_verified"])
+
+    def test_the_singular_api_key_variable_is_accepted_as_an_alias(self):
+        chain = providers.from_env({"AFNI_JUDGE_PROVIDER": "openai",
+                                    "OPENAI_API_KEY": "k"})
+        self.assertEqual(chain.links, ["openai[0]"])
+
+    def test_a_repeated_provider_is_a_configuration_error(self):
+        with self.assertRaises(ValueError):
+            providers.from_env({"AFNI_JUDGE_PROVIDER": "openai,openai",
+                                "OPENAI_API_KEYS": "k"})
+
+    def test_the_chain_order_follows_the_configured_order(self):
+        chain = providers.from_env({"AFNI_JUDGE_PROVIDER": "gemini,openai",
+                                    "OPENAI_API_KEYS": "a,b",
+                                    "GOOGLE_API_KEYS": "g"})
+        self.assertEqual(chain.links, ["gemini[0]", "openai[0]", "openai[1]"])
+
+    def test_a_blank_entry_in_a_key_list_is_not_a_phantom_key(self):
+        chain = providers.from_env({"AFNI_JUDGE_PROVIDER": "openai",
+                                    "OPENAI_API_KEYS": "a, ,b,"})
+        self.assertEqual(chain.links, ["openai[0]", "openai[1]"])
 
     def test_binding_a_provider_does_not_mutate_the_tenet_singletons(self):
         """The tenet packages export module-level rail singletons. Mutating them
@@ -718,6 +783,230 @@ class BrokenJudge(StubJudge):
 
 
 # --------------------------------------------------------------------------- #
+class TestTheFallbackChain(unittest.TestCase):
+    """The chain is only correct if it falls through on the right things.
+
+    Falling through on a usable answer would be shopping for a verdict until a
+    key agrees. Not falling through on a 429 would waste a configured key. Both
+    are asserted here against a mocked transport - no network is touched, and
+    none can be from this environment anyway.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            import httpx
+        except ImportError as exc:  # pragma: no cover
+            raise unittest.SkipTest(f"httpx is not installed: {exc}") from exc
+        cls.httpx = httpx
+
+    def openai(self, status, body, name="openai"):
+        """An OpenAI-shaped adapter wired to a canned response."""
+        def handler(request):
+            return self.httpx.Response(status, json=body)
+
+        return providers.OpenAICompatibleJudge(
+            api_key="unused-in-a-mock", name=name,
+            transport=self.httpx.MockTransport(handler))
+
+    ANSWER = {"choices": [{"message": {"content": "0.87"}}]}
+    LOW = {"choices": [{"message": {"content": "0.10"}}]}
+
+    def test_a_rate_limited_key_falls_through_to_the_next_one(self):
+        chain = providers.JudgeChain([
+            (self.openai(429, {"error": "slow down"}), "openai", 0),
+            (self.openai(200, self.ANSWER), "openai", 1)])
+        self.assertEqual(chain.score("prompt", "text"), 0.87)
+        self.assertEqual([a.link for a in chain.last_attempts],
+                         ["openai[0]", "openai[1]"])
+
+    def test_every_infrastructural_status_falls_through(self):
+        for status in (401, 403, 408, 429, 500, 502, 503, 504):
+            with self.subTest(status=status):
+                chain = providers.JudgeChain([
+                    (self.openai(status, {}), "openai", 0),
+                    (self.openai(200, self.ANSWER), "openai", 1)])
+                self.assertEqual(chain.score("p", "t"), 0.87)
+
+    def test_it_falls_through_across_providers_not_just_keys(self):
+        def gemini_handler(request):
+            return self.httpx.Response(
+                200, json={"candidates": [{"content": {"parts": [{"text": "0.42"}]}}]})
+
+        gemini = providers.GeminiJudge(
+            api_key="unused-in-a-mock",
+            transport=self.httpx.MockTransport(gemini_handler))
+        chain = providers.JudgeChain([
+            (self.openai(429, {}), "openai", 0),
+            (self.openai(429, {}), "openai", 1),
+            (gemini, "gemini", 0)])
+        self.assertEqual(chain.score("p", "t"), 0.42)
+        self.assertTrue(chain.last_attempts[-1].served)
+        self.assertEqual(chain.last_attempts[-1].link, "gemini[0]")
+
+    def test_a_connection_error_falls_through(self):
+        def boom(request):
+            raise self.httpx.ConnectError("no route to host")
+
+        broken = providers.OpenAICompatibleJudge(
+            api_key="unused-in-a-mock",
+            transport=self.httpx.MockTransport(boom))
+        chain = providers.JudgeChain([(broken, "openai", 0),
+                                      (self.openai(200, self.ANSWER), "openai", 1)])
+        self.assertEqual(chain.score("p", "t"), 0.87)
+
+    def test_a_LOW_SCORE_IS_AN_ANSWER_and_never_falls_through(self):
+        """The one that matters most. A judge returning 0.1 has answered; asking
+        another key is shopping for a verdict, and a detector whose result
+        depends on how many keys are configured is not a detector."""
+        second = self.openai(200, self.ANSWER)
+        chain = providers.JudgeChain([(self.openai(200, self.LOW), "openai", 0),
+                                      (second, "openai", 1)])
+        self.assertEqual(chain.score("p", "t"), 0.10)
+        self.assertEqual(len(chain.last_attempts), 1)
+        # The second link has no counter at all, because it was never asked.
+        self.assertNotIn("openai[1]", chain.counters)
+
+    def test_a_bad_request_does_not_fall_through(self):
+        """A 400 or 404 is a wrong model id or a rejected body. The next key
+        fails identically, and falling through would hide the mistake behind
+        whichever provider happens to work."""
+        for status in (400, 404, 422):
+            with self.subTest(status=status):
+                chain = providers.JudgeChain([
+                    (self.openai(status, {}), "openai", 0),
+                    (self.openai(200, self.ANSWER), "openai", 1)])
+                with self.assertRaises(providers.JudgeUnavailable):
+                    chain.score("p", "t")
+
+    def test_an_exhausted_chain_raises_rather_than_guessing(self):
+        chain = providers.JudgeChain([(self.openai(429, {}), "openai", 0),
+                                      (self.openai(503, {}), "openai", 1)])
+        with self.assertRaises(providers.JudgeUnavailable):
+            chain.score("p", "t")
+
+    def test_an_exhausted_chain_makes_the_rail_unjudged_over_http(self):
+        from afni_rai.tenets.content_safety import TOXICITY_JUDGE_RAIL
+
+        chain = providers.JudgeChain([(self.openai(429, {}), "openai", 0),
+                                      (self.openai(429, {}), "openai", 1)])
+        app_client = TestClient(create_app(
+            rails=[escalating("s1", Stage.STAGE_1), TOXICITY_JUDGE_RAIL],
+            attributions={}, judge_provider=chain, env={}))
+        payload = app_client.post("/v1/guard", json=body("anything")).json()
+        self.assertEqual(payload["verdict"]["decision"], "block")
+        self.assertTrue(payload["verdict"]["unjudged"])
+
+    def test_the_trail_records_the_key_index_and_never_the_key(self):
+        chain = providers.JudgeChain([
+            (self.openai(429, {}), "openai", 0),
+            (self.openai(200, self.ANSWER), "openai", 1)])
+        chain.score("p", "t")
+        served = [a for a in chain.last_attempts if a.served]
+        self.assertEqual([a.to_dict()["key_index"] for a in served], [1])
+        blob = json.dumps([a.to_dict() for a in chain.last_attempts])
+        self.assertNotIn("unused-in-a-mock", blob)
+
+    def test_the_counters_are_cumulative_per_link(self):
+        chain = providers.JudgeChain([
+            (self.openai(429, {}), "openai", 0),
+            (self.openai(200, self.ANSWER), "openai", 1)])
+        chain.score("p", "t")
+        chain.score("p", "t")
+        self.assertEqual(chain.counters["openai[0]"], {"served": 0, "failed": 2})
+        self.assertEqual(chain.counters["openai[1]"], {"served": 2, "failed": 0})
+
+    def test_healthz_reports_the_chain_and_its_attempt_counters(self):
+        chain = providers.JudgeChain([
+            (self.openai(429, {}), "openai", 0),
+            (self.openai(200, self.ANSWER), "openai", 1)])
+        chain.score("p", "t")
+        app_client = TestClient(create_app(rails=[], attributions={},
+                                           judge_provider=chain, env={}))
+        judge = app_client.get("/healthz").json()["judge_provider"]
+        self.assertEqual(judge["chain"], ["openai[0]", "openai[1]"])
+        self.assertEqual(judge["attempts"]["openai[1]"]["served"], 1)
+
+
+# --------------------------------------------------------------------------- #
+class TestTheSamplePayloads(unittest.TestCase):
+    """Every shipped sample must actually trip the tenet it claims.
+
+    A sample that does not is worse than no sample: it teaches whoever tries it
+    that the rail does not work, and it rots silently because nothing else reads
+    the file.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from afni_rai.gateway.app import load_samples
+
+        cls.document = load_samples()
+        cls.client = client()
+
+    def test_the_samples_file_is_present_and_covers_every_tenet(self):
+        tenets = {s["tenet"] for s in self.document["samples"]}
+        for tenet in (Tenet.PRIVACY, Tenet.SECURITY, Tenet.FAIRNESS,
+                      Tenet.EXPLAINABILITY, Tenet.CONTENT_SAFETY,
+                      Tenet.HALLUCINATION, Tenet.ACCOUNTABILITY):
+            with self.subTest(tenet=tenet.value):
+                self.assertIn(tenet.value, tenets)
+
+    def test_every_sample_body_is_a_valid_guard_event(self):
+        for sample in self.document["samples"]:
+            with self.subTest(sample=sample["name"]):
+                response = self.client.post("/v1/guard", json=sample["body"])
+                self.assertEqual(response.status_code, 200, response.text)
+
+    def test_every_sample_trips_the_detectors_it_claims(self):
+        for sample in self.document["samples"]:
+            with self.subTest(sample=sample["name"]):
+                payload = dict(sample["body"])
+                # Internal traffic, so the answer is the FINDING rather than the
+                # fail-closed block that a missing Stage-2 model would produce.
+                payload["client_facing"] = False
+                verdict = self.client.post(
+                    "/v1/guard", json=payload).json()["verdict"]
+                fired = {f["detector"] for f in verdict.get("findings", [])}
+                for detector in sample["expect_detectors"]:
+                    self.assertIn(detector, fired)
+
+    def test_the_benign_control_trips_nothing_at_all(self):
+        control = next(s for s in self.document["samples"]
+                       if s["name"] == "benign_control")
+        payload = self.client.post("/v1/guard", json=control["body"]).json()
+        self.assertEqual(payload["verdict"].get("findings", []), [])
+
+    def test_no_sample_carries_a_plausible_live_credential(self):
+        """Everything in the file is synthetic, and it is committed. The AWS
+        strings are AWS's own published documentation examples."""
+        blob = json.dumps(self.document)
+        for prefix in ("sk-proj-", "sk-ant-", "AIzaSy", "ghp_", "xoxb-"):
+            self.assertNotIn(prefix, blob)
+
+    def test_the_samples_are_the_named_examples_in_the_openapi_document(self):
+        spec = self.client.get("/openapi.json").json()
+        for path in ("/v1/guard", "/v1/guard/stream"):
+            with self.subTest(path=path):
+                examples = (spec["paths"][path]["post"]["requestBody"]
+                            ["content"]["application/json"]["examples"])
+                self.assertEqual(sorted(examples),
+                                 sorted(s["name"] for s in self.document["samples"]))
+
+    def test_the_swagger_ui_and_the_schema_are_served(self):
+        self.assertEqual(self.client.get("/docs").status_code, 200)
+        self.assertEqual(self.client.get("/openapi.json").status_code, 200)
+
+    def test_every_route_has_a_summary_so_the_docs_are_navigable(self):
+        spec = self.client.get("/openapi.json").json()
+        for path, operations in spec["paths"].items():
+            for method, operation in operations.items():
+                with self.subTest(route=f"{method.upper()} {path}"):
+                    self.assertTrue(operation.get("summary"))
+                    self.assertTrue(operation.get("tags"))
+
+
+# --------------------------------------------------------------------------- #
 def read_stream(app_client, payload):
     """Parse an SSE response into the list of JSON objects on its `data:` lines."""
     response = app_client.post("/v1/guard/stream", json=payload)
@@ -726,6 +1015,89 @@ def read_stream(app_client, payload):
         if line.startswith("data: "):
             frames.append(json.loads(line[len("data: "):]))
     return frames
+
+
+class TestTheOperatorConsoleIsServed(unittest.TestCase):
+    """A mount at `/` matches every path, so its ORDER is the whole test.
+
+    Registered before the router it would shadow `/v1/guard`, `/healthz` and
+    `/docs` - the API would 404 while the console served happily, which is the
+    kind of break that looks like a deployment problem for a day. So this asserts
+    both halves: the console serves, and every API route still does.
+
+    Same-origin is also a security property, not a convenience. The console posts
+    to `/v1/guard`; the alternative to serving it from here is a CORS header, and
+    a guardrail gateway that sends `Access-Control-Allow-Origin` is one any page
+    on the internet can drive with the operator's session. No CORS middleware
+    should ever appear in this app.
+    """
+
+    def setUp(self):
+        from fastapi.testclient import TestClient
+        from afni_rai.gateway.app import create_app
+        self.client = TestClient(create_app())
+
+    def test_the_console_is_served_from_the_gateway_origin(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/html", response.headers["content-type"])
+
+    def test_the_console_assets_are_served_with_usable_mime_types(self):
+        # A .js served as text/plain is refused by the browser as an ES module,
+        # which fails as a blank page rather than an error anyone can read.
+        for path, expected in (("/styles.css", "text/css"),
+                               ("/api.js", "javascript"),
+                               ("/views/live.js", "javascript")):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200, path)
+                self.assertIn(expected, response.headers["content-type"])
+
+    def test_the_mount_does_not_shadow_the_api(self):
+        for path in ("/healthz", "/v1/rails", "/v1/coverage", "/v1/phases",
+                     "/openapi.json"):
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(path).status_code, 200, path)
+
+    def test_the_mount_does_not_shadow_the_docs(self):
+        self.assertEqual(self.client.get("/docs").status_code, 200)
+
+    def test_no_cors_header_is_sent(self):
+        response = self.client.get("/healthz",
+                                   headers={"origin": "https://evil.example"})
+        self.assertNotIn("access-control-allow-origin", response.headers)
+
+    def test_an_absent_console_directory_does_not_stop_the_api(self):
+        """The gateway's job is judging events. A missing console must degrade to
+        a 404 on `/`, never to a gateway that will not start.
+
+        Driven by pointing the lookup at a real empty directory rather than by
+        mocking `Path`, so the test exercises the actual `is_file()` branch.
+        """
+        import tempfile
+        from fastapi import FastAPI
+        import afni_rai.gateway.app as app_module
+
+        app = FastAPI()
+
+        @app.get("/healthz")
+        def _health():  # noqa: ANN202 - test stub
+            return {"status": "ok"}
+
+        with tempfile.TemporaryDirectory() as empty:
+            original = app_module.Path
+            try:
+                # `_mount_console` derives the directory from __file__; redirect
+                # only that derivation, leaving Path itself intact elsewhere.
+                app_module.Path = lambda *a, **k: original(empty) / "nowhere"
+                app_module._mount_console(app)
+            finally:
+                app_module.Path = original
+
+        mounted = [r for r in app.routes if getattr(r, "name", "") == "console"]
+        self.assertEqual(mounted, [], "a missing console directory was mounted")
+        from fastapi.testclient import TestClient
+        self.assertEqual(TestClient(app).get("/healthz").status_code, 200)
 
 
 if __name__ == "__main__":  # pragma: no cover

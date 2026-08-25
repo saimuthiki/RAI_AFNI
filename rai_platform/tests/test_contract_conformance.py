@@ -201,5 +201,108 @@ class TestExplanation(unittest.TestCase):
         self.assertEqual(d["stages_run"], 2)
 
 
+class TestEveryMountedRailCanNameItself(unittest.TestCase):
+    """The stated requirement for a block is: which repo, how confident, which
+    entity. A rail with no `RailAttribution` can answer none of the first two -
+    `explain()` degrades to the bare detector string. That is not a crash and no
+    other test notices it, which is exactly how `attack-corpus-repeat` shipped
+    unattributed: `corpus.py` defined the attribution and the package re-exported
+    it under a name (`RAIL_ATTRIBUTION`) that the loader does not read.
+
+    So this pins the join itself rather than any one rail."""
+
+    def setUp(self):
+        from afni_rai.cli import load_tenets
+        self.rails, self.attributions, self.problems = load_tenets()
+
+    def test_every_tenet_package_loaded(self):
+        # A tenet that failed to import contributes no rails, which would make
+        # the assertion below pass vacuously.
+        self.assertEqual(self.problems, [])
+        self.assertGreaterEqual(len(self.rails), 32)
+
+    def test_no_mounted_rail_lacks_an_attribution(self):
+        orphans = sorted(r.name for r in self.rails
+                         if r.name not in self.attributions)
+        self.assertEqual(
+            orphans, [],
+            "these rails can block but cannot say which repo blocked: "
+            + ", ".join(orphans))
+
+    def test_each_attribution_carries_repo_and_confidence_kind(self):
+        from afni_rai.contract.explanation import CONFIDENCE_KINDS
+        for rail in self.rails:
+            attr = self.attributions[rail.name]
+            with self.subTest(rail=rail.name):
+                self.assertTrue(attr.source_repo,
+                                f"{rail.name}: empty source_repo")
+                self.assertIn(attr.confidence_kind, CONFIDENCE_KINDS)
+                self.assertTrue(attr.evidence, f"{rail.name}: no evidence cited")
+
+    def test_the_attributed_stage_matches_the_rail_stage(self):
+        # A mismatch here would print "Stage 1, deterministic" next to a finding
+        # that actually cost a paid API call.
+        for rail in self.rails:
+            attr = self.attributions[rail.name]
+            with self.subTest(rail=rail.name):
+                self.assertEqual(int(rail.stage), attr.stage)
+
+
+class TestTheReportedEntityIsInformative(unittest.TestCase):
+    """`entity` is the "which entity is responsible" half of the requirement.
+
+    Taking the bare last segment of the category works for
+    `security.secret_leak.api_key` and fails for the region-scoped identifiers,
+    where the taxonomy's last segment is a country code: an operator reading
+    "flagged us" learns nothing, and "flagged in" reads as a preposition.
+    """
+
+    def _entity(self, category):
+        from afni_rai.contract.explanation import FindingExplanation
+        from afni_rai.contract.models import Action, Finding
+        return FindingExplanation(
+            Finding(category=category, action=Action.FLAG, detector="d"), None).entity
+
+    def test_a_country_code_tail_keeps_its_parent(self):
+        self.assertEqual(self._entity("privacy.pii.national_id.us"),
+                         "national_id.us")
+        self.assertEqual(self._entity("privacy.pii.tax_id.in"), "tax_id.in")
+        self.assertEqual(self._entity("privacy.pii.national_id.gb"),
+                         "national_id.gb")
+
+    def test_a_three_letter_tail_is_the_entity_and_is_left_alone(self):
+        # DEA is the identifier itself, not a locale. Widening the rule to three
+        # characters would turn this into "health_id.dea" for no gain.
+        self.assertEqual(self._entity("privacy.pii.health_id.dea"), "dea")
+
+    def test_ordinary_categories_are_unchanged(self):
+        for category, expected in (
+            ("security.secret_leak.api_key", "api_key"),
+            ("security.prompt_injection.indirect", "indirect"),
+            ("safety.toxicity", "toxicity"),
+            ("x.afni.structured_output.schema_violation", "schema_violation"),
+            ("privacy.pii", "pii"),
+        ):
+            with self.subTest(category=category):
+                self.assertEqual(self._entity(category), expected)
+
+    def test_every_category_the_platform_emits_yields_a_usable_entity(self):
+        """No live rail may report an entity that is shorter than three
+        characters - that is the shape of the bug this class exists for."""
+        import re
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1] / "afni_rai" / "tenets"
+        found = set()
+        for path in root.rglob("*.py"):
+            found.update(re.findall(r'category="([a-z0-9_.]+)"',
+                                    path.read_text(encoding="utf-8")))
+        self.assertGreater(len(found), 20, "category scan found almost nothing")
+        for category in sorted(found):
+            with self.subTest(category=category):
+                self.assertGreaterEqual(
+                    len(self._entity(category)), 3,
+                    f"{category} reports an uninformative entity")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

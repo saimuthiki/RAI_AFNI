@@ -52,9 +52,10 @@ import logging
 import os
 import threading
 import uuid
-from typing import Any, Callable, Iterator, Sequence
+from pathlib import Path
+from typing import Annotated, Any, Callable, Iterator, Sequence
 
-from fastapi import APIRouter, FastAPI, Request, Response
+from fastapi import APIRouter, Body, FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -106,6 +107,128 @@ OPTIONAL_DEPENDENCIES: tuple[tuple[str, str], ...] = (
     ("jsonschema", "structured-output-schema validation"),
     ("opentelemetry", "span export from the accountability tracer"),
 )
+
+
+SAMPLES_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "samples", "tenet_payloads.json")
+
+
+def load_samples(path: str = SAMPLES_PATH) -> dict[str, Any]:
+    """The verified per-tenet sample payloads, or an empty set.
+
+    Read at import so they can become the named examples on the request body,
+    which FastAPI collects at decoration time. This is the one file this module
+    reads on import: a few kilobytes of bundled API documentation, not runtime
+    state, and a missing or unparseable file costs the docs their examples rather
+    than costing the gateway its startup.
+    """
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError) as exc:  # noqa: BLE001
+        LOGGER.warning("sample payloads unavailable (%s): /docs will have no "
+                       "per-tenet examples", exc)
+        return {"samples": []}
+
+
+def guard_examples(document: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Turn the samples into Swagger's named-example dropdown.
+
+    Each entry keeps the sample's own `why` as its description, so the reason a
+    payload trips a tenet is in front of whoever is about to send it rather than
+    in a file they have not opened.
+    """
+    document = load_samples() if document is None else document
+    examples: dict[str, Any] = {}
+    for sample in document.get("samples", []):
+        examples[sample["name"]] = {
+            "summary": sample.get("summary", sample["name"]),
+            "description": (f"**{sample.get('tenet', '?')}** - "
+                            f"{sample.get('why', '')}\n\nExpected detectors: "
+                            + (", ".join(f"`{d}`" for d in sample.get("expect_detectors", ()))
+                               or "_none - this one must trip nothing_")),
+            "value": sample["body"],
+        }
+    return examples
+
+
+GUARD_EXAMPLES = guard_examples()
+
+GUARD_BODY = Annotated[GuardRequest, Body(openapi_examples=GUARD_EXAMPLES)]
+
+# A worked response, so the Swagger page shows what comes back before anyone
+# sends anything. Taken from the `security_leaked_credentials` sample: a block
+# caused by a real finding, short-circuited at Stage 1, with the value withheld.
+GUARD_RESPONSE_EXAMPLE = {
+    "verdict": {
+        "event_id": "sample-security-2",
+        "provider": "afni-rai-gateway",
+        "decision": "block",
+        "latency_ms": 2,
+        "findings": [{
+            "category": "security.secret_leak.cloud_credential",
+            "severity": "critical", "action": "block",
+            "path": "payload.messages[0].content", "start": 12, "end": 32,
+            "detector": "security.secrets", "fp": "sha256:6f1c0e",
+        }],
+    },
+    "explanation": {
+        "decision": "block", "stages_run": 1, "latency_ms": 2,
+        "could_not_judge": [],
+        "blocked_by": [{
+            "entity": "cloud_credential",
+            "category": "security.secret_leak.cloud_credential",
+            "action": "block", "score": None,
+            "location": "payload.messages[0].content chars 12-32",
+            "sentence": ("AFNI secret patterns (hai-guardrails-main) flagged "
+                         "cloud_credential at payload.messages[0].content chars "
+                         "12-32 - deterministic match, no score - action block - "
+                         "value withheld (fp sha256:6f1c0e)"),
+            "attributed_to": {
+                "repo": "hai-guardrails-main", "tool": "AFNI secret patterns",
+                "rail": "security.secrets", "mechanism": "Keyword/Regex",
+                "stage": 1, "confidence_kind": "deterministic",
+                "evidence": "src/guards/secret.guard.ts",
+                "capability": "Secret / credential leak detection",
+            },
+        }],
+        "also_flagged": [],
+    },
+}
+
+# SSE is a text format, so the example is the literal wire bytes rather than a
+# JSON object - a client author needs to see the framing, not a pretty-printed
+# approximation of it.
+STREAM_RESPONSE_EXAMPLE = (
+    'event: stage\n'
+    'data: {"event":"stage","stage":1,"ran":true,"rails_run":["security.secrets"],'
+    '"rails_skipped":[],"findings":[],"stage_findings":1,"unjudged":[],'
+    '"short_circuited":true,"will_escalate":false,"stage_latency_ms":2,"elapsed_ms":2}\n'
+    '\n'
+    'event: stage\n'
+    'data: {"event":"stage","stage":2,"ran":false,"rails_run":[],'
+    '"rails_skipped":["privacy.presidio_ner"],"findings":[],"stage_findings":0,'
+    '"unjudged":[],"short_circuited":true,"will_escalate":false,'
+    '"stage_latency_ms":0,"elapsed_ms":2}\n'
+    '\n'
+    'event: verdict\n'
+    'data: {"event":"verdict","verdict":{"event_id":"sample-security-2",'
+    '"provider":"afni-rai-gateway","decision":"block"},"explanation":{...}}\n'
+    '\n'
+    'event: done\n'
+    'data: {"event":"done"}\n'
+    '\n'
+)
+
+TAGS_METADATA = [
+    {"name": "decisions", "description":
+     "Judge a GuardEvent. These are the only endpoints in the request path, and "
+     "the only ones that write to the audit store."},
+    {"name": "introspection", "description":
+     "What this gateway is running, what it covers, and what is missing. "
+     "Read-only, no audit rows, safe to poll."},
+]
 
 
 def _truthy(value: str | None) -> bool:
@@ -202,8 +325,13 @@ class Gateway:
 
         # A judge provider is optional and defaults to absent. With none, every
         # Stage-3 judge rail reports `unjudged` - which fails closed. No guess.
-        self.judge_provider = (providers.from_env(env) if judge_provider is None
-                               else judge_provider)
+        # A provider named in the chain with no credential is skipped rather than
+        # fatal, and the reason is kept so /healthz can name it: a missing paid key
+        # must not take Stage 1 and Stage 2 offline with it.
+        self.judge_providers_skipped: list[str] = []
+        self.judge_provider = (
+            providers.from_env(env, self.judge_providers_skipped)
+            if judge_provider is None else judge_provider)
         mountable = [r for r in rails if r.stage is not Stage.OFFLINE]
         self.rails: list[Any] = providers.bind_judges(mountable, self.judge_provider)
 
@@ -336,6 +464,14 @@ class Gateway:
                     stages_run=explanation.stages_run)
         except Exception:  # noqa: BLE001 - never fail a request over the audit write
             LOGGER.exception("audit write failed for event %s", verdict.event_id)
+        trail = getattr(self.judge_provider, "last_attempts", None)
+        if trail:
+            # Which provider and which key INDEX served the judge call, joined to
+            # the event id. Never the key itself: `JudgeAttempt.link` is
+            # `openai[1]`, and there is no code path from a key to a log line.
+            LOGGER.info("event %s judge trail: %s", verdict.event_id,
+                        "; ".join(f"{a.link}={'served' if a.served else a.detail}"
+                                  for a in trail))
         if decided.needs_review:
             LOGGER.warning("event %s ALLOWED with %d unjudged path(s) under "
                            "fail_mode=%s - queued for review", verdict.event_id,
@@ -451,12 +587,14 @@ class Gateway:
             judge = describe() if callable(describe) else {
                 "provider": getattr(self.judge_provider, "name", "custom")}
         return {
-            "status": "degraded" if (self.problems or unavailable) else "ok",
+            "status": "degraded" if (self.problems or unavailable
+                                     or self.judge_providers_skipped) else "ok",
             "protocol_version": PROTOCOL_VERSION,
             "rails_mounted": len(self.rails),
             "tenets_not_loaded": list(self.problems),
             "rails_unavailable": unavailable,
             "judge_rails_without_a_judge": providers.unbound_judge_rails(self.rails),
+            "judge_providers_skipped": list(self.judge_providers_skipped),
             "dependencies_absent": absent,
             "judge_provider": judge,
             "reveal_subject": self.reveal_subject,
@@ -510,11 +648,26 @@ def _stage_frame(progress: Any, reveal_subject: bool = False) -> dict[str, Any]:
 def _router(gateway: Gateway) -> APIRouter:
     router = APIRouter()
 
-    @router.post("/v1/guard", response_model=GuardResponse,
-                 summary="Judge one GuardEvent",
-                 responses={422: {"model": Error, "description":
-                                  "The body is not a valid GuardEvent."}})
-    def guard(body: GuardRequest, response: Response) -> JSONResponse:
+    @router.post("/v1/guard", response_model=GuardResponse, tags=["decisions"],
+                 summary="Judge one GuardEvent and return the verdict",
+                 response_description=(
+                     "The strict OpenGuardrails v0.8 verdict, plus the AFNI "
+                     "attribution alongside it. Always 200 once the body parses - "
+                     "read `verdict.decision`, never the status code."),
+                 responses={
+                     200: {"content": {"application/json": {
+                         "example": GUARD_RESPONSE_EXAMPLE}}},
+                     422: {"model": Error, "description":
+                           "The body is not a valid GuardEvent. `details.fields` "
+                           "names the offending field.",
+                           "content": {"application/json": {"example": {
+                               "code": "invalid_guard_event",
+                               "message": "the request body is not a valid GuardEvent",
+                               "details": {"fields": [{"loc": ["body", "step_id"],
+                                                       "msg": "Field required",
+                                                       "type": "missing"}]},
+                               "request_id": "9f2c41ab7d8e4c1e"}}}}})
+    def guard(body: GUARD_BODY, response: Response) -> JSONResponse:
         """Run the cascade and return the verdict with its attribution.
 
         Always HTTP 200 once the body parses, including when the cascade fails:
@@ -534,13 +687,20 @@ def _router(gateway: Gateway) -> APIRouter:
         headers = {"x-afni-degraded": degraded} if degraded else None
         return JSONResponse(payload, headers=headers)
 
-    @router.post("/v1/guard/stream", summary="Judge one GuardEvent, streaming",
+    @router.post("/v1/guard/stream", tags=["decisions"],
+                 summary="Judge one GuardEvent, streaming one event per stage",
                  response_class=StreamingResponse,
-                 responses={200: {"content": {"text/event-stream": {}},
-                                  "description":
-                                  "One `stage` event per cascade stage as it "
-                                  "completes, then `verdict`, then `done`."}})
-    def guard_stream(body: GuardRequest) -> StreamingResponse:
+                 responses={200: {
+                     "description":
+                         "`text/event-stream`. One `stage` event per cascade "
+                         "stage AS IT COMPLETES, then one `verdict` event, then "
+                         "`done`. Every frame is a JSON object on a `data:` line, "
+                         "with the event name repeated inside it so a plain-text "
+                         "reader can tell the frames apart too.",
+                     "content": {"text/event-stream": {
+                         "schema": {"type": "string"},
+                         "example": STREAM_RESPONSE_EXAMPLE}}}})
+    def guard_stream(body: GUARD_BODY) -> StreamingResponse:
         """Server-Sent Events, one frame per stage, emitted as the stage finishes.
 
         The frames are not a replay of a finished decision. Each one is produced
@@ -558,7 +718,7 @@ def _router(gateway: Gateway) -> APIRouter:
                 "connection": "keep-alive",
             })
 
-    @router.get("/v1/coverage", response_model=CoverageResponse,
+    @router.get("/v1/coverage", tags=["introspection"], response_model=CoverageResponse,
                 summary="Capability coverage, with the gaps counted")
     def coverage() -> JSONResponse:
         """65 capabilities across 7 tenets, each in one of five states.
@@ -570,14 +730,14 @@ def _router(gateway: Gateway) -> APIRouter:
         """
         return JSONResponse(gateway.coverage())
 
-    @router.get("/v1/phases", summary="Roadmap phases against what is built")
+    @router.get("/v1/phases", tags=["introspection"], summary="Roadmap phases against what is built")
     def phase_status() -> JSONResponse:
         """`present_in_platform` means a rail cites the repo as the source of a
         pattern. That is provenance, not adoption - see the note each phase
         carries."""
         return JSONResponse(phases.status())
 
-    @router.get("/v1/rails", response_model=RailsResponse,
+    @router.get("/v1/rails", tags=["introspection"], response_model=RailsResponse,
                 summary="Every mounted rail and its provenance")
     def rails() -> JSONResponse:
         return JSONResponse({
@@ -587,7 +747,7 @@ def _router(gateway: Gateway) -> APIRouter:
             "tenets_not_loaded": list(gateway.problems),
         })
 
-    @router.get("/healthz", response_model=HealthResponse,
+    @router.get("/healthz", tags=["introspection"], response_model=HealthResponse,
                 summary="Liveness, plus what is missing")
     def healthz() -> JSONResponse:
         """`degraded` still serves traffic - and still fails closed, which is why
@@ -605,12 +765,31 @@ def create_app(**kwargs: Any) -> FastAPI:
     app = FastAPI(
         title="AFNI Responsible AI gateway",
         version=f"1.0.0 (OpenGuardrails protocol {PROTOCOL_VERSION})",
+        openapi_tags=TAGS_METADATA,
         description=(
-            "Guardrail decisions over HTTP. `verdict` is strict OpenGuardrails "
-            f"v{PROTOCOL_VERSION} and nothing is added to it; everything "
-            "AFNI-specific rides in `explanation` alongside. A non-empty "
-            "`unjudged` means 'could not look', which is not 'found nothing', "
-            "and on client-facing traffic it blocks."),
+            "Guardrail decisions over HTTP.\n\n"
+            f"**The contract.** `verdict` is strict OpenGuardrails v{PROTOCOL_VERSION} "
+            "and nothing is added to it - both `verdict` and `findings[]` are "
+            "`additionalProperties: false` upstream, so everything AFNI-specific "
+            "rides in `explanation` alongside it: which repo made the call, how "
+            "confident, which entity, and where.\n\n"
+            "**Read the decision, not the status code.** Once a body parses, every "
+            "outcome is HTTP 200 - including a cascade failure, which comes back as "
+            "a BLOCK with every payload path in `unjudged`. A 500 is ambiguous, and "
+            "an ambiguous guardrail failure gets read as a pass by the next "
+            "`try/except` up the stack.\n\n"
+            "**`unjudged` is not 'clean'.** A non-empty value means 'could not "
+            "look', which is not 'found nothing'. On `client_facing` traffic (the "
+            "default) it blocks. On a fresh install with no model weights the "
+            "Stage-2 rails report `unjudged`, so expect blocks until the weights "
+            "are installed or the rails are explicitly disabled - deliberate, and "
+            "it will surprise you once.\n\n"
+            "**Matched values are withheld.** A finding carries `fp`, a fingerprint, "
+            "not the SSN or the API key it matched. Revealing is a server-side "
+            "environment flag and deliberately not a request parameter.\n\n"
+            "**Try it.** Every example in the request-body dropdown is a real "
+            "payload verified to trip the tenet it names, plus one benign control "
+            "that must trip nothing."),
     )
     app.state.gateway = gateway
     app.include_router(_router(gateway))
@@ -637,18 +816,68 @@ def create_app(**kwargs: Any) -> FastAPI:
         error shape. Mapped onto the one shape this API returns everywhere, with
         the field-level detail kept - an integrator debugging their own client
         needs to know WHICH field, not just that something was wrong.
+
+        Only `loc`, `msg` and `type` survive. Pydantic also puts `input` in each
+        error, which on this endpoint is the caller's whole `payload` - the prompt
+        that may hold the SSN. Echoing it into an error body, and from there into
+        every log between here and the caller, would leak on the validation path
+        exactly what the success path is careful to withhold. The field name is
+        what makes the error debuggable; the value adds nothing the caller does
+        not already have.
         """
         rid = getattr(request.state, "request_id", None)
+        fields = [{"loc": [str(part) for part in error.get("loc", ())],
+                   "msg": str(error.get("msg", "")),
+                   "type": str(error.get("type", ""))}
+                  for error in exc.errors()]
         return JSONResponse(
             status_code=422,
             content=Error(
                 code="invalid_guard_event",
                 message="the request body is not a valid GuardEvent",
-                details={"fields": json.loads(json.dumps(exc.errors(), default=str))},
+                details={"fields": fields},
                 request_id=rid,
             ).model_dump(exclude_none=True))
 
+    _mount_console(app)
     return app
+
+
+# --------------------------------------------------------------------------- #
+# The operator console                                                         #
+# --------------------------------------------------------------------------- #
+def _mount_console(app: FastAPI) -> None:
+    """Serve `rai_platform/web/` from this app's own origin at `/`.
+
+    Same-origin is the point, and it is a security decision rather than a
+    convenience one. The console reads `/healthz` and posts to `/v1/guard`, so
+    the alternative to a static mount is CORS - and a guardrail gateway that
+    sends `Access-Control-Allow-Origin` is a gateway any page on the internet
+    can drive with the operator's cookies. Serving the console from here means
+    the browser's same-origin policy does that work for free and no CORS header
+    is needed anywhere.
+
+    Mounted last, after every `/v1` route and after `/docs`, because a mount at
+    `/` matches everything: registered earlier it would shadow the entire API.
+
+    Absent directory is not an error. The gateway's job is judging events, and a
+    missing console must not stop it from serving them - so this logs and returns
+    rather than raising, and `/` then 404s like any other unrouted path.
+    """
+    console = Path(__file__).resolve().parents[2] / "web"
+    if not (console / "index.html").is_file():
+        LOGGER.warning(
+            "operator console not mounted: no index.html under %s - the API is "
+            "unaffected and every /v1 route still serves", console)
+        return
+    try:
+        from fastapi.staticfiles import StaticFiles
+    except ImportError:  # pragma: no cover - starlette ships it with fastapi
+        LOGGER.warning("operator console not mounted: StaticFiles unavailable")
+        return
+    app.mount("/", StaticFiles(directory=str(console), html=True),
+              name="console")
+    LOGGER.info("operator console mounted at / from %s", console)
 
 
 app_factory = create_app  # what `serve.py --factory` names
