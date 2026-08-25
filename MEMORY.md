@@ -235,3 +235,58 @@ and HTML are the evidence base for that platform, not the product.
   `request-flow.md`, `dev-vs-test-loop.md`, `roadmap.md`, `open-questions.md` — new
 - `MEMORY.md` — this entry
 - Not committed (regenerable caches, gitignored): `graft/` (722 MB), `graphify-out/`
+
+### 2026-08-25 — Per-tenet methodology analysis: 7 new slides from a source-level read
+**Type:** New Build
+**Ask:** For each of the 7 tenets, a slide holding a table of every reference repository that
+deals with that tenet, detailing *how* each one actually implements its check — module-based,
+keyword-based, classifier-based, model-level, prompt-template/AI-call, cloud-based, or paid — plus
+latency, and whether the tool targets chatbot/LLM text or classical classification/prediction
+models. Purpose: AFNI's platform will run a **cost- and latency-ordered cascade** — free
+deterministic checks on 100% of traffic, flagging immediately, and escalating only the surviving
+slice to paid or higher-latency checks. Use the existing PPT as the starting reference, plan in
+ultra plan mode first, and spawn multiple subagents. Deliver an updated PPTX plus a bundle/patch,
+since this session cannot push.
+**What was done:**
+- Planned in plan mode and settled four decisions with the user before building: the full 7-attribute
+  column set; broad repo scope per tenet (every repo credited with ≥1 checklist item, from
+  `master_aspect_list`); a new deck section rather than replacing the capability matrices; and
+  latency as a mechanism-derived tier, explicitly labelled on-slide as an estimate rather than a
+  benchmark (measuring 23 frameworks against live models was not feasible and was not faked).
+- Fanned out 22 subagents, one per repo appearing in the master checklist, each reading the **actual
+  source** under `references/` via graft rather than the existing summaries. Produced 108 repo-tenet
+  fact rows, every one carrying an `evidence` field naming the `file:line`, model id or dependency
+  it came from. Hand-verified three claims against source afterwards.
+- Derived `latency` and `stage` centrally rather than per fact, so they stay consistent across all
+  seven tenets. Two corrections were made to the derivation during the build: latency became a
+  **range** across a row's mechanisms (so a mixed row reads "Very low-Low" instead of hiding half of
+  itself), and stage became the **earliest** point a tool can contribute, from its cheapest
+  mechanism — the first rule (slowest component wins) wrongly left Security with no Stage 1 at all,
+  because it collapsed LLM Guard's deterministic secret/unicode scanning into its classifier's tier.
+- Added a fifth stage, **Delegates**, after finding an internally contradictory row: Guardrails AI
+  was ranked Stage 1 for Privacy while its own description said "NO in-repo PII code". Tools that
+  supply a contract or taxonomy but no detector of their own cannot occupy a cascade stage.
+- Recorded ten corrections to the existing deck's claims that the source read turned up — see
+  `knowledge/methodology.md`. The most consequential: hai-guardrails' toxicity/profanity/bias guards
+  are LLM-judge prompts needing a paid API (not wordlists, so Stage 3 not Stage 1); Giskard v3 is
+  LLM/agent-only with its tabular-ML support gone since v2; garak's shields.Up/Down detectors ship
+  with no matching probe, so the Phase-3 "point shields at AFNI's gateway" action needs AFNI to
+  write that probe; and OpenAI Evals' sample data is absent locally because it was all Git-LFS stubs
+  removed when `references/` was first committed.
+- **Mistake made and corrected:** I treated the reference repos' own `.claude/` folders as accidental
+  noise from the earlier `.gitignore` change and removed 26 of them in a merge. Commit `6d8da14`
+  tracks them deliberately, as part of the reference material. Restored, and the ignore rule I added
+  was dropped with a note in `.gitignore` so it is not repeated.
+- Verified: 87 slides (PAGE counter and actual count agree), 16 tables with 0 overflow cells, 0 deck
+  layout issues, all 23 repos and 7 tenets still present, `guardrail_atlas.html` byte-identical
+  (the HTML path is untouched), and the data build byte-identical on re-run.
+**Files created / changed:**
+- `data/tenet_methodology_facts.json` — new: 22 repos × 108 tenet rows of source-level facts with evidence
+- `data/tenet_methodology_data.json` — new: generated tables, latency/stage derived
+- `helpers/build_tenet_methodology_data.py` — new: the derivation, documented in its docstring
+- `helpers/build_deck_methodology.py` — new: renders the 7 slides, sized against the `qa_matrix.py` estimator
+- `helpers/build_deck_synthesis.py` — +6 lines: divider + call, after the capability matrices
+- `AFNI_Responsible_AI_Framework.pptx` — grew to 87 slides (new slides 61-68)
+- `knowledge/methodology.md` — new: the same tables in markdown, generated from the data so it cannot drift
+- `knowledge/INDEX.md`, `knowledge/tenets.md` — +links to the new node
+- `.gitignore` — note added about the reference repos' tracked `.claude/` folders
