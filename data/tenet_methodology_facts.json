@@ -1,0 +1,1516 @@
+{
+  "_comment": "Per-repo, per-tenet mechanism facts derived by reading the actual source under references/. Every entry's `evidence` field names the file:line, model id or dependency it came from. latency and cascade stage are NOT stored here - they are derived in helpers/build_tenet_methodology_data.py so they stay consistent across all seven tenets. `ships_own_detector` is false where the repo provides the contract, taxonomy or orchestration for a tenet but no detector of its own - those rows cannot be a cascade stage, so they are labelled Delegates.",
+  "repos": [
+    {
+      "repo": "AIF360-main",
+      "tenets": {
+        "Fairness & Bias": {
+          "mechanism": [
+            "Statistical",
+            "Module"
+          ],
+          "functionality": "ClassificationMetric disparities + Theil; MDSS/FACTS bias_scan discovers the biased subgroup itself",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "Classical ML",
+          "evidence": "detectors/mdss_detector.py:15 bias_scan (no prot_attr arg - scans all columns); sklearn/detectors/facts/__init__.py:28 FACTS_bias_scan",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Explainability & Transparency": {
+          "mechanism": [
+            "Module",
+            "Statistical"
+          ],
+          "functionality": "MetricTextExplainer/MetricJSONExplainer emit templated metric explanations; FACTS mines counterfactual recourse",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "Classical ML",
+          "evidence": "explainers/metric_text_explainer.py:5; explainers/metric_json_explainer.py:8; facts/formatting.py print_recourse_report",
+          "in_request_path": false,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "Ships an R package (aif360/aif360-r via reticulate). setup.py pins scikit-learn<1.6. MDSS/FACTS confirmed - they FIND the biased subgroup rather than needing it named, which is the real differentiator vs Fairlearn."
+    },
+    {
+      "repo": "FuzzyAI-main",
+      "tenets": {
+        "Security": {
+          "mechanism": [
+            "Attack generator",
+            "Cloud API"
+          ],
+          "functionality": "20 attack handlers in attacks/enums.py: DAN, Crescendo, ActorAttack, BoN, pygad genetic, ManyShot, ArtPrompt",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "handlers/attacks/enums.py:4-24 (20 modes); resources/adv_suffixes.txt (1462 GCG-style suffixes)",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Profanity / Content Safety": {
+          "mechanism": [
+            "Cloud API",
+            "NLI/Cross-encoder"
+          ],
+          "functionality": "Harm oracles: OpenAI omni-moderation-latest, Azure ContentSafety, AWS Guardrails, local bart-large-mnli",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "classifiers/openai_moderation/handler.py:33; classifiers/sentiment/handler.py:21 facebook/bart-large-mnli",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Hallucination / Reliability": {
+          "mechanism": [
+            "Keyword/Regex",
+            "NLI/Cross-encoder"
+          ],
+          "functionality": "Refusal detection only: 7-phrase prefix list + bart-large-mnli disapproval score; no factuality check",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "classifiers/obvious_negative/handler.py:12 (7 phrases); classifiers/disapproval/handler.py:21",
+          "in_request_path": false,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "Offline CLI red-teamer requiring MongoDB; ollama/local providers make it free. No Llama Guard/ShieldGemma, no GCG/TAP/PAIR/GOAT code, no base64/ROT13 encoders despite the aspect labels."
+    },
+    {
+      "repo": "Guardrails-develop",
+      "tenets": {
+        "Privacy": {
+          "mechanism": [
+            "Module",
+            "Classifier"
+          ],
+          "functionality": "Presidio Analyzer/Anonymizer detect+mask rails; GLiNER NIM (nvidia/gliner-pii) zero-shot NER",
+          "cost": "Free",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "library/sensitive_data_detection/actions.py:81; library/gliner/rail_config.py:54",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Security": {
+          "mechanism": [
+            "Classifier",
+            "Keyword/Regex"
+          ],
+          "functionality": "NemoGuard-JailbreakDetect ONNX RF over Snowflake embeddings + YARA sqli/code/template/xss rules",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "library/jailbreak_detection/model_based/checks.py:26; library/injection_detection/yara_rules/*.yara",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Explainability & Transparency": {
+          "mechanism": [
+            "LLM-judge"
+          ],
+          "functionality": "topic_safety_check prompt to nvidia/llama-3.1-nemoguard-8b-topic-control; on-topic/off-topic verdict",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "library/topic_safety/actions.py:39-41",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Profanity / Content Safety": {
+          "mechanism": [
+            "LLM-judge",
+            "Cloud API"
+          ],
+          "functionality": "content_safety rails to nemoguard-8b-content-safety, Llama Guard, ShieldGemma; ~8 vendor adapters",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "examples/configs/content_safety/config.yml; library/content_safety/actions.py:238-286",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Hallucination / Reliability": {
+          "mechanism": [
+            "NLI/Cross-encoder",
+            "LLM-judge"
+          ],
+          "functionality": "AlignScore roberta-base nli_sp server; self_check_facts prompt; Patronus-Lynx-70B and Cleanlab rails",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "library/factchecking/align_score/server.py:49-54; library/hallucination/actions.py:33",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Accountability": {
+          "mechanism": [
+            "Module"
+          ],
+          "functionality": "OpenTelemetry span adapter + RailDecision ALLOW/BLOCK/TRANSFORM; rail_guard fail-closed envelope",
+          "cost": "Free",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "tracing/adapters/opentelemetry.py:19-47; actions/rail_outcome.py:48-53; guardrails/rail_guard.py:16-24",
+          "in_request_path": true,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "v0.24.0.dev0. Jailbreak rail is documented FAIL-OPEN (jailbreak-protection.mdx:112) - confirms the deck's Phase-1 flip-to-fail-closed action. Heuristics pull gpt2-large. yara-python is an extra."
+    },
+    {
+      "repo": "Infosys-Responsible-AI-Toolkit-master",
+      "tenets": {
+        "Privacy": {
+          "mechanism": [
+            "Module",
+            "Classifier"
+          ],
+          "functionality": "Presidio analyzer/anonymizer + roberta/PIIRanha NER; Faker and diffprivlib; DICOM/image redaction",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "Both",
+          "evidence": "responsible-ai-privacy/src/privacy/service/__init__.py:103-132 (TransformersRecognizer, DicomImageRedactorEngine); temp/PreDefinedRecg.csv (27 entity types incl AADHAR_NUMBER)",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Security": {
+          "mechanism": [
+            "Classifier",
+            "LLM-judge"
+          ],
+          "functionality": "fine_tuned_promptInjection model + mpnet cosine vs jailbreak_embeddings.json; SmoothLLM/Bergeron critique",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "moderationmodel/src/service/injectionModel.py:44; moderationlayer/src/service/service.py:423; smoothLLm.py:125; bergeron.py:88",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Fairness & Bias": {
+          "mechanism": [
+            "Statistical",
+            "LLM-judge"
+          ],
+          "functionality": "aif360+fairlearn+holisticai disparity metrics and Reweighing/DIR/ThresholdOptimizer; GPT-4o image-bias judge",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "Both",
+          "evidence": "responsible_ai_fairness.py:613-675; src/fairness/service/inprocessing.py:47-57; constants/llm_constants.py:22",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Explainability & Transparency": {
+          "mechanism": [
+            "Statistical",
+            "LLM-judge"
+          ],
+          "functionality": "shap.KernelExplainer/LimeTabularExplainer for ML; GPT-4 token-importance, G-Eval rubric, CoT/CoVe/GoT",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "Both",
+          "evidence": "responsible_ai_explain.py:222 shap.KernelExplainer, :404 LimeTabularExplainer; llm_explain/utility/prompt_utils.py:84",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Profanity / Content Safety": {
+          "mechanism": [
+            "Classifier",
+            "Keyword/Regex"
+          ],
+          "functionality": "Detoxify fine_tuned_toxicity_model, better_profanity wordlist (918 rows), deberta zero-shot, NudeNet/nsfw.h5",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "moderationmodel/src/service/detoxifyModel.py:45; topicModel.py:47-55; profanity/util/NudeNet/NudeNet.py:23",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Hallucination / Reliability": {
+          "mechanism": [
+            "LLM-judge",
+            "Statistical"
+          ],
+          "functionality": "show_score weighted mpnet cosine (input/output/source); GPT-4 self-score, G-Eval, CoVe; TrustLLM truthfulness",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "moderationlayer/src/service/service.py:2899-2955 show_score; :2190-2275 hallucination self-score",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Accountability": {
+          "mechanism": [
+            "Module",
+            "Statistical"
+          ],
+          "functionality": "16 checks gathered into summary(status,reason); admin ModerationCheckThreshold per account/portfolio; telemetry",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "Both",
+          "evidence": "moderationlayer/src/service/service.py:1622-1666 asyncio.gather, :1690-1719 summary(); responsible-ai-admin/.../FmConfigMapper.py:22-123",
+          "in_request_path": true,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "Model weights are ABSENT from the repo - fine_tuned_*/PIIRanha/roberta/deberta/nsfw.h5/glove must be fetched into models/ (multi-GB, Git LFS). ~20 FastAPI services. Security (adversarial) module retired at 2.2.1, confirming the deck's finding."
+    },
+    {
+      "repo": "JCB-main",
+      "tenets": {
+        "Privacy": {
+          "mechanism": [
+            "Module",
+            "Statistical"
+          ],
+          "functionality": "Memorisation test: 100 copyright behaviors + datasketch MinHash Jaccard>0.6 vs 100 reference hash files",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "eval_utils.py:223-263 compute_hashes_with_sliding_window; data/copyright_classifier_hashes/*.pkl",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Security": {
+          "mechanism": [
+            "Attack generator"
+          ],
+          "functionality": "JCB loop: ChatGPT seed templates, WordNet synonym mutation, UCB/eps-greedy bandit reuse across behaviors",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "baselines/JCB/selector.py:58-81 UCBSelector; baselines/JCB/mutator.py:46 get_synonym_advanced",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Profanity / Content Safety": {
+          "mechanism": [
+            "Classifier",
+            "Attack generator"
+          ],
+          "functionality": "400 HarmBench behaviors + 50-row AdvBench subset; harm scored by local vLLM HarmBench-Llama-2-13b-cls",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "data/behavior_datasets/harmbench_behaviors_text_all.csv (400 rows); evaluate_completions.py:19",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Hallucination / Reliability": {
+          "mechanism": [
+            "Keyword/Regex",
+            "LLM-judge"
+          ],
+          "functionality": "29-prefix AdvBench refusal list + gpt-4.1 judge score cutoff 8.5; MinHash verbatim-reproduction check",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "eval_utils.py:277-304 (29 prefixes); configs/method_configs/JCB_config.yaml judge_model gpt-4.1",
+          "in_request_path": false,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "HarmBench fork shipping ONLY the JCB method and pipeline steps 1+3 - none of the paper's baselines. Supports a local judge but config defaults to paid gpt-4.1. Supports the Skip verdict."
+    },
+    {
+      "repo": "PyRIT-main",
+      "tenets": {
+        "Privacy": {
+          "mechanism": [
+            "Module",
+            "Attack generator"
+          ],
+          "functionality": "SystemPromptExtractionScorer n-gram overlap + PlagiarismScorer LCS/Jaccard vs reference text",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "score/float_scale/system_prompt_extraction_scorer.py:13; plagiarism_scorer.py:22",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Security": {
+          "mechanism": [
+            "Attack generator",
+            "Keyword/Regex"
+          ],
+          "functionality": "657 jailbreak templates + 90 converters + Crescendo/TAP/PAIR/SkeletonKey; regex SQLi/SSRF/secret scorers",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "score/true_false/regex/sql_injection_output_scorer.py:7; executor/attack/multi_turn/crescendo.py:122",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Fairness & Bias": {
+          "mechanism": [
+            "Attack generator",
+            "LLM-judge"
+          ],
+          "functionality": "FairnessBiasBenchmark story probes over gendered_professions.yaml, scored by SelfAskCategoryScorer",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "executor/benchmark/fairness_bias.py:63; datasets/lexicons/fairness/gendered_professions.yaml",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Profanity / Content Safety": {
+          "mechanism": [
+            "LLM-judge",
+            "Cloud API"
+          ],
+          "functionality": "SelfAskLikertScorer over harm_definition YAMLs; Llama-Guard-3-8B and shieldgemma-9b; AzureContentFilter",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "score/true_false/llamaguard_scorer.py:74; float_scale/azure_content_filter_scorer.py:41",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Hallucination / Reliability": {
+          "mechanism": [
+            "Keyword/Regex",
+            "LLM-judge"
+          ],
+          "functionality": "PackageHallucinationScorer allow-list vs registry names (garak port); SelfAskRefusalScorer; PlagiarismScorer",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "score/true_false/regex/package_hallucination_scorer.py:54; self_ask_refusal_scorer.py:22",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Accountability": {
+          "mechanism": [
+            "Module",
+            "Statistical"
+          ],
+          "functionality": "SQLite/AzureSQL memory (PromptMemoryEntries, ScoreEntry, AttackResults); ScorerEvaluator Krippendorff alpha",
+          "cost": "Free",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "memory/sqlite_memory.py:34; score/scorer_evaluation/krippendorff.py:215 used at scorer_evaluator.py:619",
+          "in_request_path": false,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "v1.1.0.dev0, offline harness - nothing inline, though the ~11 pure re.search output scorers could be. Compliance mapping is only OWASP LLM01/LLM02 docstrings; there is NO NIST/ATLAS report generator (deck overstates this)."
+    },
+    {
+      "repo": "agentic_security-main",
+      "tenets": {
+        "Privacy": {
+          "mechanism": [
+            "Keyword/Regex"
+          ],
+          "functionality": "PIIDetector regex set (email/SSN/phone/private key/token) plus Luhn-checked cards; ships DISABLED by default",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "refusal_classifier/pii_detector.py:33-67 DEFAULT_PATTERNS, :108 _passes_luhn",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Security": {
+          "mechanism": [
+            "Attack generator",
+            "Keyword/Regex"
+          ],
+          "functionality": "Jailbreak-dataset + stenography/adaptive-attack generators, YAML attack rules; SandboxEscapeDetector regex",
+          "cost": "Free + optional paid",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "probe_data/data.py:165-232 DATASET_CONFIGS; refusal_classifier/sandbox_escape_detector.py:32-79",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Profanity / Content Safety": {
+          "mechanism": [
+            "Attack generator"
+          ],
+          "functionality": "Loads AdvBench/ForbiddenQuestion/MaliciousInstruct via EasyJailbreak_Datasets purely as attack prompts",
+          "cost": "Free",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "probe_data/data.py:459-469 Lemhf14/EasyJailbreak_Datasets. HarmBench/BeaverTails/XSTest absent from tree",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Hallucination / Reliability": {
+          "mechanism": [
+            "Keyword/Regex",
+            "Classifier"
+          ],
+          "functionality": "Refusal detection: 28-phrase REFUSAL_MARKS + one-class SVM (joblib); optional LLM judge",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "probe_actor/refusal.py:14-43; refusal_classifier/model.py:60 OneClassSVM",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Accountability": {
+          "mechanism": [
+            "Statistical"
+          ],
+          "functionality": "Per-module failure rate vs max_th=0.3 PASS/FAIL, failures.csv, matplotlib chart; never exits non-zero",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "lib.py:72; config.py:107 max_th=0.3; probe_actor/fuzzer.py:58",
+          "in_request_path": false,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "SECURITY: hard-coded default third-party bearer token CONFIRMED at probe_data/modules/fine_tuned.py:9 and rl_model.py:14, posted to mcp.metaheuristic.co/infer. Red-team fuzzer, NOT a runtime defence. Malwaregen/Hallucination/DataLeak are registry stubs with no loader."
+    },
+    {
+      "repo": "deepchecks-main",
+      "tenets": {
+        "Privacy": {
+          "mechanism": [
+            "Keyword/Regex"
+          ],
+          "functionality": "Regex email/URL counts as TextData properties only; no Presidio, no NER, no redaction capability",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "deepchecks/nlp/utils/text_properties.py:438 email_pattern; registered :562",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Fairness & Bias": {
+          "mechanism": [
+            "Statistical"
+          ],
+          "functionality": "PerformanceBias subgroup score gaps + decision-tree weak-segment search; class imbalance; PPS leakage",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "Both",
+          "evidence": "tabular/checks/model_evaluation/performance_bias.py:28; utils/abstracts/weak_segment_abstract.py:171",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Profanity / Content Safety": {
+          "mechanism": [
+            "Classifier",
+            "Statistical"
+          ],
+          "functionality": "Toxicity via SkolkovoInstitute/roberta_toxicity_classifier + TextBlob sentiment/subjectivity",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "nlp/utils/text_properties.py:257 TOXICITY_MODEL_NAME; :198 textblob sentiment",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Hallucination / Reliability": {
+          "mechanism": [
+            "Statistical",
+            "Classifier"
+          ],
+          "functionality": "Dataset drift (KS/EMD/PSI/Cramer's V), LoOP+IQR outliers, dup/null/mixed-type integrity, fasttext lang",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "Both",
+          "evidence": "utils/distribution/drift.py:35-36; tabular/.../outlier_sample_detection.py:16 PyNomaly loop",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Accountability": {
+          "mechanism": [
+            "Module"
+          ],
+          "functionality": "Condition pass/fail per check with JUnit XML, JSON and HTML suite serializers for CI gating",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "Both",
+          "evidence": "core/condition.py:55 ConditionCategory; core/serialization/suite_result/junit.py:26",
+          "in_request_path": false,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "AGPL-3.0 CONFIRMED in LICENSE (+ ee/ commercial exception). Every check is a batch SingleDatasetCheck/TrainTestCheck over a Dataset - there is no per-request API at all. No MDSS/GerryFair/FACTS in tree despite those aspect labels."
+    },
+    {
+      "repo": "deepeval-main",
+      "tenets": {
+        "Privacy": {
+          "mechanism": [
+            "LLM-judge"
+          ],
+          "functionality": "PIILeakageMetric uses extract_pii + generate_verdicts Jinja prompts judged by an LLM - no regex, no Presidio",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "metrics/pii_leakage/pii_leakage.py:48 initialize_model; metrics/pii_leakage/templates/extract_pii.txt",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Security": {
+          "mechanism": [
+            "Keyword/Regex",
+            "Module"
+          ],
+          "functionality": "ToolPermissionMetric allow/deny lists + ToolCorrectnessMetric set-compare; fully deterministic, no LLM",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "metrics/tool_permission/tool_permission.py:26 'fully deterministic and requires no LLM', :44 fail-closed",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Fairness & Bias": {
+          "mechanism": [
+            "LLM-judge",
+            "Classifier"
+          ],
+          "functionality": "BiasMetric rubric judge (gender/political/racial/geographic); BBQ + EquityMedQA harnesses; legacy Dbias model",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "metrics/bias/templates/generate_verdicts.txt; benchmarks/bbq/bbq.py:155; models/unbias_model.py",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Explainability & Transparency": {
+          "mechanism": [
+            "LLM-judge",
+            "Module"
+          ],
+          "functionality": "GEval/DAG Jinja rubric judges emit score+reason; JsonCorrectness pydantic validate; PatternMatch regex",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "metrics/g_eval/templates/generate_evaluation_results.txt; metrics/dag/nodes.py:223 BinaryJudgementNode",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Profanity / Content Safety": {
+          "mechanism": [
+            "LLM-judge",
+            "Classifier"
+          ],
+          "functionality": "ToxicityMetric LLM-judge on generate_verdicts.txt; optional Detoxify (original/unbiased/multilingual) scorer",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "metrics/toxicity/toxicity.py:49; models/detoxify_model.py; scorer/scorer.py:273 neural_toxic_score",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Hallucination / Reliability": {
+          "mechanism": [
+            "LLM-judge",
+            "NLI/Cross-encoder"
+          ],
+          "functionality": "Faithfulness claim-vs-truth verdicts; contextual precision/recall/relevancy judges; vectara CrossEncoder",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "metrics/faithfulness/faithfulness.py:127-131; models/hallucination_model.py vectara/hallucination_evaluation_model",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Accountability": {
+          "mechanism": [
+            "Module",
+            "LLM-judge"
+          ],
+          "functionality": "pytest11 assert_test fails on threshold miss; JSON results folder; Misuse/RoleViolation rubric judges",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "evaluate/evaluate.py:177 raise AssertionError; pyproject pytest11 plugin; evaluate/local_store.py:48",
+          "in_request_path": false,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "v4.1.8, openai is a HARD dependency. Default judge gpt-5.4 - paid unless `deepeval set-ollama`. Only 4 of ~49 metrics are LLM-free (ExactMatch, PatternMatch, ToolPermission, AgentLoopDetection). Local classifier paths are legacy and their deps are undeclared."
+    },
+    {
+      "repo": "deepteam-main",
+      "tenets": {
+        "Privacy": {
+          "mechanism": [
+            "LLM-judge",
+            "Attack generator"
+          ],
+          "functionality": "PIIMetric/PromptExtractionMetric judge leaks; PrivacyGuard (gpt-4.1) screens live input and output",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "metrics/pii/pii.py:27; guardrails/guards/privacy_guard/template.py",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Security": {
+          "mechanism": [
+            "Attack generator",
+            "LLM-judge"
+          ],
+          "functionality": "23 single-turn + 5 multi-turn attacks (Crescendo/Tree/Linear); PromptInjection and Cybersecurity guards",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "attacks/multi_turn/__init__.py; guards/prompt_injection_guard/template.py",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Fairness & Bias": {
+          "mechanism": [
+            "LLM-judge",
+            "Attack generator"
+          ],
+          "functionality": "BiasMetric judge on gender/race/religion/politics axes; NO bias guardrail exists - red-team only",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "metrics/bias/template.py:9; no bias guard under deepteam/guardrails/guards/",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Explainability & Transparency": {
+          "mechanism": [
+            "LLM-judge"
+          ],
+          "functionality": "TopicalGuard judges input/output against allowed_topics; HijackingMetric scores purpose deviation",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "guardrails/guards/topical_guard/template.py:6; metrics/hijacking/hijacking.py:29",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Profanity / Content Safety": {
+          "mechanism": [
+            "LLM-judge",
+            "Attack generator"
+          ],
+          "functionality": "Toxicity/Graphic/Illegal judges + ToxicityGuard, IllegalGuard; Aegis and BeaverTails HF datasets",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "frameworks/aegis/aegis.py:55; frameworks/beavertails/beavertails.py:59; guards/toxicity_guard/toxicity_guard.py:11",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Hallucination / Reliability": {
+          "mechanism": [
+            "LLM-judge"
+          ],
+          "functionality": "HallucinationMetric probes fake citations/APIs/entities/stats; HallucinationGuard fact-checks output",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "vulnerabilities/hallucination/types.py; guards/hallucination_guard/template.py:6",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Accountability": {
+          "mechanism": [
+            "Module",
+            "LLM-judge"
+          ],
+          "functionality": "5 framework maps (OWASP LLM/ASI, NIST AI RMF, MITRE ATLAS, EU AI Act) + CVSS scoring report",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "frameworks/constants.py:18 FRAMEWORKS_MAP; red_teamer/cvss.py:38",
+          "in_request_path": false,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "Red-team framework PLUS 7 LLM-judge Guardrails that do run in-path. Every check is an LLM call; default gpt-4o-mini/gpt-4.1 needs OPENAI_API_KEY (Ollama swappable). No TAP/PAIR, no HarmBench, no ProPILE."
+    },
+    {
+      "repo": "evals-main",
+      "tenets": {
+        "Hallucination / Reliability": {
+          "mechanism": [
+            "LLM-judge",
+            "Keyword/Regex"
+          ],
+          "functionality": "463 registry evals; modelgraded fact/closedqa judge prompts + Match/FuzzyMatch/Includes/JsonValidator",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "registry/modelgraded/fact.yaml + closedqa.yaml; elsuite/modelgraded/classify.py:14",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Accountability": {
+          "mechanism": [
+            "LLM-judge",
+            "Statistical"
+          ],
+          "functionality": "sandbagging (MMLU accuracy vs target), make_me_say/make_me_pay, ballots, steganography, bluff suites",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "elsuite/sandbagging/sandbagging_eval.py; elsuite/make_me_pay/eval.py:19; registry/evals/*.yaml",
+          "in_request_path": false,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "Suites confirmed as code+yaml, BUT 0 .jsonl remain under registry/data - all were Git-LFS stubs removed when references/ was committed, so sandbagging/ballots/steganography samples are ABSENT locally. MMLU/HellaSwag still load via hf://. Requires OPENAI_API_KEY at import."
+    },
+    {
+      "repo": "fairlearn-main",
+      "tenets": {
+        "Fairness & Bias": {
+          "mechanism": [
+            "Statistical",
+            "Module"
+          ],
+          "functionality": "MetricFrame disaggregates metrics by sensitive_features; ThresholdOptimizer/ExponentiatedGradient mitigate",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "Classical ML",
+          "evidence": "metrics/_metric_frame.py:51 MetricFrame (requires y_true, y_pred, sensitive_features); postprocessing/_threshold_optimizer.py:115",
+          "in_request_path": false,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "Pure numpy/pandas/scikit-learn/scipy/narwhals - no network, no model weights. Requires y_true plus a DECLARED sensitive_features column, which is why it is structurally offline-only."
+    },
+    {
+      "repo": "garak-main",
+      "tenets": {
+        "Privacy": {
+          "mechanism": [
+            "Attack generator",
+            "Keyword/Regex"
+          ],
+          "functionality": "ProPILE twin/triplet/quad probes; propile.PIILeak exact + Jaro-Winkler match; sysprompt 4-gram overlap",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "detectors/propile.py:17 PIILeak; data/propile/prompt_templates.tsv (25 rows) + pii_data.jsonl",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Security": {
+          "mechanism": [
+            "Attack generator",
+            "Keyword/Regex"
+          ],
+          "functionality": "DAN/encoding/latent-injection probe packs; string detectors dan.DAN, shields.Up/Down, 58 apikey regexes",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "detectors/shields.py:21 Up / :55 Down; probes/encoding.py 21 Inject* classes; resources/apikey/regexes.py",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Fairness & Bias": {
+          "mechanism": [
+            "Attack generator",
+            "Keyword/Regex"
+          ],
+          "functionality": "lmrc probes (Deadnaming, SlurUsage, Bullying) scored by Surge/OFCOM wordlists; no fairness metrics at all",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "probes/lmrc.py:87 Deadnaming, :196 SlurUsage -> unsafe_content.SurgeProfanityRacialEthnic",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Profanity / Content Safety": {
+          "mechanism": [
+            "Classifier",
+            "Keyword/Regex"
+          ],
+          "functionality": "HF detectors garak-llm/roberta_toxicity_classifier and toxic-comment-model; Surge/OFCOM/LDNOOBW wordlists",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "detectors/unsafe_content.py:16 and :33; data profanity_en.csv, ldnoobw-en.txt",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Hallucination / Reliability": {
+          "mechanism": [
+            "Keyword/Regex",
+            "Classifier"
+          ],
+          "functionality": "packagehallucination pkg-list lookup; refusal via mitigation string list or garak-refusal-detector",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "detectors/packagehallucination.py:141 PythonPypi; mitigation.py:255; misleading.py:21",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Accountability": {
+          "mechanism": [
+            "Statistical"
+          ],
+          "functionality": "detector_metrics_summary.json holds per-detector F1/sensitivity/specificity from human + LLM labels",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "analyze/detector_metrics.py:27 (6 detectors evaluated, seed 42); docs/source/detector_metrics.rst",
+          "in_request_path": false,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "CORRECTION: shields.Up/Down DETECTORS exist but ship with NO matching probe module - the deck's Phase-3 'point shields up/down at AFNI's gateway' action needs AFNI to write the probe. Attacker LLMs default to local HF; only judge.* detectors need a paid key."
+    },
+    {
+      "repo": "giskard-oss-main",
+      "tenets": {
+        "Privacy": {
+          "mechanism": [
+            "Attack generator",
+            "LLM-judge"
+          ],
+          "functionality": "No native PII check at all; only optional deepteam PIILeakage/PromptLeakage + garak data-exfil probes",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "scan/integrations/deepteam/_selection.py:16-22; grep for propile/presidio/pii across libs/ returns nothing",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Security": {
+          "mechanism": [
+            "Attack generator",
+            "LLM-judge"
+          ],
+          "functionality": "18 OWASP-LLM01 scenarios in prompt_injection.jsonl (leet/base64/multilingual/DAN) + Crescendo/GOAT/GCG",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "scan/generators/data/prompt_injection.jsonl (18 rows); generators/gcg.py:10-24 (13 hardcoded suffixes)",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Fairness & Bias": {
+          "mechanism": [
+            "LLM-judge",
+            "Attack generator"
+          ],
+          "functionality": "Only adversarial 'Stereotypes and Discrimination' rules judged by Conformity + Toxicity hate_speech category",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "scan/generators/adversarial.py:42; checks/judges/toxicity.py:15. No demographic-axis metric in code",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Explainability & Transparency": {
+          "mechanism": [
+            "Module",
+            "LLM-judge"
+          ],
+          "functionality": "JsonValid (jsonschema), Readability (textstat), RegexMatching/Equals, plus LLMJudge/Conformity rubric judges",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "checks/builtin/json_valid.py:6; builtin/nlp_metrics.py:19-27; judges/judge.py:12. No G-Eval/DAG",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Profanity / Content Safety": {
+          "mechanism": [
+            "LLM-judge",
+            "Attack generator"
+          ],
+          "functionality": "Toxicity judge (6 categories) + HarmBench / Do-Not-Answer HF scenario sets via harmbench_safety.j2",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "checks/judges/toxicity.py:13-30; scan/vulnerability.py:14-28 (giskardai/harmbench-scenarios)",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Hallucination / Reliability": {
+          "mechanism": [
+            "LLM-judge",
+            "Module"
+          ],
+          "functionality": "Groundedness/Contradiction/AnswerRelevance judges + SemanticSimilarity cosine; KB sycophancy generator",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "checks/judges/{groundedness,contradiction,answer_relevance}.py; scan/generators/knowledge_base/sycophancy.py",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Accountability": {
+          "mechanism": [
+            "Module"
+          ],
+          "functionality": "assert_passed + to_junit_xml/to_hub_format JSON; RegoPolicy via regorus; only OWASP LLM01 tags mapped",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "checks/core/result.py:540,668; builtin/rego_policy.py:57. No NIST/ATLAS/EU-AI-Act/ISO mapping anywhere",
+          "in_request_path": false,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "CORRECTION: Giskard v3 is a rewrite and is LLM/agent-ONLY - tabular ML support was v2 and is gone. Sycophancy generator CONFIRMED (unique in the set). Default judge gpt-4o-mini; garak/deepteam are optional heavy extras."
+    },
+    {
+      "repo": "guardrails-main",
+      "tenets": {
+        "Privacy": {
+          "mechanism": [
+            "Module",
+            "Keyword/Regex"
+          ],
+          "functionality": "NO in-repo PII code - delegates to pip guardrails-ai-detect-pii (Presidio+spaCy); MockDetectPII is tests only",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "tests/.../validators/detect_pii.py:15 MockDetectPII; guardrails/validators/__init__.py exports only base classes",
+          "in_request_path": true,
+          "ships_own_detector": false
+        },
+        "Explainability & Transparency": {
+          "mechanism": [
+            "Module",
+            "Keyword/Regex"
+          ],
+          "functionality": "RAIL XML/Pydantic to JSON Schema, Draft2020-12 enforcement, char-offset ErrorSpans on streamed output",
+          "cost": "Free + optional paid",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "guardrails/schema/validator.py:92; classes/history/outputs.py:119 error_spans_in_output",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Hallucination / Reliability": {
+          "mechanism": [
+            "Module",
+            "LLM-judge"
+          ],
+          "functionality": "Schema-fail re-ask via constants.xml prompts; groundedness ONLY via external provenance-llm/embeddings pkgs",
+          "cost": "Needs paid API",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "guardrails/constants.xml:46; actions/reask.py; zero repo hits for provenance/groundedness inside guardrails/",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Accountability": {
+          "mechanism": [
+            "Module"
+          ],
+          "functionality": "SQLite guard_logs audit DB, Guard.history per-call tree, OTel spans, 8-value OnFailAction enum",
+          "cost": "Free",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "call_tracing/sqlite_trace_handler.py:64; telemetry/runner_tracing.py:83; types/on_fail.py:24-31",
+          "in_request_path": true,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "v0.11.0 is ORCHESTRATION ONLY - guardrails/validators ships just base classes; every real validator is a separate PyPI guardrails-ai-<name> package. This is the concrete basis for the Skip verdict. No ICD-10/MRN/NPI/DEA anywhere."
+    },
+    {
+      "repo": "hai-guardrails-main",
+      "tenets": {
+        "Privacy": {
+          "mechanism": [
+            "Keyword/Regex",
+            "LLM-judge"
+          ],
+          "functionality": "piiGuard: 10 regexes incl ICD-10/MRN/NPI/DEA redaction; leakageGuard LLM-judge for prompt/config leaks",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "src/guards/pii.guard.ts:48-83; src/guards/leakage.guard.ts:31-63",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Security": {
+          "mechanism": [
+            "Keyword/Regex",
+            "LLM-judge"
+          ],
+          "functionality": "injectionGuard heuristic/pattern/LLM modes; secretGuard 25 vendor regexes gated by Shannon entropy",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "src/guards/injection.guard.ts:76-142; src/guards/secret.guard.ts:14-241 minEntropy 3-4",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Fairness & Bias": {
+          "mechanism": [
+            "LLM-judge"
+          ],
+          "functionality": "biasDetectionGuard = llmGuard scoring prompt, threshold 0.7, zod schema categories/affectedGroups",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "src/guards/bias-detection.guard.ts:74-103",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Profanity / Content Safety": {
+          "mechanism": [
+            "LLM-judge"
+          ],
+          "functionality": "toxic/hateSpeech/adultContent/profanity guards are all LLM prompts - no wordlist, no classifier",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "src/guards/hate-speech.guard.ts:82; adult-content.guard.ts:80; toxic.guard.ts:76; profanity.guard.ts:80",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Hallucination / Reliability": {
+          "mechanism": [
+            "Module",
+            "LLM-judge"
+          ],
+          "functionality": "llmGuard repairs judge JSON via jsonrepair then zod safeParse; fails closed, no re-ask/retry loop",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "src/guards/llm.guard.ts:332-341",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Accountability": {
+          "mechanism": [
+            "LLM-judge"
+          ],
+          "functionality": "copyrightGuard llmGuard prompt, threshold 0.8, flags lyrics/excerpts/code; no ethics guard exists",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "src/guards/copyright.guard.ts:72-102",
+          "in_request_path": true,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "@presidio-dev/hai-guardrails v1.11.0 TS/bun; NOT Microsoft Presidio despite the npm scope. No bundled model. Docs overclaim: no medical-licence/MAC/UUID/intl-phone patterns, no ethics guard."
+    },
+    {
+      "repo": "llm-guard-main",
+      "tenets": {
+        "Privacy": {
+          "mechanism": [
+            "Module",
+            "Keyword/Regex",
+            "Classifier"
+          ],
+          "functionality": "Anonymize scanner: presidio-analyzer 2.2.358 + regex_patterns.py + ai4privacy NER; Vault deanonymize",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "input_scanners/anonymize.py:28-40; anonymize_helpers/regex_patterns.py:35; presidio-analyzer==2.2.358; llm_guard/vault.py",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Security": {
+          "mechanism": [
+            "Classifier",
+            "Keyword/Regex"
+          ],
+          "functionality": "protectai/deberta-v3-base-prompt-injection-v2 + bc-detect-secrets (95 plugins) + unicode invisible-char strip",
+          "cost": "Free",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "input_scanners/prompt_injection.py:40; secrets.py:17 (95 plugin files); invisible_text.py:21",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Fairness & Bias": {
+          "mechanism": [
+            "Classifier"
+          ],
+          "functionality": "Bias output scanner runs valurank/distilroberta-bias text-classification against a threshold",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "output_scanners/bias.py:14 path=valurank/distilroberta-bias",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Explainability & Transparency": {
+          "mechanism": [
+            "Module",
+            "Classifier"
+          ],
+          "functionality": "JSON scanner regex + json-repair validate/repair; ReadingTime words/200; BanTopics zero-shot scope",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "output_scanners/json.py:11; reading_time.py:23; input_scanners/ban_topics.py:132",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Profanity / Content Safety": {
+          "mechanism": [
+            "Classifier",
+            "Keyword/Regex"
+          ],
+          "functionality": "unitary/unbiased-toxic-roberta + BanSubstrings blocklist + BanTopics zero-shot + VADER sentiment",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "input_scanners/toxicity.py:14; ban_substrings.py:12; ban_topics.py:81; sentiment.py:6",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Hallucination / Reliability": {
+          "mechanism": [
+            "NLI/Cross-encoder",
+            "Classifier"
+          ],
+          "functionality": "FactualConsistency entailment via MoritzLaurer/deberta-v3-base-zeroshot-v2.0; NoRefusal classifier",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "output_scanners/factual_consistency.py:45; no_refusal.py:15 ProtectAI/distilroberta-base-rejection-v1",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Accountability": {
+          "mechanism": [
+            "Classifier",
+            "Module"
+          ],
+          "functionality": "BanCompetitors NER (guishe/nuner-v1_orgs); TokenLimit via tiktoken; slowapi rate limit in API layer",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "input_scanners/ban_competitors.py:17; token_limit.py:25; llm_guard_api/app/app.py:176",
+          "in_request_path": true,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "llm-guard 0.3.16 (Protect AI, archived); all scanners local HF transformers/torch with pinned model revisions, optional ONNX; no paid API; only URLReachability makes a network call at scan time."
+    },
+    {
+      "repo": "openguardrails-main",
+      "tenets": {
+        "Privacy": {
+          "mechanism": [
+            "Cloud API",
+            "Module"
+          ],
+          "functionality": "taxonomy privacy.pii.* registry + presidio name mapping; no detector of its own; redact.go splices spans",
+          "cost": "Free",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "specification/taxonomy.md:121-160; schema/verdict.schema.json:44; integrations/gateway/higress/redact.go:84",
+          "in_request_path": true,
+          "ships_own_detector": false
+        },
+        "Security": {
+          "mechanism": [
+            "Keyword/Regex",
+            "Cloud API"
+          ],
+          "functionality": "benchmark-harness KeywordBaseline 23-term list + 6 ConfigRules regexes + EGRESS_ALLOW; reference only",
+          "cost": "Free",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "benchmarks/harness/detectors.py:30-73; benchmarks/suites/security/*.jsonl (55 cases)",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Explainability & Transparency": {
+          "mechanism": [
+            "Module",
+            "Cloud API"
+          ],
+          "functionality": "verdict.schema.json findings path/start/end/score/detector; tailhold.go holds stream tail for one verdict",
+          "cost": "Free",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "schema/verdict.schema.json:33-141; integrations/gateway/higress/tailhold.go:27-35",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Profanity / Content Safety": {
+          "mechanism": [
+            "Cloud API"
+          ],
+          "functionality": "taxonomy safety.* 11-category table only; no profanity or slur wordlist ships in this repo",
+          "cost": "Free",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "specification/taxonomy.md:10-26 and :182-202; repo-wide grep for profanity/slur/wordlist hits only taxonomy.md:189",
+          "in_request_path": true,
+          "ships_own_detector": false
+        },
+        "Accountability": {
+          "mechanism": [
+            "Module",
+            "Statistical"
+          ],
+          "functionality": "guard-event + verdict JSON Schemas, fail_mode open|closed + unjudged, composition strategies, F1 leaderboard",
+          "cost": "Free",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "schema/guard-event.schema.json ($id .../schema/0.8/); verdict.schema.json:135-141 unjudged; specification/composition.md:15-51",
+          "in_request_path": true,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "Spec repo. CORRECTION to prior framing: it DOES ship offline reference regex/keyword detectors (benchmarks/harness/detectors.py). Zero ML deps. Protocol v0.8 - pre-1.0 and breaking, confirming the pin-the-version action."
+    },
+    {
+      "repo": "promptfoo-main",
+      "tenets": {
+        "Privacy": {
+          "mechanism": [
+            "Attack generator",
+            "LLM-judge"
+          ],
+          "functionality": "PII plugins (pii:direct/api-db/session/social) generate probes; PiiGrader LLM rubric judges disclosure",
+          "cost": "Free + optional paid",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "redteam/constants/plugins.ts:231 PII_PLUGINS; redteam/plugins/pii.ts:15",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Security": {
+          "mechanism": [
+            "Attack generator",
+            "LLM-judge"
+          ],
+          "functionality": "30+ jailbreak/encoding strategies (GCG, Crescendo, GOAT, base64/ROT13/morse) + per-plugin LLM rubric graders",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "redteam/constants/strategies.ts:200 STRATEGIES_REQUIRING_REMOTE; redteam/strategies/gcg.ts:54",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Fairness & Bias": {
+          "mechanism": [
+            "LLM-judge",
+            "Attack generator"
+          ],
+          "functionality": "bias:age/disability/gender/race probes - REMOTE-generated only - graded by BiasGrader stereotyping rubric",
+          "cost": "Free + optional paid",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "redteam/constants/plugins.ts:233 BIAS_PLUGINS, :578 UI_DISABLED_WHEN_REMOTE_UNAVAILABLE",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Explainability & Transparency": {
+          "mechanism": [
+            "LLM-judge",
+            "Keyword/Regex"
+          ],
+          "functionality": "llm-rubric / g-eval / model-graded-closedqa judges return reasons; regex, is-json, word-count validators",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "types/index.ts:601-668 (76 assertion types); assertions/geval.ts:1; matchers/llmGrading.ts:204 doRemoteGrading",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Profanity / Content Safety": {
+          "mechanism": [
+            "Cloud API",
+            "Attack generator"
+          ],
+          "functionality": "moderation assert to openai / azure text-content-safety / replicate llama-guard-4-12b; 26 harmful:* categories",
+          "cost": "Free + optional paid",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "redteam/constants/plugins.ts:20 LLAMA_GUARD_REPLICATE_PROVIDER; providers/azure/moderation.ts:19",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Hallucination / Reliability": {
+          "mechanism": [
+            "LLM-judge",
+            "Statistical"
+          ],
+          "functionality": "context-faithfulness/recall/relevance + answer-relevance judges; rouge-n, bleu, meteor, levenshtein",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "assertions/contextFaithfulness.ts:1; assertions/rouge.ts:1 (js-rouge); redteam/plugins/hallucination.ts:65",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Accountability": {
+          "mechanism": [
+            "Module",
+            "Statistical"
+          ],
+          "functionality": "OTel spans + 6 framework maps (OWASP LLM, NIST RMF, ATLAS, EU AI Act, ISO 42001, GDPR), junit.xml, pass-rate gate",
+          "cost": "Free",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "redteam/constants/frameworks.ts:74,396,499,674,782,841; node/doEval.ts:1204 PROMPTFOO_PASS_RATE_THRESHOLD",
+          "in_request_path": false,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "v0.122.0 MIT. CONFIRMS the data-residency concern: harmful:*, bias:* and ~40 REMOTE_ONLY_PLUGIN_IDS require api.promptfoo.app, and llm-rubric grading also defaults remote. Richest compliance mapping of the whole set (6 frameworks incl. ISO 42001 + GDPR)."
+    },
+    {
+      "repo": "rebuff-main",
+      "tenets": {
+        "Privacy": {
+          "mechanism": [
+            "Keyword/Regex"
+          ],
+          "functionality": "Canary word (secrets.token_hex) hidden in prompt as an HTML comment; substring check on the completion",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "python-sdk/rebuff/sdk.py:129 generate_canary_word, :141-178 add_canary_word, :199 leak check",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Security": {
+          "mechanism": [
+            "Keyword/Regex",
+            "LLM-judge"
+          ],
+          "functionality": "L1 free heuristic (11x8x20x5 generated keywords, SequenceMatcher) then paid gpt-3.5 judge + pinecone top-20",
+          "cost": "Needs paid API",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "detect_pi_heuristics.py:6 and :147; detect_pi_openai.py:72; detect_pi_vectorbase.py:26 top_k=20; thresholds sdk.py:52-57",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Explainability & Transparency": {
+          "mechanism": [
+            "Module"
+          ],
+          "functionality": "RebuffDetectionResponse/TacticResult return per-tactic score, threshold, detected flag and checks-run flags",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "python-sdk/rebuff/sdk.py:15-25; javascript-sdk/src/interface.ts:30-45 TacticResult",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Accountability": {
+          "mechanism": [
+            "Module",
+            "Cloud API"
+          ],
+          "functionality": "Tactics run in fixed order, OR-combined; log_leakage writes the confirmed attack back into the vector corpus",
+          "cost": "Needs paid API",
+          "locality": "Remote",
+          "target": "LLM text",
+          "evidence": "javascript-sdk/src/sdk.ts:59-68 strategy order; python-sdk/rebuff/sdk.py:205-221 log_leakage -> vector_store.add_texts",
+          "in_request_path": true,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "Only the L1 heuristic layer is genuinely free and local. JS SDK can swap Pinecone for self-hosted Chroma, but embeddings still call OpenAI ada-002. The self-hardening corpus (log_leakage back into the same index) is the part AFNI wants to reimplement."
+    },
+    {
+      "repo": "safe-zone-main",
+      "tenets": {
+        "Privacy": {
+          "mechanism": [
+            "Keyword/Regex",
+            "LLM-judge"
+          ],
+          "functionality": "init.sql regex patterns (EMAIL, US_SSN, CREDIT_CARD, IBAN_TR) + AI_PROMPT LLM judges; no Luhn check",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "init.sql:24-38 (14 PII regexes); init.sql:105 PII_ID_GLOBAL AI_PROMPT; guardrails.go:203",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Security": {
+          "mechanism": [
+            "Keyword/Regex",
+            "LLM-judge"
+          ],
+          "functionality": "PROMPT_INJECTION_SIMPLE/JAILBREAK_DAN regexes + AWS/API-key SECRET regexes; injection AI_PROMPT",
+          "cost": "Free + optional paid",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "init.sql:46-47; init.sql:40-43; init.sql:104 via ai.CheckWithAI (client.go:15)",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Explainability & Transparency": {
+          "mechanism": [
+            "Module",
+            "Keyword/Regex"
+          ],
+          "functionality": "ConfidenceExplanation JSON (regex_score, ai_score, final_score) + gojsonschema SCHEMA/REGEX validators",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "internal/models/confidence_explanation.go:4-22; internal/guardrails/validators.go:56-80",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Hallucination / Reliability": {
+          "mechanism": [
+            "Module"
+          ],
+          "functionality": "JSON/XML/JSON-Schema structural checks only; no auto-repair and no re-ask path exists in the code",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "LLM text",
+          "evidence": "internal/guardrails/validators.go:56-80; repo-wide grep for repair|re-ask|on_fail returns zero code hits",
+          "in_request_path": true,
+          "ships_own_detector": true
+        },
+        "Accountability": {
+          "mechanism": [
+            "Module"
+          ],
+          "functionality": "SecurityEvent POSTed to SIEM_WEBHOOK_URL, [AUDIT] log line, 50-event ring buffer, per-route rate limits",
+          "cost": "Free",
+          "locality": "Local + remote option",
+          "target": "LLM text",
+          "evidence": "internal/guardrails/siem.go:16-30; main.go:171; internal/metrics/store.go maxEvents=50",
+          "in_request_path": true,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "Go service. LLM layer defaults to LOCAL Ollama (llama3, config.go:104-106) so paid API is optional. No Luhn/checksum in code. Per-pattern thresholds are stored and API-exposed (admin.go:66) but never read by Detect - env globals only."
+    },
+    {
+      "repo": "shap-master",
+      "tenets": {
+        "Fairness & Bias": {
+          "mechanism": [
+            "Statistical"
+          ],
+          "functionality": "shap.plots.group_difference: bootstrapped mean-SHAP gap between two cohorts, decomposes group metrics",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "Classical ML",
+          "evidence": "plots/_group_difference.py:7 group_difference(); :38-44 200 bootstrap resamples for CI",
+          "in_request_path": false,
+          "ships_own_detector": true
+        },
+        "Explainability & Transparency": {
+          "mechanism": [
+            "Statistical"
+          ],
+          "functionality": "Explainer auto-picks Tree/Linear (exact) or Kernel/Deep/Permutation (approx); Text masker token attribution",
+          "cost": "Free",
+          "locality": "Local",
+          "target": "Both",
+          "evidence": "explainers/_explainer.py:185-212 auto-dispatch; _tree.py:144 exact; _kernel.py:404 nsamples=2*M+2**11 (cost = samples x features)",
+          "in_request_path": false,
+          "ships_own_detector": true
+        }
+      },
+      "notes": "Pure local library, no paid API, no hardcoded model ids (user supplies the model). Kernel/Deep cost scales samples x features - that is the concrete reason it cannot run synchronously. Tree/Linear are fast. Also ships a GPUTreeExplainer."
+    }
+  ]
+}

@@ -369,6 +369,13 @@ def add_synthesis_slides(prs, synthesis, slide_divider_fn, finish_slide_fn, next
     from build_deck_matrix import add_all_capability_matrices
     add_all_capability_matrices(prs, finish_slide_fn)
 
+    slide_divider_fn(prs, "Section", "How Each Tool Actually Works",
+                      "Per tenet: every contributing repository, the mechanism behind its check - module, "
+                      "keyword, classifier, NLI, LLM judge or cloud API - its cost and latency class, and "
+                      "where it belongs in AFNI's free-first cascade.")
+    from build_deck_methodology import add_all_methodology_slides
+    add_all_methodology_slides(prs, finish_slide_fn)
+
     slide_divider_fn(prs, "Section", "Feasibility & Unified Architecture",
                       "Which tools to adopt, how they fit together, and the phased plan to get there.")
     add_dev_vs_testing_slide(prs, synthesis["dev_vs_testing_split"], finish_slide_fn)

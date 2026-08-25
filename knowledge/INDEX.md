@@ -28,6 +28,7 @@ files; nothing indexes a PowerPoint.
 | [decisions.md](decisions.md) | the locked architecture calls and the two non-negotiable rules |
 | [frameworks.md](frameworks.md) | the 23 tools: verdict, role, tier, cost, licence, where the source is |
 | [tenets.md](tenets.md) | per-tenet runtime stack, open-source vs cloud pick, and the principle |
+| [methodology.md](methodology.md) | per tenet, HOW each tool implements its check - mechanism, cost, latency class, cascade stage |
 | [infosys-vs-nemo.md](infosys-vs-nemo.md) | why NeMo is the backbone and what to carry over from Infosys |
 | [request-flow.md](request-flow.md) | the live request path and the four mitigation branches |
 | [dev-vs-test-loop.md](dev-vs-test-loop.md) | the offline red-team/CI loop and its four hand-offs |
@@ -41,6 +42,7 @@ files; nothing indexes a PowerPoint.
 | `data/RAI_Repo_Reports.json` | 23 source-level deep-dive reports (features, limits, prerequisites, fit) |
 | `data/RAI_Synthesis.json` | 142-item master checklist, tenet matrix, feasibility, architecture, roadmap |
 | `data/capability_matrix_data.json` | 7 tenets × up to 22 tools, capability-by-capability |
+| `data/tenet_methodology_facts.json` | per-repo mechanism facts with `file:line` / model-id evidence |
 | `helpers/repo_slide_content.py` | plain-English per-tool copy (`REPO_SLIDES`), incl. build-vs-buy |
 | `Responsible_AI_Framework_Brief_for_PPT.md` | the original client brief and meeting transcript |
 | `AFNI_Responsible_AI_Framework.pptx` | the client deliverable — rendered output, not a source of truth |
