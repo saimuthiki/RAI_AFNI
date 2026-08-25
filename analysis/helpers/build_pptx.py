@@ -18,7 +18,10 @@ _DATA_DIR = os.path.join(_ROOT, "data")
 
 REPORTS_PATH = os.path.join(_DATA_DIR, "RAI_Repo_Reports.json")
 SYNTHESIS_PATH = os.path.join(_DATA_DIR, "RAI_Synthesis.json")
-OUT_PATH = os.path.join(_ROOT, "AFNI_Responsible_AI_Framework.pptx")
+# The deck is a client deliverable, so it lands in deliverables/ at the repo
+# root rather than beside the pipeline that builds it.
+_DELIVERABLES = os.path.join(os.path.dirname(_ROOT), "deliverables")
+OUT_PATH = os.path.join(_DELIVERABLES, "AFNI_Responsible_AI_Framework.pptx")
 
 # ---------------------------------------------------------------- THEME ----
 NAVY = RGBColor(0x10, 0x24, 0x3E)

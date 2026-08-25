@@ -5,8 +5,8 @@ import os
 from pptx import Presentation
 from pptx.util import Emu
 
-PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                     "AFNI_Responsible_AI_Framework.pptx")
+PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                     "deliverables", "AFNI_Responsible_AI_Framework.pptx")
 EMU = 914400
 prs = Presentation(PATH)
 
