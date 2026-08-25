@@ -23,7 +23,7 @@ Three things make this filter better than the wordlists it is built from:
 
 2. **Severity and category are data, not opinion.** garak ships the only graded
    list in the whole review -
-   `garak-main/garak/data/ofcom-potentially-offensive.txt`, 149 rows of
+   `garak-main/garak/data/ofcom-potentially-offensive.txt`, 150 rows of
    `category<TAB>term<TAB>strength(0-4)` across six categories. Strength drives
    the tier (block vs flag) and category drives the OpenGuardrails id. A slur
    and a mild expletive are genuinely not the same finding, and here they are
@@ -56,7 +56,7 @@ Sources ported (all under `references/`):
     responsible-ai-safety/responsible-ai-toxicity/src/profanity/service/service.py:80,288
     responsible-ai-safety/responsible-ai-toxicity/lib/better_profanity-2.0.0-py3-none-any.whl
   garak-main
-    garak/data/ofcom-potentially-offensive.txt                             149 graded rows
+    garak/data/ofcom-potentially-offensive.txt                             150 graded rows
     garak/data/ldnoobw-en.txt                                              403 rows
   llm-guard-main
     llm_guard/input_scanners/ban_substrings.py:38-49                       MatchType STR/WORD
@@ -538,6 +538,14 @@ _AMBIGUOUS: dict[str, str] = {
     "fanny": "a given name; 'fanny pack' in US English",
     "gash": "a wound, in any clinical or incident text",
     "prick": "'pin prick', 'needle prick'",
+    # the only BLOCK-tier false positive the 10,784-file measurement found, and
+    # a block is the worst kind to get wrong: garak's own translation tests use
+    # `jap` as a language code (`language: en,jap`,
+    # references/garak-main/docs/source/translation.rst and
+    # tests/langservice/conftest.py). OFCOM grades it a strength-3 ethnic slur
+    # and it is one, but a three-letter token that doubles as a locale code
+    # cannot be a hard block on a config-carrying payload.
+    "jap": "also used as a language/locale code - 'language: en,jap'",
     # OFCOM strength-1 insults kept out of the flag tier as too weak to be
     # worth a finding on their own
     "cretin": "a weak insult; also an obsolete clinical term",
@@ -1212,7 +1220,7 @@ ATTRIBUTIONS: dict[str, RailAttribution] = {
                  "responsible-ai-toxicity/data/wordlist.csv (917 rows) "
                  "INTERSECT garak-main/garak/data/ldnoobw-en.txt (403 rows); "
                  "severity and category from garak-main/garak/data/"
-                 "ofcom-potentially-offensive.txt (149 graded rows); token "
+                 "ofcom-potentially-offensive.txt (150 graded rows); token "
                  "alphabet and CHARS_MAPPING from better_profanity-2.0.0-py3-"
                  "none-any.whl better_profanity/better_profanity.py:33-43 and "
                  "constants.py:9-12, as loaded by responsible-ai-safety/"
