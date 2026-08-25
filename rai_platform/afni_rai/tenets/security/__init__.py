@@ -985,6 +985,7 @@ class InsecureOutputRail:
 # Stage 2 - local classifier
 # --------------------------------------------------------------------------
 class DebertaInjectionRail:
+    THRESHOLD_KEY = "security.prompt_injection.classifier"
     """Stage 2. LLM Guard's prompt-injection classifier.
 
     Model id and revision are LLM Guard's, not ours
@@ -1022,7 +1023,13 @@ class DebertaInjectionRail:
             return None
         return self._pipeline
 
-    def check(self, path: str, text: str) -> RailResult:
+    def check(self, path: str, text: str,
+              ctx: CheckContext | None = None) -> RailResult:
+        # Per-tenant threshold, falling back to the ported default when no
+        # store is wired. THRESHOLD_KEY is resolved once per call, not per
+        # finding, so the read log carries one entry per check.
+        threshold = (ctx.threshold(self.THRESHOLD_KEY, self.threshold)
+                     if ctx is not None else self.threshold)
         pipe = self._load()
         if pipe is None:
             return RailResult.unjudged(self._unavailable or "classifier unavailable")
@@ -1033,7 +1040,7 @@ class DebertaInjectionRail:
         top = scores[0] if isinstance(scores, list) else scores
         label = str(top.get("label", "")).upper()
         score = float(top.get("score", 0.0))
-        if label != "INJECTION" or score < self.threshold:
+        if label != "INJECTION" or score < threshold:
             return RailResult.clean()
         return RailResult(
             findings=[Finding(

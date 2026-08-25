@@ -67,6 +67,7 @@ from dataclasses import dataclass, field
 from typing import Iterable, Iterator
 
 from ...cascade.rail import RailResult, Stage
+from ...cascade.rail import CheckContext
 from ...contract.explanation import RailAttribution
 from ...contract.models import Action, Finding, Severity, Tenet
 from .thresholds import ThresholdMisconfigured, ThresholdStore
@@ -320,24 +321,32 @@ class AttackCorpusRail:
         self.tenant = tenant
 
     def for_tenant(self, tenant: str | None) -> "AttackCorpusRail":
-        """A rail bound to one account, sharing the corpus and the store.
+        """A rail pre-bound to one account, sharing the corpus and the store.
 
-        The `Rail` protocol's `check(path, text)` carries no tenant, so the
-        gateway binds a per-tenant view at the start of a request. Cheap - it
-        copies three references.
+        Retained for a single-tenant deployment and for tests. It is no longer
+        how the gateway does it: `check` now takes the tenant from the request
+        context, because a rail whose tenant is fixed at construction applies one
+        account's threshold to every account's traffic once it is mounted in a
+        shared cascade. `ctx.tenant` wins over this when a context is passed.
         """
         return AttackCorpusRail(self.corpus, self.thresholds, tenant, self.name)
 
-    def check(self, path: str, text: str) -> RailResult:
+    def check(self, path: str, text: str,
+              ctx: "CheckContext | None" = None) -> RailResult:
         if not text or not self.corpus:
             # Nothing confirmed yet is a genuine clean, not an inability to look:
             # an empty corpus means no attack has ever been confirmed.
             return RailResult.clean()
 
+        # The request's tenant, not the one this instance happened to be built
+        # with. A mounted rail serves every account.
+        tenant = ctx.tenant if ctx is not None else self.tenant
         try:
-            read = self.thresholds.resolve(self.tenant, SIMILARITY_KEY)
+            read = self.thresholds.resolve(tenant, SIMILARITY_KEY)
         except ThresholdMisconfigured as exc:
             return RailResult.unjudged(f"{self.name}: {exc}")
+        if ctx is not None:
+            ctx.reads.append((SIMILARITY_KEY, read.value, "resolved"))
 
         hit = self.corpus.best_match(text, read.value)
         if hit is None:

@@ -740,6 +740,7 @@ class TopicScopeRail:
 
 
 class RubricJudgeRail:
+    THRESHOLD_KEY = "x.afni.rubric"
     """Stage 3 G-Eval adapter. Degrades to `unjudged`, never to clean."""
 
     name = "afni-rubric-judge"
@@ -757,7 +758,13 @@ class RubricJudgeRail:
     def configured(self) -> bool:
         return bool(self._rubric and self._model)
 
-    def check(self, path: str, text: str) -> RailResult:
+    def check(self, path: str, text: str,
+              ctx: CheckContext | None = None) -> RailResult:
+        # Per-tenant threshold, falling back to the ported default when no
+        # store is wired. THRESHOLD_KEY is resolved once per call, not per
+        # finding, so the read log carries one entry per check.
+        threshold = (ctx.threshold(self.THRESHOLD_KEY, self._threshold)
+                     if ctx is not None else self._threshold)
         if not self._rubric:
             return RailResult.unjudged(
                 f"{self.name}: no G-Eval rubric configured")
@@ -780,7 +787,7 @@ class RubricJudgeRail:
                 "GEval defaults to a paid OpenAI judge, so the model must be explicit")
         try:
             metric = GEval(name=self._rubric_name, criteria=self._rubric,
-                           model=self._model, threshold=self._threshold,
+                           model=self._model, threshold=threshold,
                            evaluation_params=[SingleTurnParams.ACTUAL_OUTPUT])
             metric.measure(LLMTestCase(input="", actual_output=text))
             score = float(metric.score)
@@ -788,13 +795,13 @@ class RubricJudgeRail:
             return RailResult.unjudged(
                 f"{self.name}: G-Eval judge failed - {type(exc).__name__}: {exc}")
 
-        if score >= self._threshold:
+        if score >= threshold:
             return RailResult.clean()
         # `metric.reason` is the judge's written explanation of *this payload* and
         # is deliberately not carried into the finding - it is model-generated
         # prose about the text, which is the one thing a finding must not echo.
         subject = (f"{path} {self._rubric_name}: G-Eval scored {score:.2f}, "
-                   f"below threshold {self._threshold}")
+                   f"below threshold {threshold}")
         return RailResult(
             findings=[Finding(
                 category="x.afni.rubric.violation",

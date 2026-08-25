@@ -877,6 +877,7 @@ def _mildly_sanitise(text: str) -> str:
 
 
 class SystemPromptLeakageRail:
+    THRESHOLD_KEY = "privacy.system_prompt_leakage"
     """Two deterministic halves of one problem.
 
     **Request side** (always on): the 9 extraction-probe patterns from
@@ -940,7 +941,13 @@ class SystemPromptLeakageRail:
             return self.excerpt_score
         return ngram_containment(target, context, self.n)
 
-    def check(self, path: str, text: str) -> RailResult:
+    def check(self, path: str, text: str,
+              ctx: CheckContext | None = None) -> RailResult:
+        # Per-tenant threshold, falling back to the ported default when no
+        # store is wired. THRESHOLD_KEY is resolved once per call, not per
+        # finding, so the read log carries one entry per check.
+        threshold = (ctx.threshold(self.THRESHOLD_KEY, self.threshold)
+                     if ctx is not None else self.threshold)
         if not text:
             return RailResult.clean()
         findings: list[Finding] = []
@@ -964,7 +971,7 @@ class SystemPromptLeakageRail:
 
         if self.system_prompt and self._looks_like_output(path):
             score = self._containment(text)
-            if score >= self.threshold:
+            if score >= threshold:
                 findings.append(Finding(
                     category="x.afni.privacy.system_prompt_leak",
                     severity=Severity.CRITICAL,
@@ -1022,6 +1029,7 @@ PRESIDIO_TO_CATEGORY = {
 
 
 class PresidioPiiRail:
+    THRESHOLD_KEY = "privacy.pii.ner_score"
     """The NER depth layer: the entities regex structurally cannot find.
 
     A checksum finds an SSN. Nothing in Stage 1 finds "the claimant, Margaret
@@ -1074,7 +1082,13 @@ class PresidioPiiRail:
             return None
         return self._analyzer
 
-    def check(self, path: str, text: str) -> RailResult:
+    def check(self, path: str, text: str,
+              ctx: CheckContext | None = None) -> RailResult:
+        # Per-tenant threshold, falling back to the ported default when no
+        # store is wired. THRESHOLD_KEY is resolved once per call, not per
+        # finding, so the read log carries one entry per check.
+        threshold = (ctx.threshold(self.THRESHOLD_KEY, self.score_threshold)
+                     if ctx is not None else self.score_threshold)
         engine = self._engine()
         if engine is None:
             return RailResult.unjudged(self._unavailable or "presidio unavailable")
@@ -1115,6 +1129,7 @@ class PresidioPiiRail:
 # Stage 3 - LLM-judge PII leakage                                              #
 # --------------------------------------------------------------------------- #
 class PiiLeakageJudgeRail:
+    THRESHOLD_KEY = "privacy.pii.leakage_judge"
     """Did the model *disclose* personal data it should not have?
 
     This is a different question from "does this string contain an SSN", and it
@@ -1145,7 +1160,13 @@ class PiiLeakageJudgeRail:
     def dependency_available() -> bool:
         return importlib.util.find_spec("deepteam") is not None
 
-    def check(self, path: str, text: str) -> RailResult:
+    def check(self, path: str, text: str,
+              ctx: CheckContext | None = None) -> RailResult:
+        # Per-tenant threshold, falling back to the ported default when no
+        # store is wired. THRESHOLD_KEY is resolved once per call, not per
+        # finding, so the read log carries one entry per check.
+        threshold = (ctx.threshold(self.THRESHOLD_KEY, self.threshold)
+                     if ctx is not None else self.threshold)
         if self.judge is None:
             return RailResult.unjudged(
                 "no PII-leakage judge configured; DeepTeam PIIMetric "
@@ -1161,7 +1182,7 @@ class PiiLeakageJudgeRail:
         if not 0.0 <= score <= 1.0:
             return RailResult.unjudged(
                 f"PII-leakage judge returned {score!r}, outside [0, 1]")
-        if score < self.threshold:
+        if score < threshold:
             return RailResult.clean()
         return RailResult(findings=[Finding(
             category="privacy.pii",

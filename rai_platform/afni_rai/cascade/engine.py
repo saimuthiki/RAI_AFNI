@@ -26,12 +26,13 @@ borderline traffic instead of on all of it.
 """
 from __future__ import annotations
 
+import inspect
 import time
-from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass, field
 
 from ..contract.models import Action, Decision, Finding, GuardEvent, Severity, Span, Verdict
-from .rail import Rail, RailResult, Stage
+from .rail import CheckContext, Rail, RailResult, Stage
 
 PROVIDER = "afni-rai-gateway"
 
@@ -55,6 +56,10 @@ class StageTrace:
 class CascadeOutcome:
     verdict: Verdict
     trace: list[StageTrace]
+    # (key, value, source) for every threshold consulted this request. The audit
+    # trail has to be able to say WHICH threshold produced a decision - "a
+    # threshold was applied" is not evidence anyone can act on.
+    threshold_reads: list[tuple[str, float, str]] = field(default_factory=list)
 
     @property
     def stages_run(self) -> int:
@@ -108,7 +113,19 @@ def _severe(findings: Iterable[Finding]) -> bool:
 class Cascade:
     """Runs rails stage by stage over every judgeable string in an event."""
 
-    def __init__(self, rails: Sequence[Rail]) -> None:
+    def __init__(self, rails: Sequence[Rail],
+                 resolve_threshold: Callable[[str | None, str], float] | None = None) -> None:
+        """`resolve_threshold(tenant, key) -> float` is the only hook a rail gets
+        into per-tenant configuration. Pass
+        `ThresholdStore(...).resolve_value` to wire the real store; leave it None
+        and every rail falls back to the threshold it was ported with, so an
+        unconfigured gateway behaves exactly as before.
+        """
+        self._resolve = resolve_threshold
+        # Which rails take a CheckContext is decided ONCE, here. Doing it per
+        # request would mean an inspect.signature call per rail per payload
+        # string, on the hot path, to answer a question that cannot change.
+        self._wants_ctx: dict[str, bool] = {}
         # Grouped once at construction; the request path does no sorting.
         self._by_stage: dict[Stage, list[Rail]] = {}
         for rail in rails:
@@ -122,6 +139,26 @@ class Cascade:
                     "request cascade; register it with the CI tier instead"
                 )
             self._by_stage.setdefault(rail.stage, []).append(rail)
+            self._wants_ctx[rail.name] = self._accepts_context(rail)
+
+    @staticmethod
+    def _accepts_context(rail: Rail) -> bool:
+        """True when `rail.check` takes a third parameter for the context.
+
+        Signature inspection rather than an isinstance check, because Rail is a
+        structural Protocol - an adapter should not have to import from us just
+        to be usable, and that property is worth keeping.
+        """
+        try:
+            params = list(inspect.signature(rail.check).parameters.values())
+        except (TypeError, ValueError):  # C extension, or an exotic callable
+            return False
+        positional = [p for p in params
+                      if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
+        if len(positional) >= 3:
+            return True
+        return any(p.name in ("ctx", "context") for p in params
+                   if p.kind is p.KEYWORD_ONLY)
 
     @property
     def rails(self) -> list[Rail]:
@@ -129,6 +166,10 @@ class Cascade:
 
     def evaluate(self, event: GuardEvent) -> CascadeOutcome:
         texts = event.texts()
+        ctx = CheckContext(
+            tenant=event.tenant, portfolio=event.project,
+            client_facing=event.client_facing, resolve=self._resolve,
+        )
         findings: list[Finding] = []
         modifications: list[Span] = []
         unjudged: set[str] = set()
@@ -158,7 +199,8 @@ class Cascade:
             for rail in self._by_stage[stage]:
                 ran.append(rail.name)
                 for path, text in texts.items():
-                    result = self._run(rail, path, text)
+                    result = self._run(rail, path, text,
+                                       ctx if self._wants_ctx.get(rail.name) else None)
                     if not result.judged:
                         unjudged.add(path)
                         stage_unjudged.append(path)
@@ -200,15 +242,17 @@ class Cascade:
             modifications=modifications,
             unjudged=sorted(unjudged),
         )
-        return CascadeOutcome(verdict=verdict, trace=trace)
+        return CascadeOutcome(verdict=verdict, trace=trace,
+                              threshold_reads=list(ctx.reads))
 
     @staticmethod
-    def _run(rail: Rail, path: str, text: str) -> RailResult:
+    def _run(rail: Rail, path: str, text: str,
+             ctx: CheckContext | None = None) -> RailResult:
         """Backstop only. A rail that knows it failed should return
         `RailResult.unjudged(...)`; this catches the ones that don't and turns a
         crash into an explicit "could not judge" rather than a dropped check."""
         try:
-            return rail.check(path, text)
+            return rail.check(path, text, ctx) if ctx is not None else rail.check(path, text)
         except Exception as exc:  # noqa: BLE001 - deliberate: any failure is unjudged
             return RailResult.unjudged(f"{rail.name} raised {type(exc).__name__}: {exc}")
 

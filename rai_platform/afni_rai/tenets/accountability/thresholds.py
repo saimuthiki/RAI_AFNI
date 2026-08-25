@@ -67,6 +67,39 @@ GLOBAL_DEFAULTS: dict[str, float] = {
     "x.afni.confidence.block": 0.85,
 }
 
+
+# --- Rail thresholds, keyed by MECHANISM as well as by what is judged --------
+# Scores from different mechanisms are not on one scale: a DeBERTa probability, a
+# zero-shot NLI entailment score and an LLM judge's self-report mean different
+# things, which is why `CONFIDENCE_KINDS` exists in the contract. Collapsing them
+# onto one "toxicity" knob would let an operator tighten a classifier and
+# unknowingly loosen a judge.
+#
+# Every value here is the default the rail was PORTED WITH, cited below, so
+# wiring the store changed no detection behaviour. Overriding is a deliberate act.
+RAIL_DEFAULTS: Mapping[str, float] = {
+    # llm-guard input_scanners/toxicity.py (MATCH_TYPE threshold arg default)
+    "safety.toxicity.classifier": 0.5,
+    # hai-guardrails src/guards/profanity.guard.ts:21-27 / toxic.guard.ts
+    "safety.toxicity.judge": 0.8,
+    # llm-guard input_scanners/ban_topics.py:104
+    "safety.topic_violation.zeroshot": 0.6,
+    # llm-guard input_scanners/prompt_injection.py (as mounted here)
+    "security.prompt_injection.classifier": 0.9,
+    # llm-guard anonymize_helpers default_score_threshold
+    "privacy.pii.ner_score": 0.5,
+    # deepteam metrics/pii/pii.py
+    "privacy.pii.leakage_judge": 0.5,
+    # garak resources/matching.py n-gram containment, as mounted here
+    "privacy.system_prompt_leakage": 0.6,
+    # llm-guard output_scanners/bias.py:15
+    "x.afni.bias.classifier": 0.7,
+    # hai-guardrails src/guards/bias-detection.guard.ts:74-103
+    "x.afni.bias.judge": 0.7,
+    # deepeval G-Eval, as mounted here
+    "x.afni.rubric": 0.5,
+}
+
 # Safe Zone thresholds.go:23 - the fallback used when no key matches at all.
 LAST_RESORT_THRESHOLD = 0.85
 
@@ -177,8 +210,10 @@ class ThresholdStore:
 
     def __init__(self, defaults: Mapping[str, float] | None = None,
                  last_resort: float = LAST_RESORT_THRESHOLD) -> None:
-        self._defaults: dict[str, float] = dict(
-            GLOBAL_DEFAULTS if defaults is None else defaults)
+        # RAIL_DEFAULTS first so an explicit GLOBAL_DEFAULTS entry wins on a
+        # key collision; both are overridable by portfolio and tenant above.
+        self._defaults: dict[str, float] = dict(RAIL_DEFAULTS)
+        self._defaults.update(GLOBAL_DEFAULTS if defaults is None else defaults)
         self._last_resort = float(last_resort)
         self._tenants: dict[str, TenantConfig] = {}
         self._portfolios: dict[str, TenantConfig] = {}
@@ -273,6 +308,38 @@ class ThresholdStore:
             return (self._defaults[pattern], ThresholdScope.GLOBAL,
                     f"global-default:{pattern}")
         return self._last_resort, ThresholdScope.LAST_RESORT, "last-resort"
+
+    def resolve_value(self, tenant: str | None, key: str) -> float | None:
+        """The callable the cascade injects into `CheckContext.resolve`.
+
+        Returns the resolved score, or **None** when the stored value is
+        unusable, so the rail falls back to the threshold it was ported with.
+
+        That is a deliberate softening of `resolve()`'s contract, and worth
+        stating rather than burying. `resolve()` argues a bad config must become
+        `unjudged`, never a default, because silently substituting a number turns
+        a tuned threshold into a lie. The argument is right about the lie and
+        wrong about the remedy at this particular seam: `unjudged` fails closed
+        on client-facing traffic, so a single typo in one tenant's config would
+        take that tenant's production traffic down.
+
+        So the fallback happens, and is made loud in two places instead of one:
+        the store's own read log records the attempted read of the broken value
+        (it logs before validating, on purpose), and `CheckContext.reads` records
+        the source as `rail-default-after-resolver-error`, which lands in
+        `CascadeOutcome.threshold_reads` and from there in the audit record. An
+        operator sees that their value did not take effect; traffic keeps
+        flowing. `audit()` is the surface that should page someone.
+
+        `ThresholdMisconfigured` is deliberately NOT caught here. Swallowing it
+        into a None would make a rejected value indistinguishable from a value
+        nobody ever set - both would land in the read log as plain
+        "rail-default", so an operator who typed 42.0 would see exactly what one
+        who configured nothing sees. `CheckContext.threshold` catches it and
+        labels the read `rail-default-after-resolver-error`, which keeps the two
+        cases tellable apart in the audit trail.
+        """
+        return self.resolve(tenant, key).value
 
     def check_enabled(self, tenant: str | None, check: str) -> bool:
         """Infosys FMConfigRequest.ModerationChecks. An account with no declared
