@@ -61,7 +61,7 @@ the gateway is useful the minute you clone it.
 ```bash
 git clone <this repo> && cd RAI_AFNI
 
-# 1. Does it work at all? 726 tests, no third-party dependencies needed.
+# 1. Does it work at all? 727 tests, no third-party dependencies needed.
 python3 rai_platform/run_tests.py
 
 # 2. Judge one string.
@@ -88,13 +88,55 @@ python3 rai_platform/serve.py
 | <http://127.0.0.1:8000/docs> | Swagger UI, with a worked sample payload per tenet |
 | <http://127.0.0.1:8000/healthz> | liveness, rail count, and which judge providers are configured |
 
-Optional, and only if you want the Stage-2 tier to actually run rather than
-report `unjudged`:
+### Optional: turning the Stage-2 tier on
+
+Without these, the seven Stage-2 rails report `unjudged`, which fails closed on
+client-facing traffic. Install them in two independent halves, because they
+behave differently and the second one may not be available to you at all.
+
+**Presidio — one command, and it works.** This is the one worth doing first: it
+is the rail that causes the fail-closed block in the flagship SSN example above.
 
 ```bash
-python3 -m pip install transformers torch presidio-analyzer
-python3 -m spacy download en_core_web_lg
+python3 -m pip install presidio-analyzer
+python3 -m spacy download en_core_web_lg     # NOT a pinned URL - see below
 ```
+
+Verified working: `privacy.presidio_ner` goes from `unjudged` to judging, and
+catches what no regex can — `"the caller is Jane Doe"` returns
+`privacy.pii.person_name` at `0.85 (classifier)`. Note the first check after
+start-up costs ~3.5 s while the spaCy model loads; that is a warm-up cost, not
+per-request.
+
+Use `spacy download`, not a release URL. The model's version must match the
+installed spaCy — an `en_core_web_lg-3.7.1` wheel against spaCy 3.8 installs
+without error and then fails to load. `download` resolves the pairing for you.
+
+**transformers / torch — install only if you can reach the weights.**
+
+```bash
+python3 -m pip install transformers torch
+```
+
+The libraries come from PyPI; the *model weights* come from `huggingface.co` on
+first use. In a network-restricted environment that host is often blocked while
+PyPI is not, and in that case this install changes nothing about your coverage —
+the four affected rails go from reporting `transformers not installed` to
+reporting `weights not in the local cache`, both of which are `unjudged`. Check
+before you spend the ~2.5 GB:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://huggingface.co/   # want 200, not 000
+```
+
+If it is blocked, pre-populate the HuggingFace cache from a machine that can
+reach it, copy it across, and set `HF_HUB_OFFLINE=1` so a rail can never reach
+for the network mid-request.
+
+The four rails needing this: `security.injection.deberta_v3_v2`,
+`llm_guard.bias`, `content_safety.toxicity_model`, `groundedness-nli`.
+`content_safety.zeroshot_topics` and `structured-output-schema` judge without
+either install.
 
 ---
 
@@ -185,7 +227,7 @@ RAI_AFNI/
 | `afni_rai/gateway/` | The FastAPI app, request/response models, and the judge-provider fallback chain. The only place an outbound vendor call is made. |
 | `afni_rai/cli.py` | `check`, `coverage`, `rails`. The fastest way to see the gateway decide something. |
 | `web/` | The operator UI — vanilla ES modules, no build step, no CDN. `views/live.js` consumes the SSE stream. |
-| `tests/` | 726 tests, standard-library `unittest` only. |
+| `tests/` | 727 tests, standard-library `unittest` only. |
 | `docs/` | `02-cascade.md` — the cascade in depth, with the source evidence behind each rule. |
 | `samples/` | Sample payloads per tenet, wired into Swagger as examples. |
 
@@ -599,7 +641,7 @@ than claimed.
 python3 rai_platform/run_tests.py
 ```
 
-726 tests, no third-party packages required. If this passes, Stage 1 works.
+727 tests, no third-party packages required. If this passes, Stage 1 works.
 
 ### Step 2 · Judge one string from the command line
 
@@ -901,7 +943,7 @@ python3 rai_platform/run_tests.py                    # everything
 python3 -m unittest tests.test_privacy -v            # one tenet, from rai_platform/
 ```
 
-726 tests, standard-library `unittest` only. What they cover, and why in this
+727 tests, standard-library `unittest` only. What they cover, and why in this
 shape:
 
 - **Contract conformance** — the Python binding validated against the real
@@ -921,6 +963,14 @@ shape:
   storm waiting for production traffic.
 - **Dependency-absent paths** — a rail whose library is missing must return
   `unjudged`, never a pass.
+- **Environment-independence** — a test must not pass or fail on whether an
+  optional package happens to be installed. Three did: two asserted the SSN
+  block that only occurs when Presidio is *absent*, and two checked
+  `sys.modules` in-process, which measures the whole test run rather than one
+  import and so depended on module order. The suite was green on a bare
+  container and red on a machine provisioned exactly as this README instructs —
+  the wrong way round. The cascade tests now use an explicit stage-2 stand-in and
+  assert both outcomes, and the import checks run in a subprocess.
 
 ---
 
