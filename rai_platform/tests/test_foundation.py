@@ -228,3 +228,40 @@ class TestCascade(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestCascadeReporting(unittest.TestCase):
+    """Two bugs that only surfaced when the cascade was run end-to-end with real
+    rails, not in the unit tests above. Both are regressions worth pinning."""
+
+    def test_stages_run_counts_executed_stages_not_trace_entries(self):
+        # A clean request must not report "3 stages" just because the trace
+        # records the two it skipped. Counting skipped stages as run inverts the
+        # entire cost argument in the operator-facing output.
+        s1 = FakeRail("regex", Stage.STAGE_1, RailResult.clean())
+        s2 = FakeRail("classifier", Stage.STAGE_2, RailResult.clean())
+        s3 = FakeRail("judge", Stage.STAGE_3, RailResult.clean())
+        out = Cascade([s1, s2, s3]).evaluate(event())
+        self.assertEqual(out.stages_run, 1, "skipped stages counted as run")
+        self.assertEqual(out.stages_skipped, 2)
+        self.assertEqual(len(out.trace), 3, "the trace should still record all three")
+
+    def test_identical_findings_from_one_detector_are_deduped(self):
+        # A rail with several patterns for one attack shape matches the same span
+        # twice. The duplicate would inflate the count, appear twice in the
+        # explanation, and double-count in the compliance rollup.
+        dup = Finding(category="security.injection", path="payload.text",
+                      start=0, end=10, detector="pyrit/static", action=Action.FLAG)
+        rail = FakeRail("pyrit", Stage.STAGE_1, RailResult(findings=[dup, dup]))
+        out = Cascade([rail]).evaluate(event())
+        self.assertEqual(len(out.verdict.findings), 1)
+
+    def test_two_different_detectors_on_one_span_are_kept_as_corroboration(self):
+        a = Finding(category="security.injection", path="payload.text", start=0,
+                    end=10, detector="pyrit/static", action=Action.FLAG)
+        b = Finding(category="security.injection", path="payload.text", start=0,
+                    end=10, detector="llm-guard/deberta", action=Action.FLAG)
+        rail = FakeRail("both", Stage.STAGE_1, RailResult(findings=[a, b]))
+        out = Cascade([rail]).evaluate(event())
+        self.assertEqual(len(out.verdict.findings), 2,
+                         "independent detectors agreeing is signal, not noise")
