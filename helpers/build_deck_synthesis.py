@@ -2,16 +2,14 @@
 """Synthesis-driven slides: master checklist, tenet recommendations, dev vs
 testing split, feasibility matrix, unified architecture, roadmap, closing."""
 import textwrap
-from pptx.util import Inches, Pt
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
-from pptx.enum.shapes import MSO_SHAPE
 
 from build_pptx import (
     blank_slide, add_rect, add_rounded, add_text, add_bullets,
-    add_header, pill, badge, add_table,
-    NAVY, TEAL, BG_LIGHT, CARD_BG, WHITE, TEXT_DARK, TEXT_MUTED,
+    add_header, add_table,
+    NAVY, TEAL, WHITE, TEXT_DARK, TEXT_MUTED,
     TEXT_SOFT_ON_NAVY, AMBER, GREEN, RED_SOFT, LINE_GREY, TENET_COLORS,
-    TENET_ORDER, ROLE_COLORS, FONT_HEAD, FONT_BODY, SLIDE_W_IN, SLIDE_H_IN,
+    TENET_ORDER, FONT_HEAD, FONT_BODY, SLIDE_W_IN, SLIDE_H_IN,
 )
 
 SHORT_NAME = {
@@ -91,88 +89,6 @@ def add_all_checklists(prs, master_aspect_list, finish_slide_fn):
         items = by_tenet.get(tenet, [])
         if items:
             add_checklist_slide(prs, tenet, items, None, finish_slide_fn)
-
-
-# ------------------------------------------------ TENET RECOMMENDATION ----
-def add_tenet_recommendation_slide(prs, entry, finish_slide_fn):
-    tenet = entry["tenet"]
-    color = TENET_COLORS[tenet]
-    slide = blank_slide(prs)
-    add_header(slide, "Tenet Recommendation", tenet, accent=color)
-
-    full_x, full_w = 0.55, 12.1
-    left_x, left_w = 0.55, 5.85
-    right_x, right_w = 6.55, 6.1
-
-    # Row A: open-source pills (left) + cloud/paid bullets (right)
-    row_a_y = 1.45
-    add_text(slide, left_x, row_a_y, left_w, 0.22, "OPEN-SOURCE OPTIONS (of the 23 reviewed)", size=9.5,
-              color=TEAL, bold=True, font=FONT_HEAD)
-    os_repos = entry["open_source_repos"]
-    shown = os_repos[:10]
-    extra = len(os_repos) - len(shown)
-    x, y, row_h = left_x, row_a_y + 0.26, 0.28
-    max_x = left_x + left_w
-    max_rows = 2
-    row_idx = 0
-    for repo in shown:
-        label = short(repo)
-        w = 0.14 + 0.062 * len(label) + 0.12
-        if x + w > max_x:
-            x = left_x
-            row_idx += 1
-            y += row_h
-            if row_idx >= max_rows:
-                break
-        pill(slide, x, y, label, color, w=w, size=8.2)
-        x += w + 0.07
-    if extra > 0:
-        add_text(slide, left_x, y + row_h + 0.02, left_w, 0.2, f"+ {extra} more", size=8.5,
-                  color=TEXT_MUTED, italic=True, font=FONT_BODY)
-
-    add_text(slide, right_x, row_a_y, right_w, 0.22, "CLOUD / PAID OPTIONS", size=9.5, color=NAVY,
-              bold=True, font=FONT_HEAD)
-    cloud_items = [_truncate(c, 92) for c in entry["cloud_paid_options"][:5]]
-    add_bullets(slide, right_x, row_a_y + 0.26, right_w, 0.95, cloud_items, size=8.8, bullet_color=NAVY,
-                space_after=2, line_spacing=0.98)
-
-    # Row B: recommended combination badges
-    row_b_y = row_a_y + 1.22
-    add_text(slide, full_x, row_b_y, 3.0, 0.24, "AFNI RECOMMENDATION:", size=10, color=GREEN, bold=True,
-              font=FONT_HEAD)
-    xb = full_x + 2.35
-    for repo in entry["recommended_combination"]:
-        label = short(repo)
-        w = 0.18 + 0.082 * len(label) + 0.14
-        badge(slide, xb, row_b_y - 0.03, label, GREEN, w=w, h=0.32, size=10)
-        xb += w + 0.1
-
-    # Row C: rationale, full width
-    row_c_y = row_b_y + 0.44
-    add_text(slide, full_x, row_c_y, full_w, 0.2, "WHY THIS COMBINATION", size=9.5, color=TEXT_MUTED,
-              bold=True, font=FONT_HEAD)
-    rationale_h = 2.95
-    add_text(slide, full_x, row_c_y + 0.24, full_w, rationale_h, entry["combination_rationale"],
-              size=10.3, color=TEXT_DARK, font=FONT_BODY, line_spacing=1.08)
-
-    # Row D: prior experience, full width
-    prior = entry.get("afni_prior_experience_note", "")
-    if prior:
-        row_d_y = row_c_y + 0.24 + rationale_h + 0.08
-        row_d_h = max(0.5, 7.08 - row_d_y)
-        add_rounded(slide, full_x, row_d_y, full_w, row_d_h, NAVY, radius=0.04)
-        add_text(slide, full_x + 0.15, row_d_y + 0.06, 2.6, row_d_h - 0.1, "SAI'S PRIOR EXPERIENCE",
-                  size=8.7, color=TEAL, bold=True, font=FONT_HEAD, line_spacing=1.0)
-        add_text(slide, full_x + 2.85, row_d_y + 0.06, full_w - 3.0, row_d_h - 0.1,
-                  _truncate(prior, 430), size=8.9, color=WHITE, font=FONT_BODY, line_spacing=1.05)
-
-    notes = slide.notes_slide
-    notes.notes_text_frame.text = (
-        f"Full cloud/paid options:\n" + "\n".join(f"- {c}" for c in entry["cloud_paid_options"])
-        + f"\n\nFull prior-experience note:\n{prior}"
-    )
-
-    finish_slide_fn(slide, f"Recommendation - {tenet}")
 
 
 # ------------------------------------------------------- DEV VS TESTING ----
@@ -353,14 +269,12 @@ def add_synthesis_slides(prs, synthesis, slide_divider_fn, finish_slide_fn, next
     add_all_checklists(prs, synthesis["master_aspect_list"], finish_slide_fn)
 
     slide_divider_fn(prs, "Section", "Tenet-by-Tenet Recommendations",
-                      "For each of the 7 tenets: the open-source options, the cloud options, "
-                      "and AFNI's recommended combination - picked on merit, not forced into a fixed pattern.")
+                      "One slide per tenet: the open-source and cloud options, then a single AFNI "
+                      "recommendation stated in three layers - which repo to adopt, the engine under it, "
+                      "and the cloud second opinion beside it - so there is exactly one answer per tenet.")
 
-    from build_deck_tenetcards import add_all_tenet_cards
-    add_all_tenet_cards(prs, finish_slide_fn)
-
-    for entry in synthesis["tenet_matrix"]:
-        add_tenet_recommendation_slide(prs, entry, finish_slide_fn)
+    from build_deck_tenetmerged import add_all_tenet_merged_slides
+    add_all_tenet_merged_slides(prs, finish_slide_fn)
 
     slide_divider_fn(prs, "Section", "Detailed Capability Matrix",
                       "Every specific control found across the frameworks reviewed - aspects on the rows, "
