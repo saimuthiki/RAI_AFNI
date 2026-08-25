@@ -89,6 +89,8 @@ import copy
 import logging
 import os
 import re
+import threading
+from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Protocol, Sequence, runtime_checkable
 
 LOGGER = logging.getLogger("afni_rai.gateway.providers")
@@ -131,6 +133,60 @@ class JudgeUnavailable(RuntimeError):
     this and return `RailResult.unjudged(...)`, so it becomes a block on
     client-facing traffic instead of a silent pass.
     """
+
+
+class JudgeLinkFailed(JudgeUnavailable):
+    """An INFRASTRUCTURAL failure: this link could not answer at all.
+
+    The distinction from plain `JudgeUnavailable` is the whole correctness of the
+    fallback chain. This one means "ask the next key" - the request never reached
+    a model, or the model never replied. Its parent means "stop": either a model
+    answered and its answer was unusable, or the request itself is wrong and the
+    next key will reject it identically.
+
+    Getting this backwards in either direction is a real bug. Retrying a usable
+    answer would be shopping for a verdict; retrying a 404 would hide a bad model
+    id behind whichever provider happens to work.
+    """
+
+    def __init__(self, message: str, *, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+# Statuses that mean "this key or this endpoint, right now" rather than "this
+# request". Everything else is terminal.
+RETRYABLE_STATUS = frozenset({401, 403, 408, 425, 429, 500, 502, 503, 504, 529})
+
+
+def _is_retryable(status: int) -> bool:
+    return status in RETRYABLE_STATUS or status >= 500
+
+
+@dataclass(frozen=True)
+class JudgeAttempt:
+    """One link tried, and what came of it.
+
+    `key_index` is an INDEX into the configured key list and never the key. -1
+    means the link has no key at all, which is the normal case for a local
+    inference server.
+    """
+
+    provider: str
+    key_index: int
+    served: bool
+    detail: str = ""
+    status: int | None = None
+
+    @property
+    def link(self) -> str:
+        return (f"{self.provider}[{self.key_index}]" if self.key_index >= 0
+                else f"{self.provider}[nokey]")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"provider": self.provider, "key_index": self.key_index,
+                "link": self.link, "served": self.served,
+                "detail": self.detail, "status": self.status}
 
 
 @runtime_checkable
@@ -192,10 +248,16 @@ class _HttpJudge:
 
     name = "http"
 
-    def __init__(self, *, model: str, base_url: str, timeout: float) -> None:
+    def __init__(self, *, model: str, base_url: str, timeout: float,
+                 transport: Any = None) -> None:
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.timeout = float(timeout)
+        # An httpx transport, injected. The reason it exists is testing - the
+        # adapters must be exercised against every status code in
+        # RETRYABLE_STATUS without a network - and it doubles as the seam for a
+        # deployment that needs a proxy or client certificates.
+        self._transport = transport
         self._client: Any = None
 
     # httpx is imported inside the property so that importing this module - which
@@ -205,7 +267,8 @@ class _HttpJudge:
         if self._client is None:
             import httpx  # noqa: PLC0415 - deliberately lazy
 
-            self._client = httpx.Client(timeout=self.timeout)
+            self._client = httpx.Client(timeout=self.timeout,
+                                        transport=self._transport)
         return self._client
 
     def close(self) -> None:
@@ -217,13 +280,21 @@ class _HttpJudge:
         try:
             response = self.client.post(url, json=json, headers=headers)
         except Exception as exc:  # noqa: BLE001 - httpx errors, DNS, TLS, timeout
-            # `exc` may name the host but never a credential: keys travel in
-            # headers and query params that are not echoed here.
-            raise JudgeUnavailable(
+            # Only the exception TYPE is reported. The message can contain the
+            # request URL, and a Gemini URL carries the key in a query parameter.
+            raise JudgeLinkFailed(
                 f"{self.name} judge call failed: {type(exc).__name__}") from exc
-        if response.status_code >= 400:
+        status = response.status_code
+        if status >= 400:
+            message = f"{self.name} judge returned HTTP {status}"
+            if _is_retryable(status):
+                raise JudgeLinkFailed(message, status=status)
+            # A 400 or 404 is a configuration mistake - wrong model id, rejected
+            # body - and the next key would fail identically. Reported rather
+            # than papered over with a fallback.
             raise JudgeUnavailable(
-                f"{self.name} judge returned HTTP {response.status_code}")
+                f"{message} (not retryable: this is a request or configuration "
+                "error, not a key problem)")
         try:
             return response.json()
         except ValueError as exc:
@@ -253,8 +324,10 @@ class OpenAICompatibleJudge(_HttpJudge):
                  base_url: str = DEFAULT_OPENAI_BASE_URL,
                  api_key: str | None = None,
                  timeout: float = DEFAULT_TIMEOUT,
-                 name: str = "openai") -> None:
-        super().__init__(model=model, base_url=base_url, timeout=timeout)
+                 name: str = "openai",
+                 transport: Any = None) -> None:
+        super().__init__(model=model, base_url=base_url, timeout=timeout,
+                         transport=transport)
         self.name = name
         self._api_key = api_key
 
@@ -296,8 +369,10 @@ class GeminiJudge(_HttpJudge):
     def __init__(self, *, api_key: str,
                  model: str = DEFAULT_GEMINI_MODEL,
                  base_url: str = DEFAULT_GEMINI_BASE_URL,
-                 timeout: float = DEFAULT_TIMEOUT) -> None:
-        super().__init__(model=model, base_url=base_url, timeout=timeout)
+                 timeout: float = DEFAULT_TIMEOUT,
+                 transport: Any = None) -> None:
+        super().__init__(model=model, base_url=base_url, timeout=timeout,
+                         transport=transport)
         if not api_key:
             raise ValueError("GeminiJudge requires an API key")
         self._api_key = api_key
@@ -326,7 +401,8 @@ class GeminiJudge(_HttpJudge):
 
 def local_judge(*, base_url: str, model: str = DEFAULT_LOCAL_MODEL,
                 api_key: str | None = None,
-                timeout: float = DEFAULT_TIMEOUT) -> OpenAICompatibleJudge:
+                timeout: float = DEFAULT_TIMEOUT,
+                transport: Any = None) -> OpenAICompatibleJudge:
     """A local inference server - Ollama, vLLM, llama.cpp - reached over the
     OpenAI-compatible shape they all expose.
 
@@ -335,77 +411,261 @@ def local_judge(*, base_url: str, model: str = DEFAULT_LOCAL_MODEL,
     a different name, and a second implementation of the same POST would be one
     more place for the two to diverge.
     """
-    return OpenAICompatibleJudge(model=model, base_url=base_url,
-                                 api_key=api_key, timeout=timeout, name="local")
+    return OpenAICompatibleJudge(model=model, base_url=base_url, api_key=api_key,
+                                 timeout=timeout, name="local", transport=transport)
 
 
 # --------------------------------------------------------------------------- #
-# Selection                                                                    #
+# The fallback chain                                                           #
 # --------------------------------------------------------------------------- #
-KNOWN_PROVIDERS = ("none", "openai", "gemini", "local")
+KNOWN_PROVIDERS = ("openai", "gemini", "local")
+DISABLED_NAMES = ("", "none", "off", "disabled")
 
 
-def from_env(env: dict[str, str] | None = None) -> JudgeProvider | None:
-    """Build the configured judge, or None.
+class JudgeChain:
+    """An ordered list of judges. The first one that ANSWERS wins.
+
+    Two failure classes, and the difference is the point:
+
+      `JudgeLinkFailed`  this key could not answer - 401, 429, a timeout, a 5xx.
+                         Move to the next link.
+      `JudgeUnavailable` stop. Either a model answered unusably, or the request
+                         is wrong and every remaining link will reject it too.
+
+    A low score is not a failure of either kind. `score()` returns the first
+    number it gets, so the answer does not depend on how many keys are
+    configured - a detector whose verdict shifts with the length of a key list is
+    not a detector.
+
+    Exhausting the chain raises `JudgeUnavailable`, which the rails turn into
+    `unjudged` and the engine turns into a block on client-facing traffic. There
+    is no guessed score at the end of this function.
+    """
+
+    name = "chain"
+
+    def __init__(self, links: Sequence[tuple[JudgeProvider, str, int]]) -> None:
+        if not links:
+            raise ValueError("a JudgeChain needs at least one link")
+        self._links = list(links)
+        # Per-call trail, per thread: the gateway serves requests on a threadpool
+        # and one shared list would interleave two requests' attempts into one
+        # unusable audit record.
+        self._local = threading.local()
+        self._counter_lock = threading.Lock()
+        self._counters: dict[str, dict[str, int]] = {}
+
+    # ------------------------------------------------------------- reporting --
+    @property
+    def last_attempts(self) -> list[JudgeAttempt]:
+        """The attempt trail of THIS thread's most recent `score()` call."""
+        return list(getattr(self._local, "attempts", ()))
+
+    @property
+    def counters(self) -> dict[str, dict[str, int]]:
+        """Cumulative served/failed per link, for `/healthz`.
+
+        Keyed by `provider[index]`, so an operator can see that `openai[0]` is
+        being rate limited into `openai[1]` on every request without a key ever
+        appearing anywhere.
+        """
+        with self._counter_lock:
+            return {link: dict(counts) for link, counts in self._counters.items()}
+
+    @property
+    def links(self) -> list[str]:
+        return [JudgeAttempt(name, index, False).link
+                for _, name, index in self._links]
+
+    def _count(self, attempt: JudgeAttempt) -> None:
+        with self._counter_lock:
+            row = self._counters.setdefault(attempt.link, {"served": 0, "failed": 0})
+            row["served" if attempt.served else "failed"] += 1
+
+    def describe(self) -> dict[str, Any]:
+        """What `/healthz` may safely say. No credential, no key length, no URL
+        that could carry one."""
+        return {
+            "provider": "chain",
+            "chain": self.links,
+            "models": [{"link": JudgeAttempt(name, index, False).link,
+                        "model": getattr(judge, "model", "?")}
+                       for judge, name, index in self._links],
+            "model_id_verified": False,
+            "attempts": self.counters,
+        }
+
+    # ----------------------------------------------------------------- score --
+    def score(self, prompt: str, text: str) -> float:
+        attempts: list[JudgeAttempt] = []
+        self._local.attempts = attempts
+        for judge, name, index in self._links:
+            try:
+                value = judge.score(prompt, text)
+            except JudgeLinkFailed as exc:
+                attempt = JudgeAttempt(name, index, False, str(exc),
+                                       getattr(exc, "status", None))
+                attempts.append(attempt)
+                self._count(attempt)
+                LOGGER.warning("judge link %s could not answer (%s); trying the "
+                               "next link", attempt.link, exc)
+                continue
+            except JudgeUnavailable as exc:
+                # Terminal. Falling through here would hide a configuration
+                # error, or shop for a second opinion on a usable answer.
+                attempt = JudgeAttempt(name, index, False, str(exc))
+                attempts.append(attempt)
+                self._count(attempt)
+                LOGGER.error("judge link %s failed terminally: %s", attempt.link, exc)
+                raise
+            attempt = JudgeAttempt(name, index, True, "served")
+            attempts.append(attempt)
+            self._count(attempt)
+            LOGGER.info("judge served by %s", attempt.link)
+            return value
+
+        trail = ", ".join(f"{a.link}: {a.detail}" for a in attempts)
+        raise JudgeUnavailable(
+            f"every judge link failed, so nobody looked ({trail}) - reporting "
+            "unjudged rather than guessing a score")
+
+
+def _keys(env: dict[str, str], plural: str, singular: str) -> list[str]:
+    """The ordered key list for one provider.
+
+    `*_API_KEYS` is the contract in `.env.example`; the singular `*_API_KEY` is
+    accepted as an alias because it is the near-universal convention and a
+    deployment that sets only it should work rather than refuse to boot.
+    Blank entries are dropped, so a trailing comma is not a phantom key.
+    """
+    raw = env.get(plural) or env.get(singular) or ""
+    return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+class UnusableProvider(ValueError):
+    """A provider named in the chain that cannot contribute a single link."""
+
+
+def _links_for(name: str, env: dict[str, str], timeout: float
+               ) -> list[tuple[JudgeProvider, str, int]]:
+    """Every link one provider contributes, in order.
+
+    Raises `UnusableProvider` when it can contribute none. `from_env` SKIPS such
+    a provider loudly rather than refusing to boot, and the reasoning is worth
+    stating because the opposite is tempting:
+
+    A missing judge credential is already a fully handled state in this platform -
+    the judge rail reports `unjudged`, the engine fails closed, and the coverage
+    report says `cloud-not-configured`. Turning it into a boot failure would take
+    Stage 1 and Stage 2 down with it, so an unmounted secret or a rotated key
+    would stop the gateway guarding ANYTHING. For a guardrail, no gateway is
+    strictly worse than a gateway with no judge: one degradation is documented and
+    fails closed, the other is an outage that fails open by absence.
+
+    An unrecognised provider NAME is different and stays fatal in `from_env`: it
+    cannot be interpreted at all, the operator's intent is unknowable, and it is a
+    deploy-time typo the first boot in CI should catch.
+    """
+    if name == "openai":
+        keys = _keys(env, "OPENAI_API_KEYS", "OPENAI_API_KEY")
+        if not keys:
+            raise UnusableProvider(
+                "openai is in the chain but OPENAI_API_KEYS is empty")
+        base_url = env.get("OPENAI_BASE_URL") or DEFAULT_OPENAI_BASE_URL
+        model = env.get("OPENAI_MODEL") or DEFAULT_OPENAI_MODEL
+        return [(OpenAICompatibleJudge(model=model, base_url=base_url, api_key=key,
+                                       timeout=timeout, name="openai"), "openai", i)
+                for i, key in enumerate(keys)]
+
+    if name == "gemini":
+        keys = _keys(env, "GOOGLE_API_KEYS", "GOOGLE_API_KEY")
+        if not keys:
+            raise UnusableProvider(
+                "gemini is in the chain but GOOGLE_API_KEYS is empty")
+        base_url = env.get("GOOGLE_BASE_URL") or DEFAULT_GEMINI_BASE_URL
+        model = env.get("GOOGLE_MODEL") or DEFAULT_GEMINI_MODEL
+        return [(GeminiJudge(api_key=key, model=model, base_url=base_url,
+                             timeout=timeout), "gemini", i)
+                for i, key in enumerate(keys)]
+
+    base_url = env.get("LOCAL_BASE_URL")
+    if not base_url:
+        raise UnusableProvider(
+            "local is in the chain but LOCAL_BASE_URL is unset - there is no "
+            "sensible default for someone else's inference server")
+    keys = _keys(env, "LOCAL_API_KEYS", "LOCAL_API_KEY")
+    model = env.get("LOCAL_MODEL") or DEFAULT_LOCAL_MODEL
+    if not keys:
+        # The normal case: a local server with no auth. One link, no key index.
+        return [(local_judge(base_url=base_url, model=model, timeout=timeout),
+                 "local", -1)]
+    return [(local_judge(base_url=base_url, model=model, api_key=key,
+                         timeout=timeout), "local", i)
+            for i, key in enumerate(keys)]
+
+
+def from_env(env: dict[str, str] | None = None,
+             skipped: list[str] | None = None) -> JudgeProvider | None:
+    """Build the configured chain, or None.
 
     None is the default and a legitimate steady state: it means every judge rail
     reports `unjudged`, the coverage report says `cloud-not-configured`, and
     client-facing traffic that escalates to Stage 3 is blocked rather than passed
     unexamined. That is the honest behaviour of a gateway with no key.
 
-    An unrecognised provider name, or a named provider with no credential, raises
-    `ValueError`. Both are configuration mistakes, and a gateway should refuse to
-    boot on them rather than serve traffic that quietly never reaches a judge.
+    A provider named in the chain with no usable credential is SKIPPED, at WARNING
+    level, and appended to `skipped` so `/healthz` can name it - see
+    `_links_for`'s docstring for why that is not a boot failure. If nothing in the
+    chain is usable the result is None, logged at ERROR: the operator configured a
+    judge and has none, and every judge rail will report `unjudged` until they
+    fix it.
+
+    An unrecognised or repeated provider NAME does raise `ValueError`. Neither can
+    be interpreted, and both are deploy-time typos rather than operational states.
     """
     env = os.environ if env is None else env
-    name = (env.get(ENV_PROVIDER) or "none").strip().lower()
-    if name in ("", "none", "off", "disabled"):
-        LOGGER.info("no judge provider configured (%s unset): every Stage-3 "
-                    "judge rail will report unjudged, which fails closed",
+    raw = (env.get(ENV_PROVIDER) or "").strip().lower()
+    names = [part.strip() for part in raw.split(",") if part.strip()]
+    names = [n for n in names if n not in DISABLED_NAMES]
+    if not names:
+        LOGGER.info("no judge provider configured (%s unset or none): every "
+                    "Stage-3 judge rail will report unjudged, which fails closed",
                     ENV_PROVIDER)
         return None
-    if name not in KNOWN_PROVIDERS:
+
+    unknown = [n for n in names if n not in KNOWN_PROVIDERS]
+    if unknown:
         raise ValueError(
-            f"{ENV_PROVIDER}={name!r} is not one of {list(KNOWN_PROVIDERS)}")
+            f"{ENV_PROVIDER} names unknown provider(s) {unknown}; known: "
+            f"{list(KNOWN_PROVIDERS)}")
+    if len(set(names)) != len(names):
+        # A repeated provider would mean the same keys tried twice, which is a
+        # config mistake rather than extra resilience.
+        raise ValueError(f"{ENV_PROVIDER}={raw!r} repeats a provider")
 
     timeout = _timeout_from_env()
+    links: list[tuple[JudgeProvider, str, int]] = []
+    skipped = [] if skipped is None else skipped
+    for name in names:
+        try:
+            links.extend(_links_for(name, env, timeout))
+        except UnusableProvider as exc:
+            skipped.append(str(exc))
+            LOGGER.warning("skipping judge provider %s: %s - the remaining chain "
+                           "still serves, and every judge rail reports unjudged if "
+                           "none of it does", name, exc)
 
-    if name == "openai":
-        key = env.get("OPENAI_API_KEY")
-        if not key:
-            raise ValueError(
-                f"{ENV_PROVIDER}=openai but OPENAI_API_KEY is unset - refusing to "
-                "boot a gateway that believes it has a judge and does not")
-        provider: JudgeProvider = OpenAICompatibleJudge(
-            model=env.get("OPENAI_MODEL") or DEFAULT_OPENAI_MODEL,
-            base_url=env.get("OPENAI_BASE_URL") or DEFAULT_OPENAI_BASE_URL,
-            api_key=key, timeout=timeout)
-    elif name == "gemini":
-        key = env.get("GOOGLE_API_KEY")
-        if not key:
-            raise ValueError(
-                f"{ENV_PROVIDER}=gemini but GOOGLE_API_KEY is unset - refusing to "
-                "boot a gateway that believes it has a judge and does not")
-        provider = GeminiJudge(
-            api_key=key,
-            model=env.get("GOOGLE_MODEL") or DEFAULT_GEMINI_MODEL,
-            base_url=env.get("GOOGLE_BASE_URL") or DEFAULT_GEMINI_BASE_URL,
-            timeout=timeout)
-    else:  # local
-        base_url = env.get("LOCAL_BASE_URL")
-        if not base_url:
-            raise ValueError(
-                f"{ENV_PROVIDER}=local but LOCAL_BASE_URL is unset - there is no "
-                "sensible default for someone else's inference server")
-        provider = local_judge(
-            base_url=base_url,
-            model=env.get("LOCAL_MODEL") or DEFAULT_LOCAL_MODEL,
-            api_key=env.get("LOCAL_API_KEY"),
-            timeout=timeout)
+    if not links:
+        LOGGER.error("%s=%r but no provider in it is usable (%s): every Stage-3 "
+                     "judge rail will report unjudged, which fails closed. Stage 1 "
+                     "and Stage 2 are unaffected and this gateway still serves.",
+                     ENV_PROVIDER, raw, "; ".join(skipped))
+        return None
 
-    LOGGER.info("judge provider %s configured, model %s (model id NOT verified "
-                "against a live endpoint)", name, getattr(provider, "model", "?"))
-    return provider
+    chain = JudgeChain(links)
+    LOGGER.info("judge chain configured: %s (model ids NOT verified against a "
+                "live endpoint)", " -> ".join(chain.links))
+    return chain
 
 
 # --------------------------------------------------------------------------- #

@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AFNI Responsible AI — gateway console</title>
 <meta name="description" content="Operator console for the AFNI Responsible AI gateway: cascade escalation, capability coverage, roadmap status and framework provenance.">
+<!-- Inline so the browser's unprompted /favicon.ico request never 404s. A red
+     console error in a governance console is worse than cosmetic: an operator
+     cannot tell a spurious one from a real one at a glance. Data URI keeps it a
+     zero-request asset. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b1220'/%3E%3Cpath d='M16 5l9 4v7c0 6-4 9.5-9 11-5-1.5-9-5-9-11V9z' fill='none' stroke='%2338bdf8' stroke-width='2.4'/%3E%3Cpath d='M11.5 16.2l3.2 3.3 6-6.6' fill='none' stroke='%2338bdf8' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -41,6 +46,8 @@
   snapshot of the capability registry. Nothing here is a live judgement.</span>
   <button id="retry" class="banner__btn" type="button">Retry the gateway</button>
 </div>
+
+<div id="health" class="health" hidden></div>
 
 <div class="shell">
   <nav class="nav" aria-label="Views">

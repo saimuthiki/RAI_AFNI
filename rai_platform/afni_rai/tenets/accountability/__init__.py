@@ -94,6 +94,16 @@ ATTACK_CORPUS_RAIL = AttackCorpusRail(DEFAULT_CORPUS, DEFAULT_THRESHOLDS)
 
 RAILS = [ATTACK_CORPUS_RAIL]
 
+# The loader in `cli.py` and the gateway both read `ATTRIBUTIONS` off the tenet
+# package, keyed by rail name. `corpus.py` has always defined the attribution,
+# but this package only re-exported it as the singular `RAIL_ATTRIBUTION`, which
+# nothing looks for - so a block from this rail arrived at the caller with no
+# repo, no mechanism and no confidence kind, printing bare "attack-corpus-repeat
+# flagged ...". That defeats the one thing an explanation exists to say. Keyed
+# off the mounted rails rather than off `ATTRIBUTION.rail`, so renaming a rail
+# cannot silently orphan its attribution again.
+ATTRIBUTIONS = {rail.name: RAIL_ATTRIBUTION for rail in RAILS}
+
 RAIL_SPECS = [
     RailSpec(
         rail=ATTACK_CORPUS_RAIL,
@@ -384,6 +394,7 @@ def register(registry) -> None:
 
 __all__ = [
     "RAILS", "RAIL_SPECS", "TENET", "register", "RAIL_ATTRIBUTION",
+    "ATTRIBUTIONS",
     # policy / fail-closed
     "FailMode", "FailurePolicy", "PolicyOutcome", "ModeDecision",
     "CLIENT_FACING_DEFAULT", "INTERNAL_DEFAULT", "engine_enforces_fail_closed",

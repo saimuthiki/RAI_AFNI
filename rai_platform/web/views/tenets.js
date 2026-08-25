@@ -86,7 +86,21 @@ export async function render(root) {
         COVERAGE.filter((c) => t.counts[c.key]).map((c) => covChip(c.key, t.counts[c.key]))),
     ]);
 
-    // The honesty rail. Two failure modes worth shouting about.
+    // The honesty rail. Three failure modes worth shouting about, in order of
+    // how badly a green-looking tenet would mislead.
+    const dead = mounted.filter((r) => r.available === false);
+    if (dead.length) {
+      card.append(el('p', { class: 'warnline' }, [
+        el('span', { text: '▲' }),
+        el('span', {}, [
+          el('b', { text: `${dead.length} of this tenet’s ${mounted.length} rails cannot run right now. ` }),
+          document.createTextNode(
+            `${dead.map((r) => r.name).join(', ')} — mounted, so they report “could not judge”, `
+            + 'which fails closed on client-facing traffic without protecting anything. The '
+            + 'counts above are the registry’s view; this line is the running gateway’s.'),
+        ]),
+      ]));
+    }
     if (runtime === 0) {
       card.append(el('p', { class: 'warnline' }, [
         el('span', { text: '▲' }),
@@ -98,7 +112,9 @@ export async function render(root) {
             + 'passing through the gateway right now is not checked against this tenet at all.'),
         ]),
       ]));
-    } else if ((t.counts['dependency-missing'] || 0) > 0) {
+    } else if (!dead.length && (t.counts['dependency-missing'] || 0) > 0) {
+      // Only when the live rail list did not already say it — the two lines
+      // carry the same warning from two sources, and printing both is noise.
       card.append(el('p', { class: 'warnline' }, [
         el('span', { text: '▲' }),
         el('span', {}, [
@@ -145,11 +161,20 @@ export async function render(root) {
             stageTag(s, { withKind: true }),
             el('span', { class: 'micro mute', text: `${list.length} rail${list.length === 1 ? '' : 's'}` }),
           ]),
-          el('div', { class: 'railgroup', style: 'margin-top:.5rem' }, list.map((r) => el('div', { class: 'railrow' }, [
+          el('div', { class: 'railgroup', style: 'margin-top:.5rem' }, list.map((r) => el('div', {
+            class: `railrow${r.available === false ? ' railrow--dead' : ''}`,
+          }, [
             el('span', { class: 'conf__k', data: { kind: r.confidence_kind || 'unknown' },
               text: r.confidence_kind || 'unknown' }),
             el('div', {}, [
-              el('div', { class: 'railrow__name', text: r.name }),
+              el('div', { class: 'railrow__name' }, [
+                el('span', { text: r.name }),
+                r.available === false
+                  ? el('span', { class: 'cannotrun', style: 'margin-left:.5rem', text: 'cannot run' })
+                  : null,
+              ]),
+              r.available === false && r.unavailable_reason
+                ? el('div', { class: 'railrow__why', text: r.unavailable_reason }) : null,
               el('div', { class: 'railrow__mech', text:
                 [r.tool, r.mechanism].filter(Boolean).join(' · ') || '—' }),
               r.repo ? el('div', { class: 'railrow__mech', text: `from ${r.repo}` }) : null,

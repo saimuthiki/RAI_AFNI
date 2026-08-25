@@ -73,8 +73,21 @@ class FindingExplanation:
     @property
     def entity(self) -> str:
         """The entity type, taken from the last segment of the category path -
-        `privacy.pii.us_ssn` reads as `us_ssn`."""
-        return self.finding.category.rsplit(".", 1)[-1]
+        `security.secret_leak.api_key` reads as `api_key`.
+
+        With one exception. The taxonomy suffixes region-scoped identifiers with
+        a two-letter country code, so the bare last segment of
+        `privacy.pii.national_id.us` is `us` - and "flagged us" tells an operator
+        nothing at all. `privacy.pii.tax_id.in` is worse, because `in` reads as
+        an English preposition. Those get their parent segment back.
+
+        Deliberately restricted to a two-letter tail: `privacy.pii.health_id.dea`
+        must keep reading as `dea`, which is the entity, not a locale.
+        """
+        parts = self.finding.category.split(".")
+        if len(parts) >= 2 and len(parts[-1]) == 2 and parts[-1].isalpha():
+            return f"{parts[-2]}.{parts[-1]}"
+        return parts[-1]
 
     @property
     def location(self) -> str | None:

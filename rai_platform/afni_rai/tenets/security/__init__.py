@@ -522,6 +522,31 @@ _SECRET_PATTERNS: tuple[tuple[str, str, "re.Pattern[str]", float | None, bool], 
     ("private_key_header", "private_key",
      re.compile(r"-----BEGIN (?:RSA |DSA |EC |PGP |OPENSSH |ENCRYPTED )?PRIVATE KEY-----"),
      None, True),
+    # --- AFNI additions: LLM provider keys ----------------------------------
+    # Not a port. Every list above was read from its source and none of them
+    # carries an OpenAI-format key, because garak's dora regexes, PyRIT's
+    # credential scorer and hai-guardrails' vendor list all predate `sk-proj-`.
+    # The consequence was demonstrable rather than theoretical: this rail caught
+    # a Google AI Studio key (`AIza...`, covered above) and let an OpenAI project
+    # key through untouched - and OpenAI and Google are the two providers this
+    # platform's own Stage-3 chain is configured against, so the one credential
+    # most likely to be pasted into an AFNI prompt was the one not covered.
+    #
+    # A faithful port is the right default and it is not a completeness
+    # guarantee. Formats confirmed against each vendor's own documented prefix;
+    # the `-` after `sk` is what separates these from Stripe's `sk_live_`.
+    ("openai_project_key", "api_key",
+     re.compile(r"\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_\-]{20,}"), 3.0, True),
+    ("openai_legacy_key", "api_key",
+     re.compile(r"\bsk-[A-Za-z0-9]{32,}\b"), 3.0, True),
+    ("anthropic_api_key", "api_key",
+     re.compile(r"\bsk-ant-(?:api|admin)\d{2}-[A-Za-z0-9_\-]{80,}"), 3.0, True),
+    ("openrouter_api_key", "api_key",
+     re.compile(r"\bsk-or-v1-[a-f0-9]{64}\b"), 3.0, True),
+    ("groq_api_key", "api_key",
+     re.compile(r"\bgsk_[A-Za-z0-9]{40,}\b"), 3.0, True),
+    ("huggingface_token", "api_key",
+     re.compile(r"\bhf_[A-Za-z0-9]{34,}\b"), 3.0, True),
 )
 
 # `security.secret_leak` subcategory ids the taxonomy enumerates. Anything not in
@@ -1151,13 +1176,16 @@ ATTRIBUTIONS: dict[str, RailAttribution] = {
     "security.secrets": RailAttribution(
         rail="security.secrets",
         source_repo="garak-main",
-        display_name="garak dora key regexes + hai-guardrails entropy gate",
-        mechanism="Keyword/Regex",
+        display_name="garak dora key regexes + hai-guardrails entropy gate "
+                     "(+ AFNI LLM-provider prefixes)",
+        mechanism="Keyword/Regex + Shannon entropy gate",
         stage=int(Stage.STAGE_1),
         confidence_kind="deterministic",
         evidence="garak/resources/apikey/regexes.py:12-125 (58 regexes); "
                  "hai-guardrails/src/guards/secret.guard.ts:243-263 (Shannon minEntropy 3-4); "
-                 "pyrit/score/true_false/regex/credential_leak_scorer.py:16-31",
+                 "pyrit/score/true_false/regex/credential_leak_scorer.py:16-31; "
+                 "OpenAI/Anthropic/OpenRouter/Groq/HuggingFace prefixes are AFNI "
+                 "additions - no reviewed repo carries them",
         capability="Secrets / credential leakage",
     ),
     "security.invisible_text": RailAttribution(

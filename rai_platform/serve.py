@@ -18,12 +18,16 @@ must never print a matched value, and `logging` is the only writer - there is no
 allows a matched value into an explanation, it is off unless a server operator
 sets it, and no request can turn it on.
 
+`.env` at the repository root is read on startup (`--no-dotenv` to skip), and an
+already-set environment variable always wins over it. `.env.example` is the
+documented template and the full contract.
+
 Configuration, all server-side:
 
     AFNI_REVEAL_SUBJECT   off (default) | 1 - echo matched values in explanations
     AFNI_AUDIT_DB         :memory: (default) | a path for the durable evidence pack
-    AFNI_JUDGE_PROVIDER   none (default) | openai | gemini | local
-    AFNI_JUDGE_TIMEOUT    seconds, default 10.0
+    AFNI_JUDGE_PROVIDER   none (default) | an ordered chain, e.g. "openai,gemini"
+    AFNI_JUDGE_TIMEOUT    seconds, default 20.0
     AFNI_HOST/AFNI_PORT   defaults 127.0.0.1 / 8000 - loopback, not 0.0.0.0,
                           because this endpoint sees every prompt in the estate
 """
@@ -42,6 +46,43 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 LOG_FORMAT = "%(asctime)s %(levelname)-8s %(name)s %(message)s"
+
+# `.env` sits at the repository root, next to `.env.example`, and is gitignored.
+DOTENV_PATH = os.path.join(os.path.dirname(HERE), ".env")
+
+
+def load_dotenv(path: str = DOTENV_PATH) -> list[str]:
+    """Read `.env` into the environment and return the NAMES that were set.
+
+    Names only, never values - this function's return value ends up in a log
+    line, and half the names in that file are credentials.
+
+    Stdlib rather than python-dotenv: one fewer dependency for twenty lines, and
+    a gateway whose whole argument is "no silent failures" should not need a
+    package to read a key-value file. An already-set variable always wins, so a
+    real environment (a container, a systemd unit, a CI secret) is never
+    overridden by a checked-out file.
+    """
+    loaded: list[str] = []
+    try:
+        with open(path, encoding="utf-8") as handle:
+            lines = handle.readlines()
+    except OSError:
+        return loaded
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, _, value = line.partition("=")
+        name = name.strip()
+        if name.startswith("export "):
+            name = name[len("export "):].strip()
+        value = value.strip().strip('"').strip("'")
+        if not name or name in os.environ:
+            continue
+        os.environ[name] = value
+        loaded.append(name)
+    return loaded
 
 
 def build_app():
@@ -63,6 +104,8 @@ def parse_args(argv=None) -> argparse.Namespace:
                         choices=("critical", "error", "warning", "info", "debug"))
     parser.add_argument("--reload", action="store_true",
                         help="uvicorn autoreload - development only")
+    parser.add_argument("--no-dotenv", action="store_true",
+                        help="do not read .env; use the process environment only")
     parser.add_argument("--workers", type=int, default=1,
                         help="each worker holds its own audit store; a file-backed "
                              "AFNI_AUDIT_DB is shared, :memory: is not")
@@ -74,6 +117,12 @@ def main(argv=None) -> int:
     logging.basicConfig(level=getattr(logging, args.log_level.upper()),
                         format=LOG_FORMAT)
     log = logging.getLogger("afni_rai.serve")
+
+    if not args.no_dotenv:
+        names = load_dotenv()
+        if names:
+            log.info("loaded %d setting(s) from .env: %s", len(names),
+                     ", ".join(sorted(names)))
 
     try:
         import uvicorn

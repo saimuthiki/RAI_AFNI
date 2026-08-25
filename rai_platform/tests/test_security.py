@@ -594,5 +594,102 @@ class TestRegistration(unittest.TestCase):
         return next(r for r in self.rows if r.capability == capability)
 
 
+class TestLLMProviderKeys(unittest.TestCase):
+    """The AFNI additions to the secret table.
+
+    Every pattern above these was ported from a reviewed repo, and none of those
+    repos carries an OpenAI-format key - garak's dora list, PyRIT's credential
+    scorer and hai-guardrails' vendor list all predate `sk-proj-`. The observable
+    consequence was that this rail blocked a pasted Google AI Studio key
+    (`AIza...`) and allowed a pasted OpenAI project key, while the platform's own
+    Stage-3 chain is configured against both providers.
+
+    All values here are structurally valid and deliberately non-secret."""
+
+    def setUp(self):
+        self.rail = SecretsRail()
+
+    def _blocked_kinds(self, text):
+        result = self.rail.check(PATH, text)
+        return result, {f.category for f in result.findings}
+
+    def test_openai_project_key_blocks(self):
+        result, kinds = self._blocked_kinds(
+            "here is the key sk-proj-Xq7SvT2mNbLp9RdKzWyE4HcJ8FgAuQ3T for testing")
+        self.assertTrue(result.block, "an OpenAI project key did not block")
+        self.assertIn("security.secret_leak.api_key", kinds)
+
+    def test_openai_service_account_and_admin_keys_block(self):
+        for prefix in ("sk-svcacct-", "sk-admin-"):
+            with self.subTest(prefix=prefix):
+                result = self.rail.check(
+                    PATH, prefix + "Xq7SvT2mNbLp9RdKzWyE4HcJ8FgAuQ3T")
+                self.assertTrue(result.block, f"{prefix} did not block")
+
+    def test_openai_legacy_key_blocks(self):
+        result = self.rail.check(
+            PATH, "OPENAI_API_KEY=sk-Xq7SvT2mNbLp9RdKzWyE4HcJ8FgAuQ3TvB2nMkLp")
+        self.assertTrue(result.block)
+
+    def test_anthropic_key_blocks(self):
+        key = "sk-ant-api03-" + "Xq7SvT2mNbLp9RdKzWyE4HcJ8FgAuQ3T" * 3
+        result, kinds = self._blocked_kinds(key)
+        self.assertTrue(result.block, "an Anthropic key did not block")
+        self.assertIn("security.secret_leak.api_key", kinds)
+
+    def test_openrouter_groq_and_huggingface_keys_block(self):
+        cases = {
+            "openrouter": "sk-or-v1-" + "a1b2c3d4" * 8,
+            "groq": "gsk_" + "Xq7SvT2mNbLp9RdKzWyE4HcJ8FgAuQ3TvB2nMkLp",
+            "huggingface": "hf_" + "XqSvTmNbLpRdKzWyEHcJFgAuQTvBnMkLpQ",
+        }
+        for name, key in cases.items():
+            with self.subTest(provider=name):
+                self.assertTrue(self.rail.check(PATH, key).block,
+                                f"{name} key did not block")
+
+    # ---------------------------------------------------------------- negatives
+
+    def test_ordinary_prose_and_code_do_not_trip_the_new_patterns(self):
+        """The `sk-` and `hf_` prefixes are short enough to worry about. These are
+        the strings a real AFNI prompt or code snippet would plausibly contain."""
+        benign = (
+            "call hf_hub_download to fetch the model",
+            "set HF_HUB_OFFLINE=1 before running",
+            "use the sk-learn library please",
+            "from sklearn.model_selection import train_test_split",
+            "docs say to pass hf_token but I do not have one",
+            "the gsk_ prefix belongs to Groq",
+        )
+        for text in benign:
+            with self.subTest(text=text):
+                result = self.rail.check(PATH, text)
+                self.assertEqual(
+                    result.findings, [],
+                    f"false positive on benign text: {text!r}")
+
+    def test_stripe_underscore_form_is_not_confused_with_openai(self):
+        """Stripe uses `sk_live_`, OpenAI uses `sk-`. The separator is the whole
+        distinction, so a truncated Stripe key must not match an OpenAI rule."""
+        result = self.rail.check(PATH, "the stripe test key is sk_live_abc")
+        self.assertEqual([f.category for f in result.findings], [])
+
+    def test_a_low_entropy_lookalike_is_gated_out(self):
+        """The entropy gate is what keeps a placeholder out of the audit trail.
+        `sk-proj-aaaa...` is structurally a key and obviously not one."""
+        result = self.rail.check(PATH, "sk-proj-" + "a" * 40)
+        self.assertEqual(result.findings, [],
+                         "a zero-entropy placeholder was reported as a credential")
+
+    def test_the_matched_key_is_never_echoed_outside_subject(self):
+        key = "sk-proj-Xq7SvT2mNbLp9RdKzWyE4HcJ8FgAuQ3T"
+        result = self.rail.check(PATH, key)
+        finding = result.findings[0]
+        self.assertEqual(finding.subject, key)
+        self.assertTrue(finding.fp)
+        self.assertNotIn(key, finding.category)
+        self.assertNotIn(key, finding.fp)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

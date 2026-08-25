@@ -20,3 +20,11 @@ secrets.json
 # Regenerable context caches — each dev builds their own (like node_modules)
 graft/
 graphify-out/
+
+# Runtime artefacts
+afni_audit.sqlite
+afni_audit.sqlite-shm
+afni_audit.sqlite-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

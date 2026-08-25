@@ -122,7 +122,7 @@ export function render(root) {
 
   // ------------------------------------------------------------- results ----
   ui.verdictSlot = el('div');
-  ui.blindSlot = el('div', { style: 'margin-top:1.5rem' });
+  ui.blindSlot = el('div', { style: 'margin: 1.5rem 0' });
   ui.ladder = el('div', { class: 'ladder' });
   ui.saving = el('div', { class: 'saving', hidden: true });
   ui.findings = el('div');
@@ -182,7 +182,12 @@ export function render(root) {
         const s = normalizeStage(obj);
         stagesSeen.set(s.stage, s);
         s.unjudged.forEach((p) => seenUnjudged.add(p));
-        if (s.short_circuited && s.ran && stopAt === null) stopAt = s.stage;
+        if (stopAt === null && s.short_circuited) {
+          // The engine flags the stage that stopped AND every stage it skipped.
+          // Whichever arrives first, the stop belongs to the last stage that ran.
+          stopAt = s.ran ? s.stage : Math.max(0, ...[...stagesSeen.values()]
+            .filter((x) => x.ran && x.stage <= 3).map((x) => x.stage)) || null;
+        }
         paintStage(ui, s, stopAt);
         // The engine emits a trace for every stage, so the next unreported
         // request-path stage is genuinely the one in flight. Light it up; its
@@ -285,6 +290,16 @@ function paintStage(ui, s, stopAt) {
   if (s.unjudged.length) bits.push(`${s.unjudged.length} unjudged`);
   r.stat.textContent = bits.join('  ·  ');
 
+  // The escalation decision, in the stage that made it.
+  if (s.will_escalate !== null && !s.short_circuited && s.stage < 3) {
+    r.row.append(el('p', { class: 'escalated', style: 'grid-column:2' }, [
+      el('span', { class: 'escalated__mark', text: s.will_escalate ? 'ESCALATE' : 'SETTLED' }),
+      el('span', { text: s.will_escalate
+        ? `A rail here was not confident enough to close the question, so stage ${s.stage + 1} was asked to look.`
+        : 'Nothing here asked for a second opinion, so the cascade stops paying at this stage.' }),
+    ]));
+  }
+
   if (s.unjudged.length) {
     r.detail.hidden = false;
     r.detail.textContent = 'A rail in this stage could not look. That is not "found nothing" — '
@@ -322,13 +337,13 @@ function showRails(r, names, label) {
   clear(r.railsBox);
   r.railsBox.hidden = false;
   const shown = names.slice(0, 12);
-  r.railsBox.append(
+  r.railsBox.append(...[
     el('span', { class: 'railchip', style: 'border-style:dashed', text: `${names.length} ${label}` }),
     ...shown.map((n) => el('span', { class: 'railchip', text: n })),
     names.length > shown.length
       ? el('span', { class: 'railchip', text: `+${names.length - shown.length} more` })
       : null,
-  );
+  ].filter(Boolean));
 }
 
 // ----------------------------------------------------------------- verdict --
@@ -341,11 +356,18 @@ function paintVerdict(ui, v, stagesSeen, stopAt) {
 
   clear(ui.verdictSlot).append(el('div', { class: `verdict verdict--${blocked ? 'block' : 'allow'}` }, [
     el('span', { class: 'verdict__word', text: blocked ? 'BLOCK' : 'ALLOW' }),
-    el('span', { class: 'small', style: 'max-width:34ch', text: blocked
+    el('span', { class: 'small', style: 'max-width:38ch', text: blocked
       ? (v.blocked_by.length
         ? 'A finding carried the block action.'
-        : 'Nothing was found, but a path went unjudged on client-facing traffic — fail closed.')
-      : 'Every rail that ran judged the payload and found nothing that blocks.' }),
+        : (v.also_flagged.length
+          ? 'No finding carried a block action. A payload path went unjudged on '
+            + 'client-facing traffic, and that fails closed.'
+          : 'Nothing was found — but a payload path went unjudged on client-facing '
+            + 'traffic, and that fails closed.'))
+      : (v.could_not_judge.length
+        ? 'Allowed with an unjudged path, because this run is not client-facing. '
+          + 'The same payload would have been blocked with the switch on.'
+        : 'Every rail that ran judged every payload path and found nothing that blocks.') }),
     el('dl', { class: 'verdict__meta' }, [
       stat('stages run', v.stages_run === null ? '—' : String(v.stages_run)),
       stat('latency', v.latency_ms === null ? '—' : `${v.latency_ms} ms`),
