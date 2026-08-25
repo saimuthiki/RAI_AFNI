@@ -500,15 +500,32 @@ class TestRailsAndAttributions(unittest.TestCase):
             self.assertIsNotNone(fe.attribution, fe.finding.category)
 
     def test_stage_1_rails_import_nothing_third_party(self):
-        # The Stage-1 promise: useful before anyone installs torch. Assert the
-        # module never pulled a third-party package into sys.modules.
-        import afni_rai.tenets.security as pkg
+        """The Stage-1 promise: useful before anyone installs torch.
 
-        self.assertTrue(pkg.RAILS)
-        for banned in ("transformers", "torch", "detect_secrets", "presidio_analyzer",
-                       "yara", "onnxruntime"):
-            self.assertNotIn(banned, sys.modules,
-                             f"importing the security tenet pulled in {banned}")
+        Run in a fresh subprocess. Checking this process's `sys.modules` measures
+        the whole test run, not this import: once any other test module has
+        touched presidio or transformers, the check fails here for a reason that
+        has nothing to do with the security tenet. It is also order-dependent,
+        so it passed or failed depending on which modules ran first.
+        """
+        import os
+        import subprocess
+
+        banned = ("transformers", "torch", "detect_secrets", "presidio_analyzer",
+                  "yara", "onnxruntime")
+        probe = (
+            "import sys; import afni_rai.tenets.security as pkg; "
+            "assert pkg.RAILS, 'no rails exported'; "
+            f"print(','.join(m for m in {banned!r} if m in sys.modules) or 'CLEAN')"
+        )
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        result = subprocess.run(
+            [sys.executable, "-c", probe], capture_output=True, text=True,
+            env={**os.environ, "PYTHONPATH": root}, timeout=120)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout.strip(), "CLEAN",
+            "importing the security tenet pulled in: " + result.stdout.strip())
 
     def test_a_regex_rail_does_not_report_a_model_score(self):
         # CONFIDENCE_KINDS: a deterministic match has score 1.0 or absent.

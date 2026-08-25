@@ -532,8 +532,27 @@ class TestDependentRails(unittest.TestCase):
         self.assertNotEqual(result, RailResult.clean())
 
     def test_presidio_rail_does_not_import_its_dependency_at_module_import(self):
-        # No network calls, no model downloads as a side effect of importing.
-        self.assertNotIn("presidio_analyzer", sys.modules)
+        """No network calls and no model downloads as a side effect of importing.
+
+        Checked in a fresh subprocess rather than against this process's
+        `sys.modules`. The in-process form only holds on a machine where
+        presidio is not installed - and on that machine it proves nothing, since
+        the import could not have succeeded anyway. Worse, it made the suite red
+        on a machine provisioned exactly as this repo's own README instructs,
+        while staying green on a bare container: the wrong way round.
+        """
+        import subprocess
+        probe = (
+            "import sys; import afni_rai.tenets.privacy; "
+            "print('LOADED' if 'presidio_analyzer' in sys.modules else 'LAZY')"
+        )
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        result = subprocess.run(
+            [sys.executable, "-c", probe], capture_output=True, text=True,
+            env={**os.environ, "PYTHONPATH": root}, timeout=120)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "LAZY",
+                         "importing the privacy package pulled in presidio")
 
     def test_judge_rail_is_unjudged_without_a_judge(self):
         result = PiiLeakageJudgeRail().check("payload.text", "anything")
@@ -662,17 +681,56 @@ class TestNoFalsePositiveStorm(unittest.TestCase):
 
 
 # ------------------------------------------------------- cascade behaviour --
+class _BlindStage2:
+    """A stage-2 rail that cannot look - the shape every dependency-missing rail
+    degrades to. Deliberately explicit, so the fail-closed tests below do not
+    depend on which optional packages this machine happens to have."""
+
+    name = "test.stage_2.blind"
+    tenet = privacy.TENET
+    stage = Stage.STAGE_2
+
+    def check(self, path, text):
+        return RailResult.unjudged("stand-in: dependency absent")
+
+
+class _SeeingStage2:
+    """A stage-2 rail that judges and finds nothing."""
+
+    name = "test.stage_2.seeing"
+    tenet = privacy.TENET
+    stage = Stage.STAGE_2
+
+    def check(self, path, text):
+        return RailResult.clean()
+
+
 class TestCascadeBehaviour(unittest.TestCase):
 
+    # Both halves of the escalation outcome are asserted below, and both use an
+    # EXPLICIT stage-2 stand-in rather than whatever happens to be installed.
+    #
+    # The earlier version of these two tests called `Cascade(RAILS)` and assumed
+    # presidio was absent. That made the block a property of the machine: green
+    # on a bare container, red the moment someone followed this repo's own
+    # README and installed presidio-analyzer. A test whose result depends on
+    # whether an optional dependency is present is not testing the cascade.
+    #
+    # What is actually worth pinning is the *rule*: an escalated stage that
+    # cannot look fails closed on client-facing traffic and open on internal
+    # traffic, and an escalated stage that CAN look does neither.
+
+    def _cascade_with_stage_2(self, stage_2_rail):
+        return Cascade([r for r in RAILS if r.stage is Stage.STAGE_1]
+                       + [stage_2_rail])
+
     def test_a_severe_pii_hit_escalates_and_then_fails_closed(self):
-        # Worth stating plainly because it surprises people. A checksum-valid
-        # SSN is HIGH severity, so the engine escalates for the NER second
-        # opinion. presidio-analyzer is absent, that stage reports unjudged, and
-        # fail-closed turns it into a block on client-facing traffic. Blocking
-        # is the correct answer to "there is regulated PII here and I cannot
-        # fully assess the payload" - but it means installing presidio-analyzer
-        # changes the block rate, and nobody should be surprised by that.
-        outcome = Cascade(RAILS).evaluate(event({"text": "my ssn is 123-45-6789"}))
+        # A checksum-valid SSN is HIGH severity, so the engine escalates for a
+        # second opinion. When that stage cannot look, fail-closed turns it into
+        # a block on client-facing traffic. Blocking is the right answer to
+        # "there is regulated PII here and I could not fully assess the payload".
+        outcome = self._cascade_with_stage_2(_BlindStage2()).evaluate(
+            event({"text": "my ssn is 123-45-6789"}))
         self.assertIs(outcome.verdict.decision, Decision.BLOCK)
         self.assertTrue(outcome.verdict.could_not_judge)
         self.assertIn("payload.text", outcome.verdict.unjudged)
@@ -680,11 +738,22 @@ class TestCascadeBehaviour(unittest.TestCase):
                             for f in outcome.verdict.findings))
 
     def test_the_same_payload_is_allowed_on_internal_traffic(self):
-        outcome = Cascade(RAILS).evaluate(
+        outcome = self._cascade_with_stage_2(_BlindStage2()).evaluate(
             event({"text": "my ssn is 123-45-6789"}, client_facing=False))
         self.assertIs(outcome.verdict.decision, Decision.ALLOW)
         # Allowed, but the gap is still on the record.
         self.assertTrue(outcome.verdict.could_not_judge)
+
+    def test_a_stage_2_that_can_look_removes_the_fail_closed_block(self):
+        """The counterpart, and the reason installing presidio changes the block
+        rate: with a stage-2 rail that judges, the same payload is allowed and
+        nothing is unjudged. Same findings, opposite decision."""
+        outcome = self._cascade_with_stage_2(_SeeingStage2()).evaluate(
+            event({"text": "my ssn is 123-45-6789"}))
+        self.assertIs(outcome.verdict.decision, Decision.ALLOW)
+        self.assertEqual(outcome.verdict.unjudged, [])
+        self.assertTrue(any(f.category == "privacy.pii.national_id.us"
+                            for f in outcome.verdict.findings))
 
     def test_medium_severity_pii_does_not_escalate(self):
         # An email address is not worth paying for a second opinion, so nothing
