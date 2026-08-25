@@ -109,7 +109,14 @@ class Finding:
     end: int | None = None
     score: float | None = None
     detector: str | None = None
-    fp: bool | None = None
+    # `fp` is a whitelist FINGERPRINT - a hash of the subject minted by the
+    # engine, never the value itself. Upstream types it as a string; an earlier
+    # draft of this file had it as a bool, which the schema-conformance test now
+    # catches. `subject` is the single detected value the finding is about, and
+    # is what an operator's false-positive exception keys on - deliberately not
+    # a per-span echo of matched text, which upstream says findings MUST NOT
+    # carry.
+    fp: str | None = None
     whitelisted: bool | None = None
     subject: str | None = None
 
