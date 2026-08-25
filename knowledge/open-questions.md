@@ -45,6 +45,21 @@ platform stalling in Phase 1.
 7. **Does AFNI need media moderation at all?** NSFW image/video and DICOM PII scanning
    are Phase 3 "if the business needs them". Nobody has said whether it does.
 
+## Found while building the platform (new)
+
+These came out of writing rails against the real vendored source, and none of
+them are in the original analysis.
+
+| # | Finding | Consequence |
+|---|---|---|
+| 1 | **promptfoo's `bias:*` probes are remote-generated only.** Confirmed at `references/promptfoo-main/src/redteam/constants/plugins.ts:576-582`, where `BIAS_PLUGINS` sits in `UI_DISABLED_WHEN_REMOTE_UNAVAILABLE`. | Running that pack ships AFNI-derived prompts and the application's stated purpose to `api.promptfoo.app`. CI only, so no client traffic is involved, but it is a pre-adoption review item and it widens open item #2 above from "some plugins" to a named, confirmed set. |
+| 2 | **A checksum-valid SSN blocks client-facing traffic today.** HIGH severity escalates for a NER second opinion; Presidio is absent, so the rail returns `unjudged`, and `unjudged` fails closed. | Correct behaviour for "regulated PII is present and I cannot fully assess this payload", but installing `presidio-analyzer` will visibly change the block rate. Worth knowing before a pilot, not during one. |
+| 3 | **Several upstream patterns are too loose to ship as-is.** hai-guardrails' `mrn-numeric` regex has an optional prefix group, so it matches every 7–10 digit integer; its bare ICD-10 pattern redacts "vitamin B12" and "room T10"; NeMo's `code.yara` fires on `import os`; NeMo's `sqli.yara` bare `--` signal fires on ordinary prose containing an em-dash. | Each is gated, tightened or left opt-in, with the reason in a code comment and a false-positive test. Relevant to the roadmap's "calibrate on real AFNI traffic" action — the defaults are not safe unreviewed. |
+| 4 | **Checksums are missing upstream where they matter.** Infosys' Aadhaar recognizer is pattern-only at score 0.5 (no Verhoeff); safe-zone's `IBAN_TR` is shape-only (no mod-97); no reviewed repo validates NPI or DEA check digits. | Implemented here. Note the provenance honestly: the Verhoeff tables and the NPI 80840 prefix rule are published standards, **not** ported from any vendored repo. |
+| 5 | **Stdlib `xml.etree` is the only XML parser available at Stage 1** (`defusedxml` would break the zero-dependency rule). | Mitigated by refusing any `<!DOCTYPE`/`<!ENTITY>` fragment before parsing, plus a size cap; verified against a billion-laughs payload (returns in 0.1 ms without expanding). A security reviewer should still see this decision explicitly. |
+| 6 | **AGPL-3.0 obligation is about distribution, not possession.** Deepchecks is AGPL-3.0; §13 attaches an obligation to offer the combined work's source to anyone served over a network. | Fine for internal use. Becomes a real question the moment AFNI hosts the platform for a client. The user has confirmed proceeding; recorded here so the decision is on the record rather than assumed. |
+| 7 | **`stop_reason` / `finish_reason` / `model` were being judged as user content.** | Fixed. Worth noting as a class of bug: any field-walking guardrail will do this unless it filters transport metadata, and the symptom is bizarre — a missing model dependency blocking a request because nothing could judge the string `"gpt-4o"`. |
+
 ## Stale framing to fix in the client materials
 
 The deck cites **August 2026** EU AI Act high-risk obligations and the Guardrails AI
