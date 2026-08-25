@@ -989,6 +989,13 @@ _ZEROSHOT_MODEL = "MoritzLaurer/roberta-base-zeroshot-v2.0-c"
 _ZEROSHOT_REVISION = "d825e740e0c59881cf0b0b1481ccf726b6d65341"
 
 
+# How far past the tenant's threshold a hit must sit before it blocks outright
+# rather than escalating. This is a fraction of the range ABOVE the threshold
+# (llm-guard's risk score is threshold-relative), so it stays meaningful when a
+# tenant moves the threshold - which a bare absolute literal would not.
+_RISK_SEVERE = 0.8
+
+
 class ToxicityClassifier:
     THRESHOLD_KEY = "safety.toxicity.classifier"
     """llm-guard's `Toxicity` scanner, Stage 2.
@@ -1008,7 +1015,9 @@ class ToxicityClassifier:
         self.threshold = threshold
         self.model = _TOXICITY_MODEL
         self.revision = _TOXICITY_REVISION
-        self._scanner: object | None = None
+        # Keyed by threshold: see _load. A per-tenant threshold has to reach the
+        # scanner's constructor, so one instance may hold several.
+        self._scanners: dict[float, object] = {}
         self._unavailable: str | None = None
 
     def available(self) -> bool:
@@ -1022,17 +1031,36 @@ class ToxicityClassifier:
                 return False
         return True
 
-    def _load(self):
-        if self._scanner is not None or self._unavailable is not None:
-            return self._scanner
+    def _load(self, threshold: float | None = None):
+        """Return a scanner whose internal threshold IS `threshold`.
+
+        The threshold cannot be applied after the fact. llm-guard's `scan`
+        returns `calculate_risk_score(score, threshold)` (util.py:134-144), a
+        value in [-1, 1] measured RELATIVE to the scanner's own threshold - so
+        the raw probability never leaves the scanner, and comparing the returned
+        risk against a different threshold would be meaningless. The scanner has
+        to be built with the tenant's value.
+
+        Scanners are cached per threshold. Distinct tenant values mean distinct
+        cache entries, which is a bounded cost (the model weights are shared by
+        `transformers`' own cache; only the thin wrapper is rebuilt) and is the
+        price of the threshold being real rather than decorative.
+        """
+        if threshold is None:
+            threshold = self.threshold
+        key = round(float(threshold), 4)
+        if key in self._scanners:
+            return self._scanners[key]
+        if self._unavailable is not None:
+            return None
         try:
             from llm_guard.input_scanners.toxicity import (  # noqa: PLC0415
                 DEFAULT_MODEL, Toxicity)
-            self._scanner = Toxicity(model=DEFAULT_MODEL,
-                                     threshold=self.threshold)
+            self._scanners[key] = Toxicity(model=DEFAULT_MODEL, threshold=key)
         except Exception as exc:  # noqa: BLE001 - any failure is "cannot judge"
             self._unavailable = f"{type(exc).__name__}: {exc}"
-        return self._scanner
+            return None
+        return self._scanners[key]
 
     def check(self, path: str, text: str,
               ctx: CheckContext | None = None) -> RailResult:
@@ -1043,7 +1071,10 @@ class ToxicityClassifier:
                      if ctx is not None else self.threshold)
         if not text or not text.strip():
             return RailResult.clean()
-        scanner = self._load()
+        # The resolved threshold is passed INTO the scanner, not compared against
+        # its output - see _load. Passing it here is what makes a tenant override
+        # change the verdict rather than merely appear in the read log.
+        scanner = self._load(threshold)
         if scanner is None:
             return RailResult.unjudged(
                 f"llm-guard Toxicity unavailable ({self.model} @ "
@@ -1055,16 +1086,21 @@ class ToxicityClassifier:
                 f"{self.name} failed at scan time: {type(exc).__name__}: {exc}")
         if valid:
             return RailResult.clean()
+        # `risk` is threshold-relative in [-1, 1]: 0.0 means "exactly at the
+        # threshold", 1.0 means "at the top of the range above it". Clamping to
+        # [0, 1] keeps it inside the contract's score bounds, and the value is
+        # therefore a distance past the tenant's threshold, not a probability.
         score = max(0.0, min(1.0, float(risk)))
+        severe = score >= _RISK_SEVERE
         return RailResult(findings=[Finding(
             category=map_category("toxicity"),
-            severity=Severity.HIGH if score >= 0.8 else Severity.MEDIUM,
-            action=Action.BLOCK if score >= 0.8 else Action.FLAG,
+            severity=Severity.HIGH if severe else Severity.MEDIUM,
+            action=Action.BLOCK if severe else Action.FLAG,
             path=path,
             score=score,
             detector=self.name,
-        )], block=score >= 0.8, escalate=score < 0.8,
-            reason="classifier above threshold")
+        )], block=severe, escalate=not severe,
+            reason=f"classifier risk {score:.2f} past threshold {threshold:.2f}")
 
 
 class ZeroShotTopics:
@@ -1088,7 +1124,9 @@ class ZeroShotTopics:
         self.threshold = threshold
         self.model = _ZEROSHOT_MODEL
         self.revision = _ZEROSHOT_REVISION
-        self._scanner: object | None = None
+        # Keyed by threshold: BanTopics takes it at construction, so a
+        # per-tenant value has to reach the constructor. See ToxicityClassifier.
+        self._scanners: dict[float, object] = {}
         self._unavailable: str | None = None
 
     def available(self) -> bool:
@@ -1099,18 +1137,30 @@ class ZeroShotTopics:
                 return False
         return True
 
-    def _load(self):
-        if self._scanner is not None or self._unavailable is not None:
-            return self._scanner
+    def _load(self, threshold: float | None = None):
+        """Return a BanTopics whose internal threshold IS `threshold`.
+
+        Same reason as ToxicityClassifier: `scan` returns a threshold-relative
+        risk, not the raw entailment score, so the tenant's value must go in at
+        construction rather than being compared against the output.
+        """
+        if threshold is None:
+            threshold = self.threshold
+        key = round(float(threshold), 4)
+        if key in self._scanners:
+            return self._scanners[key]
+        if self._unavailable is not None:
+            return None
         try:
             from llm_guard.input_scanners.ban_topics import (  # noqa: PLC0415
                 MODEL_ROBERTA_BASE_C_V2, BanTopics)
-            self._scanner = BanTopics(topics=list(self.topics),
-                                      threshold=self.threshold,
-                                      model=MODEL_ROBERTA_BASE_C_V2)
+            self._scanners[key] = BanTopics(topics=list(self.topics),
+                                            threshold=key,
+                                            model=MODEL_ROBERTA_BASE_C_V2)
         except Exception as exc:  # noqa: BLE001
             self._unavailable = f"{type(exc).__name__}: {exc}"
-        return self._scanner
+            return None
+        return self._scanners[key]
 
     def check(self, path: str, text: str,
               ctx: CheckContext | None = None) -> RailResult:
@@ -1123,7 +1173,7 @@ class ZeroShotTopics:
             return RailResult.clean()
         if not text or not text.strip():
             return RailResult.clean()
-        scanner = self._load()
+        scanner = self._load(threshold)
         if scanner is None:
             return RailResult.unjudged(
                 f"llm-guard BanTopics unavailable ({self.model} @ "
