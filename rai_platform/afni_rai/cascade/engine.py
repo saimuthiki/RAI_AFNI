@@ -58,7 +58,43 @@ class CascadeOutcome:
 
     @property
     def stages_run(self) -> int:
-        return len(self.trace)
+        """Stages that actually executed a rail.
+
+        Not `len(trace)`: the trace deliberately records skipped and
+        short-circuited stages too, so that the saving is visible. Counting
+        those as "run" would report a clean request as having cost three stages
+        and quietly invert the whole cost argument.
+        """
+        return sum(1 for t in self.trace if t.rails_run)
+
+    @property
+    def stages_skipped(self) -> int:
+        return sum(1 for t in self.trace if not t.rails_run)
+
+
+def _dedupe(findings: Iterable[Finding]) -> list[Finding]:
+    """Collapse findings that are the same observation reported twice.
+
+    A rail with several patterns for one attack shape will legitimately match
+    more than once on the same span - PyRIT's static injection scorer has 11
+    rules and "ignore all previous instructions" trips two of them. Left alone,
+    the duplicate inflates the finding count, appears twice in an operator's
+    explanation, and double-counts in the compliance rollup that groups findings
+    by category.
+
+    Identity is (category, path, start, end, detector). Two genuinely different
+    detectors finding the same span is corroboration and is kept - that is
+    signal, not noise.
+    """
+    seen: set[tuple] = set()
+    out: list[Finding] = []
+    for f in findings:
+        key = (f.category, f.path, f.start, f.end, f.detector)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(f)
+    return out
 
 
 def _blocking(findings: Iterable[Finding]) -> bool:
@@ -153,6 +189,7 @@ class Cascade:
             # severe enough that a second opinion is worth paying for.
             escalate_next = asked_to_escalate or _severe(stage_findings)
 
+        findings = _dedupe(findings)
         decision = self._decide(event, findings, unjudged)
         verdict = Verdict(
             event_id=event.step_id,
