@@ -265,3 +265,52 @@ class TestCascadeReporting(unittest.TestCase):
         out = Cascade([rail]).evaluate(event())
         self.assertEqual(len(out.verdict.findings), 2,
                          "independent detectors agreeing is signal, not noise")
+
+
+class TestPayloadExtraction(unittest.TestCase):
+    """Protocol metadata must not be judged.
+
+    Found by running the CLI: a Stage-2 rail with absent model weights returns
+    `unjudged` for every path it is handed, and `unjudged` on client-facing
+    traffic fails closed - so an unfiltered payload meant a missing dependency
+    blocked a request because nothing could judge the string "gpt-4o".
+    """
+
+    def payload(self):
+        return {
+            "model": "gpt-4o",
+            "messages": [{"role": "user", "content": "hello"}],
+            "stop": ["\n", "END"],
+            "user": "u-123",
+            "id": "req_abc",
+            "finish_reason": "stop",
+        }
+
+    def test_metadata_keys_are_not_judged(self):
+        paths = event(self.payload()).texts()
+        for gone in ("payload.model", "payload.messages[0].role", "payload.id",
+                     "payload.finish_reason", "payload.stop[0]", "payload.stop[1]"):
+            self.assertNotIn(gone, paths, f"{gone} should not be judged")
+
+    def test_content_is_still_judged(self):
+        paths = event(self.payload()).texts()
+        self.assertEqual(paths["payload.messages[0].content"], "hello")
+
+    def test_user_identifier_is_still_judged(self):
+        # Deliberately NOT treated as metadata: `user` is caller-supplied and has
+        # been known to carry an email address. PII there is a real leak.
+        self.assertIn("payload.user", event(self.payload()).texts())
+
+    def test_unrecognised_keys_are_judged_not_skipped(self):
+        # Deny-list, not allow-list: missing a content field would mean missing
+        # protection, so anything unrecognised must still be judged.
+        paths = event({"some_new_field": "secret text",
+                       "vendor": {"nested_thing": "more text"}}).texts()
+        self.assertIn("payload.some_new_field", paths)
+        self.assertIn("payload.vendor.nested_thing", paths)
+
+    def test_a_metadata_key_deeper_in_the_tree_is_still_filtered(self):
+        paths = event({"choices": [{"index": 0, "finish_reason": "stop",
+                                    "message": {"role": "assistant",
+                                                "content": "the answer"}}]}).texts()
+        self.assertEqual(list(paths), ["payload.choices[0].message.content"])

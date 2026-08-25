@@ -82,6 +82,32 @@ class LLMProtocol(str, Enum):
     CANONICAL = "canonical"
 
 
+# Keys whose string values are transport metadata, never user or model content.
+# Kept deliberately tight - each entry is a field defined by a provider's API
+# schema, not a guess. `user` is NOT here: it is an opaque caller-supplied
+# identifier that has been known to carry an email address, and PII in that
+# field is a real leak worth catching.
+PROTOCOL_METADATA_KEYS = frozenset({
+    "role",             # openai.chat / anthropic.messages: "user" | "assistant"
+    "model",            # model id
+    "type",             # anthropic content-block discriminator: "text" | "image"
+    "object",           # openai response envelope: "chat.completion"
+    "id",               # request / message / tool-call identifiers
+    "tool_call_id",
+    "request_id",
+    "session_id",
+    "finish_reason",    # openai
+    "stop_reason",      # anthropic
+    "stop",             # openai: caller-supplied terminators, a list of strings
+    "stop_sequence",
+    "system_fingerprint",
+    "encoding_format",
+    "api_version",
+    "index",
+    "created",
+})
+
+
 # The seven tenets. Spelled exactly as the analysis data spells them, so a tenet
 # string joins cleanly against data/tenet_methodology_data.json and
 # data/capability_matrix_data.json without a translation table.
@@ -242,18 +268,35 @@ class GuardEvent:
         The path is what `unjudged` and `Finding.path` refer to, so this is the
         single place that decides what "a payload path" means. Nested lists and
         dicts are walked; non-string leaves are skipped rather than coerced.
+
+        Protocol metadata is excluded (see `PROTOCOL_METADATA_KEYS`). Judging it
+        is not merely wasteful - it is actively harmful. A Stage-2 rail whose
+        model weights are absent returns `unjudged` for every path it was handed,
+        and `unjudged` on client-facing traffic fails closed. Left unfiltered,
+        that means a missing dependency blocks a request because nothing could
+        judge the string "gpt-4o" in `payload.model`. Observed exactly that way
+        while running the CLI.
+
+        This is a DENY-list, not an allow-list, and deliberately so: anything
+        unrecognised is still judged. Missing a content field would mean missing
+        protection, whereas judging one extra metadata field is only noise, so
+        the failure is pointed in the safe direction.
         """
         found: dict[str, str] = {}
 
-        def walk(node: Any, path: str) -> None:
+        def walk(node: Any, path: str, key: str | None) -> None:
             if isinstance(node, str):
-                found[path] = node
+                if key not in PROTOCOL_METADATA_KEYS:
+                    found[path] = node
             elif isinstance(node, dict):
-                for key, value in node.items():
-                    walk(value, f"{path}.{key}" if path else str(key))
+                for k, value in node.items():
+                    walk(value, f"{path}.{k}" if path else str(k), k)
             elif isinstance(node, list):
                 for i, value in enumerate(node):
-                    walk(value, f"{path}[{i}]")
+                    # A list element inherits its container's key, so
+                    # `stop: ["\n", "END"]` stays metadata rather than becoming
+                    # two judgeable strings.
+                    walk(value, f"{path}[{i}]", key)
 
-        walk(self.payload, "payload")
+        walk(self.payload, "payload", None)
         return found
