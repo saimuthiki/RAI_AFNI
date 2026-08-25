@@ -996,6 +996,41 @@ _ZEROSHOT_REVISION = "d825e740e0c59881cf0b0b1481ccf726b6d65341"
 _RISK_SEVERE = 0.8
 
 
+def _localise(model, repo_id: str, revision: str | None):
+    """Point an llm-guard `Model` at a local folder when one is present.
+
+    llm-guard resolves its own weights from `Model.path` (a HuggingFace repo id)
+    plus `Model.revision`, so redirecting it means rewriting those fields rather
+    than passing arguments through. This returns a COPY: mutating the
+    module-level `DEFAULT_MODEL` in place would leak the override into every
+    other consumer in the process.
+
+    `revision` is cleared alongside `path`, because a local directory has no
+    commit sha and llm-guard passes both to `from_pretrained`, which rejects
+    `revision` for a path. The ONNX fields go too - they name a *different*
+    repo, so leaving them set would send llm-guard back to the hub for the ONNX
+    variant while the PyTorch weights sat locally.
+
+    Returns `(model, note)`. On any failure the original model comes back
+    unchanged: a rail that cannot localise should still try the hub, and the
+    honest `unjudged` path covers it from there.
+    """
+    from ...models import resolve  # noqa: PLC0415
+
+    resolved = resolve(repo_id, revision)
+    if not resolved.local:
+        return model, resolved.note
+    try:
+        import dataclasses  # noqa: PLC0415
+
+        localised = dataclasses.replace(
+            model, path=resolved.target, revision=None,
+            onnx_path=None, onnx_revision=None)
+    except Exception as exc:  # noqa: BLE001 - upstream dataclass shape changed
+        return model, f"{resolved.note} (could not redirect llm-guard: {exc})"
+    return localised, resolved.note
+
+
 class ToxicityClassifier:
     THRESHOLD_KEY = "safety.toxicity.classifier"
     """llm-guard's `Toxicity` scanner, Stage 2.
@@ -1019,6 +1054,11 @@ class ToxicityClassifier:
         # scanner's constructor, so one instance may hold several.
         self._scanners: dict[float, object] = {}
         self._unavailable: str | None = None
+        # Filled in by _load: which weights actually backed the decision, a
+        # local folder or the pinned hub revision. /healthz reports it, because
+        # "loaded from a folder someone copied in" and "loaded from the pinned
+        # upstream revision" are different provenance claims.
+        self.source: str | None = None
 
     def available(self) -> bool:
         """Cheap, side-effect-free probe: is the library importable at all?
@@ -1056,7 +1096,10 @@ class ToxicityClassifier:
         try:
             from llm_guard.input_scanners.toxicity import (  # noqa: PLC0415
                 DEFAULT_MODEL, Toxicity)
-            self._scanners[key] = Toxicity(model=DEFAULT_MODEL, threshold=key)
+            model, note = _localise(DEFAULT_MODEL, _TOXICITY_MODEL,
+                                    _TOXICITY_REVISION)
+            self.source = note
+            self._scanners[key] = Toxicity(model=model, threshold=key)
         except Exception as exc:  # noqa: BLE001 - any failure is "cannot judge"
             self._unavailable = f"{type(exc).__name__}: {exc}"
             return None
@@ -1128,6 +1171,11 @@ class ZeroShotTopics:
         # per-tenant value has to reach the constructor. See ToxicityClassifier.
         self._scanners: dict[float, object] = {}
         self._unavailable: str | None = None
+        # Filled in by _load: which weights actually backed the decision, a
+        # local folder or the pinned hub revision. /healthz reports it, because
+        # "loaded from a folder someone copied in" and "loaded from the pinned
+        # upstream revision" are different provenance claims.
+        self.source: str | None = None
 
     def available(self) -> bool:
         import importlib.util
@@ -1154,9 +1202,12 @@ class ZeroShotTopics:
         try:
             from llm_guard.input_scanners.ban_topics import (  # noqa: PLC0415
                 MODEL_ROBERTA_BASE_C_V2, BanTopics)
+            model, note = _localise(MODEL_ROBERTA_BASE_C_V2, self.model,
+                                    self.revision)
+            self.source = note
             self._scanners[key] = BanTopics(topics=list(self.topics),
                                             threshold=key,
-                                            model=MODEL_ROBERTA_BASE_C_V2)
+                                            model=model)
         except Exception as exc:  # noqa: BLE001
             self._unavailable = f"{type(exc).__name__}: {exc}"
             return None

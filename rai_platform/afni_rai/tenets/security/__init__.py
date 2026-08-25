@@ -1026,6 +1026,13 @@ class DebertaInjectionRail:
     tenet = TENET
     stage = Stage.STAGE_2
     MODEL_ID = "protectai/deberta-v3-base-prompt-injection-v2"
+    # Pinned like every other Stage-2 model here. An unpinned revision on a
+    # SECURITY control is a supply-chain hole: the upstream author can replace
+    # the weights and this gateway would adopt them on the next cold start,
+    # silently, with no diff anywhere. `None` means "pin not yet established" -
+    # set it to the sha you actually downloaded, which `preflight` prints.
+    MODEL_REVISION: str | None = None
+    source: str | None = None
 
     def __init__(self, threshold: float = 0.9) -> None:
         self.threshold = threshold
@@ -1040,11 +1047,17 @@ class DebertaInjectionRail:
         except ImportError as exc:
             self._unavailable = f"transformers not installed ({exc.__class__.__name__})"
             return None
+        from ...models import resolve  # noqa: PLC0415
+        resolved = resolve(self.MODEL_ID, self.MODEL_REVISION)
+        self.source = resolved.note
         try:
-            self._pipeline = pipeline("text-classification", model=self.MODEL_ID,
-                                      truncation=True, max_length=512)
+            self._pipeline = pipeline("text-classification",
+                                      model=resolved.target,
+                                      truncation=True, max_length=512,
+                                      **resolved.kwargs)
         except Exception as exc:  # noqa: BLE001 - weights absent, offline, OOM
-            self._unavailable = f"{self.MODEL_ID} failed to load: {exc}"
+            self._unavailable = (f"{resolved.note} failed to load: "
+                                 f"{exc.__class__.__name__}: {exc}")
             return None
         return self._pipeline
 
