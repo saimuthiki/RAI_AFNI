@@ -290,3 +290,56 @@ since this session cannot push.
 - `knowledge/methodology.md` — new: the same tables in markdown, generated from the data so it cannot drift
 - `knowledge/INDEX.md`, `knowledge/tenets.md` — +links to the new node
 - `.gitignore` — note added about the reference repos' tracked `.claude/` folders
+
+### 2026-08-25 (cont'd) — Merged the two conflicting per-tenet recommendation sets
+**Type:** Modification / Bug Fix
+**Ask:** The deck carried two separate sets of per-tenet slides that both said "AFNI
+RECOMMENDATION" and did not agree — one set starting around slide 36 (the tenet cheat sheets) and
+another around slide 43 (the tenet recommendation slides). Merge the two sets into one, carrying any
+information present in one but not the other, and resolve the recommendation ambiguity so the client
+sees a single answer per tenet. Also: clean up unnecessary files before the unified-tool build, keep
+the updated PPTX in the repo, update this tracker, push, and merge to `main`.
+**What was done:**
+- Diagnosed the root cause rather than just picking a winner. The two sets were answering **different
+  questions under the same heading**: the recommendation slides answered "which of the 23 reviewed
+  repos do we adopt" (so their badges were repo names), while the cheat sheets answered "what does
+  the runtime stack look like", which mixes repos with the *engines inside them* and the *cloud
+  services beside them*. For Privacy that produced "Presidio + Azure PII" on one slide and
+  "LLM Guard + NeMo Guardrails + garak" on another — the same stack at two different altitudes, but
+  a client cannot tell that.
+- Built one merged slide per tenet (`helpers/build_deck_tenetmerged.py`) that states the
+  recommendation in the three layers it actually has, each explicitly labelled — **ADOPT** (of the
+  23), **ENGINE UNDER IT**, **CLOUD SECOND OPINION** — plus **WHERE IT RUNS**, which ties each pick
+  to its cascade stage from the methodology analysis. A "RECONCILED" note on every slide says what
+  the two earlier slides disagreed about and why the merged answer is what it is, so the ambiguity
+  cannot silently reappear.
+- Settled the two genuine disagreements on evidence, not preference:
+  - **Accountability** — cheat sheet said DeepTeam, recommendation slide said Promptfoo. Promptfoo
+    wins: 6 framework mappings (OWASP LLM, NIST AI RMF, MITRE ATLAS, EU AI Act, ISO 42001, GDPR) vs
+    DeepTeam's 5, and PyRIT ships no report generator at all. DeepTeam kept as a secondary source.
+  - **Hallucination** — the cheat sheet put Giskard in the runtime picture; Giskard v3 is LLM-judge
+    based and needs a paid API, so it is CI-only, never inline.
+  - **Content Safety** differed only by omission; the union is correct (LLM Guard local pass, NeMo
+    routing, Promptfoo CI corpus, Azure audit trail).
+- Nothing was dropped: the long `combination_rationale`, the full cloud/paid option list and Sai's
+  prior-experience note all moved to each slide's **speaker notes** rather than being cut, since the
+  merged slide could not hold them at a readable size.
+- Deck went 87 → 80 slides (14 slides became 7). `build_deck_tenetcards.py` is now a **data-only**
+  module — the merged renderer reads its `TENET_CARDS` prose, so there is no second copy of any text.
+- Cleanup, scoped deliberately: removed the two spent one-time migration scripts
+  (`patch_repo_slides.py`, `patch_repo_slides_2.py`, 0 references), the orphaned
+  `add_tenet_recommendation_slide` (81 lines), the retired cheat-sheet renderers, and 8 imports the
+  removals left unused (AST-verified, not guessed). **`helpers/` itself was NOT deleted** — it is the
+  entire deck and HTML generation pipeline; removing it would destroy the ability to rebuild either
+  deliverable. Flagged for the user rather than acted on unilaterally.
+- Verified: 80 slides (counter and actual agree), 16 tables with 0 overflow cells, 0 deck layout
+  issues, all 23 repos and 7 tenets still present, `guardrail_atlas.html` byte-identical, and no
+  unused imports remaining in the touched modules.
+**Files created / changed:**
+- `helpers/build_deck_tenetmerged.py` — new: the merged renderer plus the `RECONCILED` dataset
+- `helpers/build_deck_tenetcards.py` — reduced to data only (179 → 136 lines); renderers retired
+- `helpers/build_deck_synthesis.py` — `add_tenet_recommendation_slide` removed; wiring points at the
+  merged set; unused imports cleaned
+- `helpers/patch_repo_slides.py`, `helpers/patch_repo_slides_2.py` — deleted (spent migrations)
+- `AFNI_Responsible_AI_Framework.pptx` — 87 → 80 slides, merged tenet section at slides 39-45
+- `knowledge/tenets.md` — new section documenting the reconciliation and the two settled conflicts
