@@ -32,7 +32,7 @@ the mapping answers "which probes exercise this control". AFNI needs the inverse
 keyed on its own taxonomy: given a finding we actually produced, which controls
 does it evidence?
 
-So the port is two tables:
+So the port is three tables:
 
   1. `PLUGIN_TO_CATEGORY` - promptfoo plugin id -> AFNI category prefixes. This is
      the only judgement call in the file, and every row is a plugin id read out
@@ -40,7 +40,12 @@ So the port is two tables:
      (`references/openguardrails-main/.../specification/taxonomy.md`) or to the
      `x.afni.*` extension namespace where the taxonomy has no term (bias, for
      instance, has no OpenGuardrails category).
-  2. `_FRAMEWORKS` - the control -> plugin lists, transcribed from frameworks.ts.
+  2. `FRAMEWORKS` - the control -> plugin lists, transcribed from frameworks.ts.
+  3. `CONTROL_STRATEGIES` + `STRATEGY_TO_CATEGORY` - the same for the `strategies`
+     half of each mapping. Skipping it would lose real coverage: `jailbreak` is a
+     promptfoo *strategy*, so without this table a `security.jailbreak` finding
+     evidences no OWASP LLM control at all, even though frameworks.ts:81 lists
+     jailbreak strategies under `owasp:llm:01`.
 
 Inversion happens once at import, in pure Python, and produces
 `category prefix -> [control ids]`. Matching is by prefix, so a finding at
@@ -367,6 +372,71 @@ GDPR: dict[str, list[str]] = {
 }
 
 
+# --------------------------------------------------------------------------- #
+# 3. Strategies.
+#
+# Each promptfoo control maps to `{plugins, strategies}` (frameworks.ts:6). The
+# plugin lists above are the *what*; the strategy lists are the *how*, and
+# ignoring them loses real mappings. `jailbreak` is a strategy, not a plugin - so
+# without this table a `security.jailbreak` finding maps to nothing under OWASP
+# LLM Top 10, even though frameworks.ts:81 lists jailbreak strategies under
+# owasp:llm:01. Transcribed from the same six blocks.
+# --------------------------------------------------------------------------- #
+STRATEGY_TO_CATEGORY: dict[str, tuple[str, ...]] = {
+    # taxonomy.md:55 - "Attempt to subvert the agent's own guardrails/policy."
+    "jailbreak": ("security.jailbreak",),
+    "jailbreak-templates": ("security.jailbreak",),
+    "jailbreak:composite": ("security.jailbreak",),
+    "jailbreak:tree": ("security.jailbreak",),
+    "crescendo": ("security.jailbreak",),
+    # Encoding obfuscation. OpenGuardrails names obfuscation only inside
+    # security.malicious_command (taxonomy.md:56), which is narrower than what
+    # these strategies do, so they get the extension namespace.
+    "base64": ("x.afni.encoding_obfuscation",),
+    "rot13": ("x.afni.encoding_obfuscation",),
+    "leetspeak": ("x.afni.encoding_obfuscation",),
+}
+
+_JB3 = ("jailbreak", "jailbreak-templates", "jailbreak:composite")
+_JB2 = ("jailbreak", "jailbreak-templates")
+
+CONTROL_STRATEGIES: dict[str, tuple[str, ...]] = {
+    # frameworks.ts:81,94,113,118,131,144,156,166 (owasp:llm:03 and :10 empty)
+    "owasp:llm:01": _JB3, "owasp:llm:02": _JB3, "owasp:llm:04": _JB3,
+    "owasp:llm:05": _JB2, "owasp:llm:06": _JB3, "owasp:llm:07": _JB3,
+    "owasp:llm:08": _JB3, "owasp:llm:09": _JB3,
+    # frameworks.ts:399,403,419,435,463 - the only five NIST controls with any
+    "nist:ai:measure:1.1": _JB2, "nist:ai:measure:1.2": _JB2,
+    "nist:ai:measure:2.4": _JB2, "nist:ai:measure:2.7": _JB2,
+    "nist:ai:measure:3.1": _JB2,
+    # frameworks.ts:496,528,552,576,603,615,629,642
+    "mitre:atlas:ai-attack-staging": ("jailbreak", "jailbreak:tree"),
+    "mitre:atlas:ml-attack-staging": ("jailbreak", "jailbreak:tree"),
+    "mitre:atlas:command-and-control": ("crescendo",),
+    "mitre:atlas:defense-evasion": ("base64", "jailbreak", "jailbreak-templates",
+                                    "leetspeak", "rot13"),
+    "mitre:atlas:execution": _JB2,
+    "mitre:atlas:impact": ("crescendo",),
+    "mitre:atlas:initial-access": ("base64", "jailbreak", "leetspeak",
+                                   "jailbreak-templates", "rot13"),
+    "mitre:atlas:persistence": ("jailbreak",),
+    "mitre:atlas:privilege-escalation": ("jailbreak", "jailbreak:tree",
+                                         "jailbreak-templates"),
+    # frameworks.ts:678,689,723
+    "eu:ai-act:art5:subliminal-manipulation": (
+        "jailbreak", "jailbreak:tree", "jailbreak:composite",
+        "jailbreak-templates"),
+    "eu:ai-act:art5:exploitation-of-vulnerabilities": ("jailbreak",),
+    "eu:ai-act:annex3:critical-infrastructure": _JB2,
+    # frameworks.ts:801,806,817
+    "iso:42001:robustness": ("jailbreak", "jailbreak:composite",
+                            "jailbreak:tree"),
+    "iso:42001:security": ("jailbreak", "jailbreak:composite", "base64", "rot13"),
+    "iso:42001:safety": ("jailbreak", "jailbreak:composite", "jailbreak:tree"),
+    # GDPR: every article's strategy list is empty upstream.
+}
+
+
 @dataclass(frozen=True)
 class Framework:
     """One framework, its controls, and how complete this port of it is."""
@@ -382,12 +452,16 @@ class Framework:
     def control_ids(self) -> list[str]:
         return list(self.controls)
 
+    def strategies_for(self, control: str) -> tuple[str, ...]:
+        return CONTROL_STRATEGIES.get(control, ())
+
     @property
     def evidenceable(self) -> list[str]:
-        """Controls that at least one plugin - and therefore at least one AFNI
-        category - can evidence. The difference between this and `control_ids` is
-        the honest gap."""
-        return [c for c, plugins in self.controls.items() if plugins]
+        """Controls that at least one plugin or strategy - and therefore at least
+        one AFNI category - can evidence. The difference between this and
+        `control_ids` is the honest gap."""
+        return [c for c, plugins in self.controls.items()
+                if plugins or CONTROL_STRATEGIES.get(c)]
 
 
 FRAMEWORKS: dict[str, Framework] = {
@@ -449,22 +523,30 @@ class ControlRef:
     framework_name: str
     control: str
     title: str
-    via_plugin: str
+    via_plugin: str   # the promptfoo plugin OR strategy id that justified it
 
     def __str__(self) -> str:
         return f"{self.control} ({self.framework_name})"
 
 
 def _invert() -> dict[str, list[ControlRef]]:
-    """category prefix -> the controls it evidences. Built once at import."""
+    """category prefix -> the controls it evidences. Built once at import.
+
+    Walks both tables: a control is evidenced by its plugins and by its
+    strategies, because upstream splits the two and a finding does not care which
+    side of that split named it.
+    """
     out: dict[str, list[ControlRef]] = {}
     for fw in FRAMEWORKS.values():
-        for control, plugins in fw.controls.items():
-            for plugin in plugins:
-                for prefix in PLUGIN_TO_CATEGORY.get(plugin, ()):
+        for control in fw.controls:
+            sources = ([(p, PLUGIN_TO_CATEGORY) for p in fw.controls[control]]
+                       + [(s, STRATEGY_TO_CATEGORY)
+                          for s in CONTROL_STRATEGIES.get(control, ())])
+            for name, table in sources:
+                for prefix in table.get(name, ()):
                     ref = ControlRef(
                         framework=fw.key, framework_name=fw.name, control=control,
-                        title=OWASP_LLM_TITLES.get(control, ""), via_plugin=plugin)
+                        title=OWASP_LLM_TITLES.get(control, ""), via_plugin=name)
                     bucket = out.setdefault(prefix, [])
                     if not any(r.framework == ref.framework
                                and r.control == ref.control for r in bucket):
@@ -489,7 +571,7 @@ class ComplianceReport:
         AFNI's coverage, and counting it as one would understate the report just
         as badly as ignoring it overstates it."""
         fw = FRAMEWORKS[framework]
-        hit = len([c for c in self.by_framework.get(framework, {}) ])
+        hit = len(self.by_framework.get(framework, {}))
         return hit, len(fw.evidenceable)
 
     def render(self) -> str:
