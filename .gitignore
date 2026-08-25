@@ -2,14 +2,10 @@ __pycache__/
 *.pyc
 
 # Local, machine-specific Claude Code settings (the shared wiring in
-# .claude/settings.json, .claude/helpers/ and .claude/skills/ IS committed)
+# .claude/settings.json, .claude/helpers/ and .claude/skills/ IS committed).
+# Note: the reference repos' own .claude/ folders under references/ ARE tracked
+# deliberately, as part of the reference material - see commit 6d8da14.
 .claude/settings.local.json
-
-# Third-party repos under references/ carry their own agent configs. Those are
-# their authors' files, not AFNI's wiring, so keep them out of this repo.
-references/**/.claude/
-references/**/.cursor/
-references/**/AGENTS.md
 
 # Regenerable context caches — each dev builds their own (like node_modules)
 graft/
