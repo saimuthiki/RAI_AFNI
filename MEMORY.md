@@ -343,3 +343,98 @@ the updated PPTX in the repo, update this tracker, push, and merge to `main`.
 - `helpers/patch_repo_slides.py`, `helpers/patch_repo_slides_2.py` — deleted (spent migrations)
 - `AFNI_Responsible_AI_Framework.pptx` — 87 → 80 slides, merged tenet section at slides 39-45
 - `knowledge/tenets.md` — new section documenting the reconciliation and the two settled conflicts
+
+---
+
+## 2026-08-25 — FastAPI gateway, operator console, and the README
+
+**What was asked:** build the gateway and a frontend UI covering all tenets with
+streaming; report per tenet which repos are used and in which phase, in the
+README; add Swagger with sample tenet payloads; implement a multi-key provider
+fallback chain; and write the README about the *tool* — folder structure,
+tenet↔framework↔phase mapping, methodology, and a fresh-user guide with
+flowcharts.
+
+**Shipped (commit `baa4cb29`, pushed to `claude/raiafni-repo-overview-grhjtb`):**
+
+- **Gateway** — 7 routes. `/v1/guard`, `/v1/guard/stream` (SSE, one frame per
+  cascade stage), `/v1/coverage`, `/v1/phases`, `/v1/rails`, `/healthz`, `/docs`.
+  `Cascade.evaluate_iter()` became a real generator so streaming is incremental;
+  `evaluate()` is now a driver over it, with a test comparing both paths.
+- **Provider chain** — ordered across providers and keys, advancing only on
+  401/403/408/429/5xx/timeout/connect-error. A low score never falls through. A
+  400/404 is terminal. Exhaustion → `unjudged` → fails closed. Logs the key
+  *index*, never the key. Verified over a real socket against a local stub
+  (429 → next key → 200).
+- **Console** — four views, vanilla ES modules, no build step. Mounted at `/`
+  **after** the API routes; a mount at `/` matches everything, so registered
+  earlier it would shadow `/v1` and `/docs`. Same-origin is deliberate: the
+  alternative is CORS, and a guardrail gateway sending
+  `Access-Control-Allow-Origin` is one any page can drive with the operator's
+  session. A test pins both halves and asserts no CORS header is ever sent.
+- **README** — 986 lines, 8 Mermaid flowcharts (whole cascade + one per tenet),
+  folder-by-folder responsibility, the full rail→repo→phase table, methodology,
+  fresh-user guide, and honest limits.
+
+**Four defects found by running it, not by reading it:**
+
+1. **`attack-corpus-repeat` could not name itself.** `corpus.py` always defined
+   its `RailAttribution`, but the package re-exported it only as
+   `RAIL_ATTRIBUTION` — a name no loader reads. So a block from that rail
+   arrived with no repo, no mechanism and no confidence kind, which defeats the
+   one thing an explanation exists for. Now keyed off the mounted rails, plus a
+   test asserting **no** mounted rail lacks an attribution. Verified failing
+   against the reverted export.
+2. **An OpenAI key was not detected.** Every secret pattern was a faithful port,
+   and none of the reviewed repos carries an `sk-proj-` format — garak's dora
+   list, PyRIT's credential scorer and hai-guardrails' vendor list all predate
+   it. So the rail caught a pasted Google AI Studio key (`AIza…`) and let an
+   OpenAI project key through, while this platform's own judge chain is
+   configured against both providers. Added six LLM-provider prefixes as
+   **declared AFNI additions**, disclosed in the attribution so a false positive
+   is filed against the right author. 10 tests, including the benign strings a
+   short prefix could trip (`hf_hub_download`, `sk-learn`, `sklearn`) and a
+   zero-entropy placeholder.
+   *Lesson: a faithful port is the right default and is not a completeness
+   guarantee.*
+3. **The reported entity was uninformative.** `entity` took the last segment of
+   the category, which works for `security.secret_leak.api_key` and degrades to
+   `us` for `privacy.pii.national_id.us` — and `in` for a tax id reads as an
+   English preposition. A two-letter tail now keeps its parent
+   (`national_id.us`), restricted to two so `health_id.dea` stays `dea`. A test
+   walks every category the platform emits and rejects any yielding under three
+   characters.
+4. **No favicon**, so the browser's unprompted request logged a 404. Cosmetic
+   anywhere else; in a governance console an operator cannot tell a spurious red
+   error from a real one. Inline data URI.
+
+**Two limits discovered and now documented rather than hidden:**
+
+- **On a fresh install most blocks are fail-closed blocks, not detections.** The
+  same SSN is *allowed* on internal traffic and *blocked* on client-facing
+  traffic with identical findings — the block comes from Presidio being absent,
+  not from the SSN. The README leads with this.
+- **No Stage-1 rail blocks on a prompt-injection pattern, by design** (PyRIT
+  documents a high FP rate, so a regex hit buys a second opinion). Consequence:
+  a textbook injection plus a DAN jailbreak yields four HIGH findings and is
+  **allowed** on internal traffic when the classifier weights are absent. Stage 1
+  alone is a detector for injection, not a control against it.
+
+**Also:** removed three empty placeholder packages (`audit/`, `policy/`,
+`rails/`) that the old README described as holding the rails and policy code.
+They never did — that code lives in `tenets/` and `tenets/accountability/`. A
+structure section describing directories that do not exist is worse than none.
+
+**Verification:** 726 tests pass. Server started and every route curled; SSE
+frames timestamped; the console driven in headless Chromium against the live
+gateway — four views render real data, zero console errors, no horizontal
+overflow. The gateway agent independently confirmed no matched value reaches the
+wire (it closed two leaks the brief did not name: the verdict's optional
+`Finding.subject`, and pydantic's 422 `input` field echoing the whole payload).
+
+**Still unverified, and stated as such everywhere:** no live provider call is
+possible from this container — `api.openai.com` and
+`generativelanguage.googleapis.com` are both blocked by the proxy while
+`pypi.org` returns 200. `HTTP=000` is a connection failure, not an auth
+rejection, so the user's keys remain untested from here and the model ids stay
+marked `UNVERIFIED DEFAULT`.
