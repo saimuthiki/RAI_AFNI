@@ -564,7 +564,7 @@ class ProtectedAttributeReferenceRail:
                 seen.add(key)
                 subject = hit.term
                 findings.append(Finding(
-                    category=f"{self.CATEGORY}",
+                    category=self.CATEGORY,
                     severity=Severity.MEDIUM if conditioned else Severity.LOW,
                     # Structural. Never BLOCK, never REDACT - redacting the word
                     # "pregnancy" out of a customer's own sentence would be a

@@ -62,7 +62,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable, Iterable, Sequence
 
 from ...cascade.rail import RailResult, Stage

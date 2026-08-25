@@ -530,6 +530,14 @@ _AMBIGUOUS: dict[str, str] = {
     "playboy": "a magazine title and an ordinary noun",
     "xx": "a chromosome pair and a placeholder",
     "goddam": "mild; left to Stage 2 rather than flagged",
+    # these six were demoted after measuring the filter against 11.6 MB of the
+    # vendored repos' own prose and code - each fired on something benign
+    "cum": "Latin ('cum laude'), and the usual abbreviation for cumulative",
+    "xxx": "the standard redaction/placeholder token, and Roman 30",
+    "dick": "a given name - Dick, and Moby-Dick",
+    "fanny": "a given name; 'fanny pack' in US English",
+    "gash": "a wound, in any clinical or incident text",
+    "prick": "'pin prick', 'needle prick'",
     # OFCOM strength-1 insults kept out of the flag tier as too weak to be
     # worth a finding on their own
     "cretin": "a weak insult; also an obsolete clinical term",
@@ -599,17 +607,28 @@ def _tokenize(text: str) -> list[tuple[str, int, int]]:
             for m in _TOKEN_RE.finditer(text)]
 
 
+_HAS_LETTER = re.compile(r"[A-Za-z]")
+
+
 def _candidates(token: str) -> list[str]:
     """Every canonical spelling this token could be an obfuscation of.
 
     Always includes the token itself and the token stripped of leading/trailing
     non-alphanumerics, so "fuck!" and "(shit)" still match while "hello!" does
     not gain a spurious variant.
+
+    A token with no letter in it at all is returned as-is and never de-obfuscated.
+    Found the hard way while measuring this filter against 11.6 MB of the
+    vendored repos' own prose and code: `455` de-leets to `ass` (4->a, 5->s,
+    5->s) and duly fired on a column of floats in a fairlearn test fixture. A
+    number is a number - leetspeak needs a letter to be leet.
     """
     seeds = {token}
     stripped = token.strip("@$*!+'\"")
     if stripped and stripped != token:
         seeds.add(stripped)
+    if not _HAS_LETTER.search(token):
+        return [s for s in seeds if s]
 
     out: list[str] = []
     seen: set[str] = set()
@@ -733,6 +752,24 @@ def _fingerprint(subject: str) -> str:
     return hashlib.sha256(subject.encode("utf-8")).hexdigest()[:16]
 
 
+def _snake_bounded(text: str, start: int, end: int) -> bool:
+    """True when the match sits inside a snake_case identifier.
+
+    `_` is deliberately outside the token alphabet, because that is what lets
+    `hand_job` match the two-token phrase "hand job" - upstream relies on the
+    same split (`better_profanity/better_profanity.py:239-243` documents
+    exactly that case). The cost is that `cum_sum_ratio` also splits, and
+    measuring this filter over 11.6 MB of the vendored repos found `cum` firing
+    on deepchecks' own variable name at
+    references/deepchecks-main/deepchecks/utils/performance/error_model.py.
+    So a *single-token* hit is rejected when an underscore is glued to either
+    end of it: that is an identifier, not a word.
+    """
+    if start > 0 and text[start - 1] == "_":
+        return True
+    return end < len(text) and text[end] == "_"
+
+
 def _scan(text: str, lexicon: dict[Term, LexEntry]
           ) -> tuple[list[tuple[LexEntry, int, int]], bool]:
     """Return the lexicon hits with their offsets, and whether any ambiguous
@@ -752,6 +789,8 @@ def _scan(text: str, lexicon: dict[Term, LexEntry]
         matched = False
         for span in range(min(_MAX_PHRASE, len(tokens) - i), 0, -1):
             window = tokens[i:i + span]
+            if span == 1 and _snake_bounded(text, window[0][1], window[0][2]):
+                continue
             if span == 1:
                 keys = [(cand,) for cand in _candidates(window[0][0])]
             else:
