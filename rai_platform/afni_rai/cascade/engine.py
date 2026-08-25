@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import inspect
 import time
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable, Sequence
 from dataclasses import dataclass, field
 
 from ..contract.models import Action, Decision, Finding, GuardEvent, Severity, Span, Verdict
@@ -50,6 +50,36 @@ class StageTrace:
     unjudged_paths: list[str]
     latency_ms: int
     short_circuited: bool = False
+
+
+@dataclass
+class StageProgress:
+    """One stage's result, handed out the moment that stage finishes.
+
+    This exists so a caller can stream a decision as it is being made rather
+    than after it has been made. `evaluate_iter` yields one of these per stage -
+    including the stages that were skipped or short-circuited, because "stage 2
+    never ran" is the cost argument becoming visible and is worth reporting.
+
+    `findings` and `unjudged` are cumulative snapshots, deduped the same way the
+    final verdict is, so a UI rendering them stage by stage shows the same rows
+    it will end up with rather than a set that has to be reconciled at the end.
+    """
+
+    trace: StageTrace
+    findings: list[Finding]
+    unjudged: list[str]
+    short_circuited: bool
+    will_escalate: bool
+    elapsed_ms: int
+
+    @property
+    def stage(self) -> Stage:
+        return self.trace.stage
+
+    @property
+    def ran(self) -> bool:
+        return bool(self.trace.rails_run)
 
 
 @dataclass
@@ -165,6 +195,36 @@ class Cascade:
         return [r for stage in sorted(self._by_stage) for r in self._by_stage[stage]]
 
     def evaluate(self, event: GuardEvent) -> CascadeOutcome:
+        """Run the whole cascade and return the one consolidated outcome.
+
+        Deliberately a thin driver over `evaluate_iter` rather than a second
+        implementation. There is exactly one place in this codebase that decides
+        what a stage does and when the next one runs; a streaming caller and a
+        blocking caller get answers from the same code or they will eventually
+        disagree, and a UI that disagrees with the audit record is worse than no
+        UI.
+        """
+        generator = self.evaluate_iter(event)
+        while True:
+            try:
+                next(generator)
+            except StopIteration as stop:
+                return stop.value
+
+    def evaluate_iter(self, event: GuardEvent
+                      ) -> Generator[StageProgress, None, CascadeOutcome]:
+        """Yield after every stage; return the consolidated outcome at the end.
+
+        The progress objects are produced *as each stage completes*, so a caller
+        streaming them is reporting work that has actually happened. Nothing is
+        buffered and re-emitted: the generator is suspended between stages, and
+        the Stage-3 rails that cost money have genuinely not run yet when the
+        Stage-1 event reaches the client.
+
+        The final outcome is the generator's return value rather than a last
+        yield, so the type of "a stage finished" and the type of "here is the
+        verdict" cannot be confused by a consumer.
+        """
         texts = event.texts()
         ctx = CheckContext(
             tenant=event.tenant, portfolio=event.project,
@@ -179,15 +239,31 @@ class Cascade:
         escalate_next = True   # stage 1 always runs
         short_circuit = False
 
+        def progress(entry: StageTrace) -> StageProgress:
+            """One snapshot. Built here so the streaming and blocking paths
+            cannot drift in what a stage is reported to have done."""
+            return StageProgress(
+                trace=entry,
+                findings=_dedupe(findings),
+                unjudged=sorted(unjudged),
+                short_circuited=short_circuit,
+                will_escalate=escalate_next and not short_circuit,
+                elapsed_ms=int((time.perf_counter() - started) * 1000),
+            )
+
         for stage in sorted(self._by_stage):
             if short_circuit:
-                trace.append(StageTrace(stage, [], [r.name for r in self._by_stage[stage]],
-                                        0, [], 0, short_circuited=True))
+                entry = StageTrace(stage, [], [r.name for r in self._by_stage[stage]],
+                                   0, [], 0, short_circuited=True)
+                trace.append(entry)
+                yield progress(entry)
                 continue
             if not escalate_next:
                 # Nothing asked for this stage. Skipping it is the saving.
-                trace.append(StageTrace(stage, [], [r.name for r in self._by_stage[stage]],
-                                        0, [], 0))
+                entry = StageTrace(stage, [], [r.name for r in self._by_stage[stage]],
+                                   0, [], 0)
+                trace.append(entry)
+                yield progress(entry)
                 continue
 
             stage_started = time.perf_counter()
@@ -213,7 +289,7 @@ class Cascade:
                         short_circuit = True
 
             findings.extend(stage_findings)
-            trace.append(StageTrace(
+            entry = StageTrace(
                 stage=stage,
                 rails_run=ran,
                 rails_skipped=[],
@@ -221,15 +297,19 @@ class Cascade:
                 unjudged_paths=stage_unjudged,
                 latency_ms=int((time.perf_counter() - stage_started) * 1000),
                 short_circuited=short_circuit,
-            ))
+            )
+            trace.append(entry)
 
             if short_circuit or _blocking(stage_findings):
                 short_circuit = True
-                continue
+            else:
+                # Escalate when a rail asked, or when this stage found something
+                # severe enough that a second opinion is worth paying for.
+                escalate_next = asked_to_escalate or _severe(stage_findings)
 
-            # Escalate when a rail asked, or when this stage found something
-            # severe enough that a second opinion is worth paying for.
-            escalate_next = asked_to_escalate or _severe(stage_findings)
+            # After the escalation call, not before: a consumer streaming this
+            # is told whether it should expect another stage.
+            yield progress(entry)
 
         findings = _dedupe(findings)
         decision = self._decide(event, findings, unjudged)
@@ -242,6 +322,8 @@ class Cascade:
             modifications=modifications,
             unjudged=sorted(unjudged),
         )
+        # The generator's RETURN value, not a final yield: "a stage finished" and
+        # "here is the verdict" are different facts and stay different types.
         return CascadeOutcome(verdict=verdict, trace=trace,
                               threshold_reads=list(ctx.reads))
 

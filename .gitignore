@@ -7,6 +7,16 @@ __pycache__/
 # deliberately, as part of the reference material - see commit 6d8da14.
 .claude/settings.local.json
 
+# Secrets. Provider keys are supplied by environment, never committed. A key
+# that reaches a commit is public and permanent, and rotating it is the only
+# remedy - so this rule comes before anything can go wrong, not after.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets.json
+
 # Regenerable context caches — each dev builds their own (like node_modules)
 graft/
 graphify-out/

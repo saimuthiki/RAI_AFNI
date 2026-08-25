@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AFNI Responsible AI — gateway console</title>
+<meta name="description" content="Operator console for the AFNI Responsible AI gateway: cascade escalation, capability coverage, roadmap status and framework provenance.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="bar">
+  <div class="bar__mark">
+    <span class="bar__glyph" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6">
+        <path d="M3 5h9M3 11h15M3 17h6" stroke-linecap="round"/>
+        <circle cx="19" cy="5" r="2.2"/><circle cx="10" cy="17" r="2.2"/>
+      </svg>
+    </span>
+    <span class="bar__name">AFNI&nbsp;<span class="bar__thin">Responsible&nbsp;AI</span></span>
+    <span class="bar__sep" aria-hidden="true"></span>
+    <span class="bar__sub">gateway console</span>
+  </div>
+
+  <div class="bar__right">
+    <div id="conn" class="conn conn--unknown" role="status" aria-live="polite">
+      <span class="conn__dot" aria-hidden="true"></span>
+      <span class="conn__text">Checking gateway…</span>
+    </div>
+    <button id="theme" class="ghost" type="button" aria-pressed="false">
+      <span class="ghost__ico" aria-hidden="true">◐</span><span id="theme-label">Theme: system</span>
+    </button>
+  </div>
+</header>
+
+<div id="fixture-banner" class="banner" hidden>
+  <strong>Demo fixtures.</strong>
+  <span id="fixture-why">The gateway is not answering, so every panel below is drawn from a static
+  snapshot of the capability registry. Nothing here is a live judgement.</span>
+  <button id="retry" class="banner__btn" type="button">Retry the gateway</button>
+</div>
+
+<div class="shell">
+  <nav class="nav" aria-label="Views">
+    <ul class="nav__list">
+      <li><a class="nav__item" href="#/live" data-view="live">
+        <span class="nav__label">Live check</span>
+        <span class="nav__hint">watch the cascade escalate</span>
+      </a></li>
+      <li><a class="nav__item" href="#/tenets" data-view="tenets">
+        <span class="nav__label">Tenets</span>
+        <span class="nav__hint">coverage, honestly counted</span>
+      </a></li>
+      <li><a class="nav__item" href="#/roadmap" data-view="roadmap">
+        <span class="nav__label">Roadmap</span>
+        <span class="nav__hint">named vs actually adopted</span>
+      </a></li>
+      <li><a class="nav__item" href="#/frameworks" data-view="frameworks">
+        <span class="nav__label">Frameworks</span>
+        <span class="nav__hint">23 repos, what each contributes</span>
+      </a></li>
+    </ul>
+
+    <div class="nav__legend">
+      <p class="eyebrow">Cascade stages</p>
+      <ul class="stagekey">
+        <li><span class="sbadge sbadge--1"><span class="sbadge__n">1</span></span>free · deterministic · every request</li>
+        <li><span class="sbadge sbadge--2"><span class="sbadge__n">2</span></span>local model · only if asked for</li>
+        <li><span class="sbadge sbadge--3"><span class="sbadge__n">3</span></span>paid judge · last resort</li>
+        <li><span class="sbadge sbadge--off"><span class="sbadge__n">◇</span></span>offline · never in the request path</li>
+      </ul>
+    </div>
+  </nav>
+
+  <main id="main" class="main" tabindex="-1">
+    <div id="view" class="view"></div>
+  </main>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

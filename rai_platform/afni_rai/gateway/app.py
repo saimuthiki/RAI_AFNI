@@ -1,0 +1,654 @@
+# -*- coding: utf-8 -*-
+"""
+The FastAPI gateway: the cascade, over HTTP.
+
+    python3 rai_platform/serve.py
+    curl -s localhost:8000/healthz | jq .
+    curl -s localhost:8000/v1/guard -H 'content-type: application/json' \
+         -d '{"kind":"step/request","step_id":"s1","agent_id":"a","agent_type":"chat",
+              "agent_workspace":"afni","agent_user":"u","llm_protocol":"openai.chat",
+              "payload":{"messages":[{"role":"user","content":"my ssn is 123-45-6789"}]}}'
+
+WHAT THIS LAYER OWNS, AND WHAT IT MUST NOT REIMPLEMENT
+
+The decision belongs to `cascade/engine.py`, the fail_mode belongs to
+`tenets/accountability/policy.py`, the thresholds to `ThresholdStore`, and the
+record to `VerdictStore`. This module wires them together, turns HTTP into a
+`GuardEvent` and back, and owns exactly four things of its own:
+
+  the trust boundary   `reveal_subject` is read from the SERVER's environment and
+                       from nowhere else. There is no request parameter, no query
+                       string and no header that can turn it on. A caller must
+                       never be able to ask the gateway to echo back the secret it
+                       just caught - that would make the endpoint an exfiltration
+                       primitive for anyone who can reach it.
+
+  fail closed on error If the cascade raises, this returns HTTP 200 with a BLOCK
+                       verdict whose `unjudged` lists the payload paths - never a
+                       500. A 500 is ambiguous, and a caller with a `try/except:
+                       pass` around its guard call reads an ambiguous failure as
+                       "no findings". That is the exact bug this platform exists
+                       to prevent, so the failure is expressed IN the contract.
+
+  real streaming       `/v1/guard/stream` drives `Cascade.evaluate_iter`, a
+                       generator that suspends between stages. A Stage-1 frame
+                       reaches the client before any Stage-3 rail has been asked
+                       to spend money. Nothing is computed up front and dribbled
+                       out; a progress UI fed by a fake would be a lie about
+                       where the latency and the cost went.
+
+  one error shape      `{code, message, details, request_id}` on every failure
+                       path, with `x-request-id` echoed on every response.
+
+Versioning: the decision endpoints are under `/v1`. `/healthz` is unversioned
+because it describes the process, not the contract.
+"""
+from __future__ import annotations
+
+import importlib
+import importlib.util
+import json
+import logging
+import os
+import threading
+import uuid
+from typing import Any, Callable, Iterator, Sequence
+
+from fastapi import APIRouter, FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, StreamingResponse
+
+from ..cascade.engine import PROVIDER, Cascade, CascadeOutcome
+from ..cascade.rail import Stage
+from ..cli import TENET_PACKAGES, load_tenets
+from ..contract.explanation import Explanation, RailAttribution, explain
+from ..contract.models import (
+    PROTOCOL_VERSION, Decision, EventKind, GuardEvent, LLMProtocol, Verdict,
+)
+from ..registry import phases
+from ..registry.capabilities import CapabilityRegistry
+from ..tenets.accountability.audit import ORIGIN_LIVE, VerdictStore
+from ..tenets.accountability.policy import FailurePolicy
+from ..tenets.accountability.thresholds import ThresholdStore
+from . import providers
+from .models import (
+    CoverageResponse, Error, GuardRequest, GuardResponse, HealthResponse,
+    RailsResponse,
+)
+
+LOGGER = logging.getLogger("afni_rai.gateway")
+
+# --------------------------------------------------------------------------- #
+# Server-side configuration. Every one of these is an environment variable and  #
+# none of them is reachable from a request body.                               #
+# --------------------------------------------------------------------------- #
+ENV_REVEAL = "AFNI_REVEAL_SUBJECT"
+ENV_AUDIT_DB = "AFNI_AUDIT_DB"
+
+STAGE_LABELS = {
+    1: "free, deterministic, every request",
+    2: "local model or cloud second opinion",
+    3: "paid API or LLM judge",
+    4: "offline - CI and red-team only, never mounted inline",
+}
+
+# Optional third-party packages a rail imports lazily, and what each one powers.
+# Reported by /healthz because a missing one is not a crash here - the rail
+# reports `unjudged`, which fails closed - and an operator seeing every escalated
+# request blocked deserves to be told why in one call.
+OPTIONAL_DEPENDENCIES: tuple[tuple[str, str], ...] = (
+    ("presidio_analyzer", "privacy.presidio_ner - Presidio NER entity detection"),
+    ("transformers", "security DeBERTa injection, bias and toxicity classifiers, "
+                     "zero-shot topics, NLI groundedness"),
+    ("torch", "the backend those classifiers run on"),
+    ("deepteam", "privacy.pii_leakage_judge provenance check"),
+    ("deepeval", "afni-rubric-judge G-Eval rubric scoring"),
+    ("jsonschema", "structured-output-schema validation"),
+    ("opentelemetry", "span export from the accountability tracer"),
+)
+
+
+def _truthy(value: str | None) -> bool:
+    return (value or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _rail_available(rail: Any) -> tuple[bool | None, str | None]:
+    """Ask a rail whether it can actually run.
+
+    Rails answer this three different ways - `dependency_available()`,
+    `available()`, `configured()` - because they were ported from three different
+    upstream shapes. Probing all three rather than normalising them keeps this
+    module out of the tenets; a rail that answers none of them reports None,
+    which is honest rather than an assumed True.
+    """
+    for attribute in ("dependency_available", "available", "configured"):
+        probe = getattr(rail, attribute, None)
+        if probe is None or not callable(probe):
+            continue
+        try:
+            ok = bool(probe())
+        except Exception as exc:  # noqa: BLE001 - a probe must not break /healthz
+            return False, f"{attribute}() raised {type(exc).__name__}"
+        return ok, None if ok else f"{attribute}() is False"
+    return None, None
+
+
+def withhold_subjects(verdict: dict[str, Any]) -> dict[str, Any]:
+    """Strip `Finding.subject` - the matched SSN, the matched API key - from a
+    verdict on its way to the wire, leaving `fp` behind.
+
+    The platform's own doctrine, from `docs/02-cascade.md`: "the value withheld -
+    with a fingerprint instead. The subject is the actual SSN. A guardrail that
+    echoes it into a log has defeated itself. `fp` is what a false-positive
+    exception keys on." `VerdictStore` already has no column it could go into.
+    Without this the HTTP verdict would be the one surface that still carried it,
+    into every proxy log and browser devtools panel between here and the caller -
+    while the explanation right next to it says "value withheld", which would be
+    false.
+
+    `subject` is optional in `verdict.schema.json`, so removing it leaves the
+    verdict strictly schema-valid; nothing is added, renamed or reshaped. The
+    same server-side `AFNI_REVEAL_SUBJECT` flag governs this and the explanation,
+    so there is one trust boundary rather than two that can disagree, and no
+    request can move either.
+    """
+    findings = verdict.get("findings")
+    if not findings:
+        return verdict
+    for finding in findings:
+        finding.pop("subject", None)
+    return verdict
+
+
+def _attribution_dict(attr: RailAttribution | None) -> dict[str, Any] | None:
+    if attr is None:
+        return None
+    return {"repo": attr.source_repo, "tool": attr.display_name, "rail": attr.rail,
+            "mechanism": attr.mechanism, "stage": attr.stage,
+            "confidence_kind": attr.confidence_kind, "evidence": attr.evidence,
+            "capability": attr.capability}
+
+
+class Gateway:
+    """Everything one gateway process holds, built once at startup.
+
+    A class rather than module globals so a test can stand up two gateways with
+    different rails in one interpreter, and so nothing is constructed at import
+    time - importing this module must not open a database or read a model file.
+    """
+
+    def __init__(self, *,
+                 rails: Sequence[Any] | None = None,
+                 attributions: dict[str, RailAttribution] | None = None,
+                 problems: Sequence[str] | None = None,
+                 threshold_store: ThresholdStore | None = None,
+                 verdict_store: VerdictStore | None = None,
+                 judge_provider: Any | None = None,
+                 reveal_subject: bool | None = None,
+                 env: dict[str, str] | None = None) -> None:
+        env = os.environ if env is None else env
+
+        if rails is None:
+            # REUSED from the CLI, not reimplemented. One definition of "which
+            # tenets exist and which of them failed to load", so the CLI and the
+            # HTTP API cannot disagree about what is mounted.
+            loaded, loaded_attributions, loaded_problems = load_tenets()
+            rails = loaded
+            attributions = attributions if attributions is not None else loaded_attributions
+            problems = problems if problems is not None else loaded_problems
+
+        self.problems: list[str] = list(problems or [])
+        self.attributions: dict[str, RailAttribution] = dict(attributions or {})
+
+        # A judge provider is optional and defaults to absent. With none, every
+        # Stage-3 judge rail reports `unjudged` - which fails closed. No guess.
+        self.judge_provider = (providers.from_env(env) if judge_provider is None
+                               else judge_provider)
+        mountable = [r for r in rails if r.stage is not Stage.OFFLINE]
+        self.rails: list[Any] = providers.bind_judges(mountable, self.judge_provider)
+
+        self.thresholds = threshold_store if threshold_store is not None else ThresholdStore()
+        # The one hook a rail gets into per-tenant configuration. Without this the
+        # threshold store would be write-only - configured, exposed, and never
+        # consulted, which is Safe Zone's bug (admin.go:66 writes it,
+        # guardrails.go:287 reads an env global instead).
+        self.cascade = Cascade(self.rails, resolve_threshold=self.thresholds.resolve_value)
+        self.policy = FailurePolicy(self.thresholds)
+
+        self.audit_db = env.get(ENV_AUDIT_DB) or ":memory:"
+        self.store = (verdict_store if verdict_store is not None
+                      else VerdictStore(self.audit_db))
+        # sqlite is opened with check_same_thread=False and the sync endpoints run
+        # in Starlette's threadpool, so writes are serialised here rather than
+        # relying on two threads sharing one cursor politely.
+        self._write_lock = threading.Lock()
+
+        # THE TRUST BOUNDARY. Server-side only, default off. There is deliberately
+        # no code path from a request to this value.
+        self.reveal_subject = (_truthy(env.get(ENV_REVEAL)) if reveal_subject is None
+                               else bool(reveal_subject))
+        if self.reveal_subject:
+            LOGGER.warning(
+                "%s is on: explanations will echo matched values (SSNs, API keys) "
+                "to every caller and into every log this response reaches",
+                ENV_REVEAL)
+        if self.problems:
+            LOGGER.warning("tenets not loaded: %s", "; ".join(self.problems))
+
+    # ------------------------------------------------------------- decisions --
+    def event(self, body: GuardRequest) -> GuardEvent:
+        return GuardEvent(
+            kind=EventKind(body.kind),
+            step_id=body.step_id,
+            agent_id=body.agent_id,
+            agent_type=body.agent_type,
+            agent_workspace=body.agent_workspace,
+            agent_user=body.agent_user,
+            llm_protocol=LLMProtocol(body.llm_protocol),
+            payload=body.payload,
+            integration=body.integration,
+            client_facing=body.client_facing,
+            project=body.project,
+            tenant=body.tenant,
+        )
+
+    @staticmethod
+    def unjudgeable_paths(event: GuardEvent) -> list[str]:
+        """Every payload path, for the fail-closed verdict.
+
+        `texts()` walks the payload and can itself be the thing that raised, so
+        it is guarded: the fallback is the single path `payload`, which is still a
+        non-empty `unjudged` and therefore still a block. An empty list here would
+        read as "everything was judged", which is the one answer that must never
+        come out of an error path.
+        """
+        try:
+            paths = sorted(event.texts())
+        except Exception:  # noqa: BLE001
+            paths = []
+        return paths or ["payload"]
+
+    def fail_closed(self, event: GuardEvent, exc: BaseException) -> CascadeOutcome:
+        """The cascade raised. Return a BLOCK, loudly, in the contract's own shape."""
+        LOGGER.exception("cascade raised for event %s; failing closed",
+                         event.step_id, exc_info=exc)
+        verdict = Verdict(
+            event_id=event.step_id,
+            provider=PROVIDER,
+            decision=Decision.BLOCK,
+            latency_ms=None,
+            findings=[],
+            modifications=[],
+            unjudged=self.unjudgeable_paths(event),
+        )
+        return CascadeOutcome(verdict=verdict, trace=[], threshold_reads=[])
+
+    def finish(self, event: GuardEvent, outcome: CascadeOutcome,
+               *, degraded: str | None = None) -> tuple[dict[str, Any], Explanation]:
+        """Apply the tenant's fail_mode, persist, and render.
+
+        Order matters. The policy may override the engine on an unjudged path -
+        that is its entire job - so the explanation is built AFTER the override,
+        or the caller would be handed an explanation that contradicts the verdict
+        it arrived with.
+        """
+        verdict = outcome.verdict
+        decided = self.policy.apply(event, outcome)
+        verdict.decision = decided.decision
+        if degraded:
+            # A tenant's fail_mode=open is a statement about ONE rail that could
+            # not look. It is not consent to serve a request the engine could not
+            # evaluate at all, so an engine-level failure stays a block even for
+            # internal traffic. The audit row still carries the configured
+            # fail_mode, so the override is visible rather than silent.
+            verdict.decision = Decision.BLOCK
+
+        explanation = explain(verdict, self.attributions,
+                              stages_run=outcome.stages_run)
+        # Recorded BEFORE the wire redaction, from the objects themselves: the
+        # audit store decides for itself what it keeps (and it keeps no subject),
+        # and it must not depend on a presentation-layer copy.
+        self.record(verdict, event, explanation, decided, degraded=degraded)
+        wire = verdict.to_dict()
+        if not self.reveal_subject:
+            withhold_subjects(wire)
+        return ({"verdict": wire,
+                 "explanation": explanation.to_dict(reveal_subject=self.reveal_subject)},
+                explanation)
+
+    def record(self, verdict: Verdict, event: GuardEvent, explanation: Explanation,
+               decided: Any, *, degraded: str | None = None) -> None:
+        """Persist every decision, including the fail-closed ones.
+
+        A swallowed audit failure would be the Infosys dispatcher pattern with a
+        different subject, so it is logged at error level - but it does not fail
+        the request. The decision has already been made correctly; losing the
+        record is a serious evidence problem and not a reason to also stop
+        protecting the caller.
+        """
+        try:
+            with self._write_lock:
+                self.store.record(
+                    verdict, event=event, explanation=explanation,
+                    attributions=self.attributions, origin=ORIGIN_LIVE,
+                    enforced=decided.decision.value,
+                    fail_mode=decided.fail_mode.value,
+                    stages_run=explanation.stages_run)
+        except Exception:  # noqa: BLE001 - never fail a request over the audit write
+            LOGGER.exception("audit write failed for event %s", verdict.event_id)
+        if decided.needs_review:
+            LOGGER.warning("event %s ALLOWED with %d unjudged path(s) under "
+                           "fail_mode=%s - queued for review", verdict.event_id,
+                           len(verdict.unjudged), decided.fail_mode.value)
+        if degraded:
+            LOGGER.error("event %s decided in degraded mode: %s",
+                         verdict.event_id, degraded)
+
+    # ------------------------------------------------------------ streaming ---
+    def stream(self, event: GuardEvent) -> Iterator[str]:
+        """SSE frames, one per cascade stage, then the verdict, then done.
+
+        A plain synchronous generator: the cascade is CPU-bound and Starlette
+        runs a sync iterator on a worker thread, so this streams without an async
+        rail interface and without blocking the event loop.
+
+        `evaluate_iter` is suspended between yields, so each frame leaves this
+        process before the next stage's rails run. That is the whole difference
+        between a progress stream and a progress animation.
+        """
+        generator = self.cascade.evaluate_iter(event)
+        outcome: CascadeOutcome | None = None
+        degraded: str | None = None
+        while True:
+            try:
+                progress = next(generator)
+            except StopIteration as stop:
+                outcome = stop.value
+                break
+            except Exception as exc:  # noqa: BLE001 - fail closed, mid-stream
+                # The status line is long gone, so the failure has to be reported
+                # inside the stream. A client that saw two stages and then silence
+                # cannot tell a crash from an allow.
+                outcome = self.fail_closed(event, exc)
+                degraded = f"cascade raised {type(exc).__name__}"
+                yield _sse("error", {
+                    "event": "error",
+                    "error": Error(code="cascade_failed",
+                                   message="the cascade raised; failing closed with "
+                                           "a BLOCK verdict and every payload path "
+                                           "unjudged",
+                                   details={"exception": type(exc).__name__}
+                                   ).model_dump(exclude_none=True)})
+                break
+            yield _sse("stage", _stage_frame(progress, self.reveal_subject))
+
+        assert outcome is not None  # both loop exits set it
+        body, _ = self.finish(event, outcome, degraded=degraded)
+        yield _sse("verdict", {"event": "verdict", **body})
+        yield _sse("done", {"event": "done"})
+
+    # ---------------------------------------------------------- introspection --
+    def rail_rows(self) -> list[dict[str, Any]]:
+        rows = []
+        for rail in sorted(self.rails, key=lambda r: (int(r.stage), r.name)):
+            available, reason = _rail_available(rail)
+            rows.append({
+                "name": rail.name,
+                "tenet": rail.tenet.value,
+                "stage": int(rail.stage),
+                "stage_label": STAGE_LABELS[int(rail.stage)],
+                "attribution": _attribution_dict(self.attributions.get(rail.name)),
+                "available": available,
+                "unavailable_reason": reason,
+            })
+        return rows
+
+    def coverage(self) -> dict[str, Any]:
+        """The capability coverage report, as data rather than a rendered table.
+
+        Rebuilt per call on purpose: `register_rail` derives DEPENDENCY from a
+        live `available()` probe, so a cached report would keep claiming
+        `implemented` after the model weights were removed.
+        """
+        registry = CapabilityRegistry()
+        not_registered: list[str] = []
+        for package in TENET_PACKAGES:
+            try:
+                module = importlib.import_module(f"afni_rai.tenets.{package}")
+                module.register(registry)
+            except Exception as exc:  # noqa: BLE001 - a tenet that will not
+                # register is a set of gaps, and must be named as one
+                not_registered.append(f"{package}: {type(exc).__name__}: {exc}")
+        report = registry.report()
+        tenets = []
+        for tenet, rows in report.by_tenet.items():
+            counts = {c.value: n for c, n in report.counts(tenet).items()}
+            tenets.append({
+                "tenet": tenet.value,
+                "counts": counts,
+                "rows": [{"capability": row.capability, "status": row.status.value,
+                          "note": row.note,
+                          "attribution": _attribution_dict(row.attribution)}
+                         for row in rows],
+            })
+        return {
+            "totals": {c.value: n for c, n in report.total_counts().items()},
+            "tenets": tenets,
+            "not_registered": not_registered,
+            "rendered": report.render(),
+        }
+
+    def health(self) -> dict[str, Any]:
+        rows = self.rail_rows()
+        unavailable = [f"{r['name']}: {r['unavailable_reason']}"
+                       for r in rows if r["available"] is False]
+        absent = [{"module": module, "present": False, "powers": powers}
+                  for module, powers in OPTIONAL_DEPENDENCIES
+                  if importlib.util.find_spec(module) is None]
+        judge = None
+        if self.judge_provider is not None:
+            describe = getattr(self.judge_provider, "describe", None)
+            judge = describe() if callable(describe) else {
+                "provider": getattr(self.judge_provider, "name", "custom")}
+        return {
+            "status": "degraded" if (self.problems or unavailable) else "ok",
+            "protocol_version": PROTOCOL_VERSION,
+            "rails_mounted": len(self.rails),
+            "tenets_not_loaded": list(self.problems),
+            "rails_unavailable": unavailable,
+            "judge_rails_without_a_judge": providers.unbound_judge_rails(self.rails),
+            "dependencies_absent": absent,
+            "judge_provider": judge,
+            "reveal_subject": self.reveal_subject,
+            "audit_db": self.audit_db,
+        }
+
+
+# --------------------------------------------------------------------------- #
+# SSE encoding                                                                 #
+# --------------------------------------------------------------------------- #
+def _sse(name: str, payload: dict[str, Any]) -> str:
+    """One Server-Sent Event: a named event and one JSON object on a data line.
+
+    The name is duplicated into the JSON body deliberately. `EventSource`
+    consumers dispatch on the `event:` field; anything reading the stream as
+    plain text (curl, a log, a test) only sees `data:`. Both should be able to
+    tell a stage frame from a verdict without cross-referencing.
+    """
+    body = json.dumps(payload, separators=(",", ":"), default=str)
+    return f"event: {name}\ndata: {body}\n\n"
+
+
+def _stage_frame(progress: Any, reveal_subject: bool = False) -> dict[str, Any]:
+    """One stage frame. The cumulative findings go out through the same
+    subject-withholding rule as the final verdict - a streaming client must not be
+    the way a matched secret gets out."""
+    trace = progress.trace
+    findings = [f.to_dict() for f in progress.findings]
+    if not reveal_subject:
+        for finding in findings:
+            finding.pop("subject", None)
+    return {
+        "event": "stage",
+        "stage": int(trace.stage),
+        "ran": progress.ran,
+        "rails_run": list(trace.rails_run),
+        "rails_skipped": list(trace.rails_skipped),
+        "findings": findings,
+        "stage_findings": trace.findings,
+        "unjudged": list(progress.unjudged),
+        "short_circuited": progress.short_circuited,
+        "will_escalate": progress.will_escalate,
+        "stage_latency_ms": trace.latency_ms,
+        "elapsed_ms": progress.elapsed_ms,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Routes                                                                       #
+# --------------------------------------------------------------------------- #
+def _router(gateway: Gateway) -> APIRouter:
+    router = APIRouter()
+
+    @router.post("/v1/guard", response_model=GuardResponse,
+                 summary="Judge one GuardEvent",
+                 responses={422: {"model": Error, "description":
+                                  "The body is not a valid GuardEvent."}})
+    def guard(body: GuardRequest, response: Response) -> JSONResponse:
+        """Run the cascade and return the verdict with its attribution.
+
+        Always HTTP 200 once the body parses, including when the cascade fails:
+        the decision lives in `verdict.decision`, and a transport-level error
+        code for a *judged* request would invite callers to treat a block as an
+        outage. A cascade failure is reported as a BLOCK with every payload path
+        in `unjudged`, plus an `x-afni-degraded` response header.
+        """
+        event = gateway.event(body)
+        degraded: str | None = None
+        try:
+            outcome = gateway.cascade.evaluate(event)
+        except Exception as exc:  # noqa: BLE001 - fail closed, never a 500
+            outcome = gateway.fail_closed(event, exc)
+            degraded = f"cascade raised {type(exc).__name__}"
+        payload, _ = gateway.finish(event, outcome, degraded=degraded)
+        headers = {"x-afni-degraded": degraded} if degraded else None
+        return JSONResponse(payload, headers=headers)
+
+    @router.post("/v1/guard/stream", summary="Judge one GuardEvent, streaming",
+                 response_class=StreamingResponse,
+                 responses={200: {"content": {"text/event-stream": {}},
+                                  "description":
+                                  "One `stage` event per cascade stage as it "
+                                  "completes, then `verdict`, then `done`."}})
+    def guard_stream(body: GuardRequest) -> StreamingResponse:
+        """Server-Sent Events, one frame per stage, emitted as the stage finishes.
+
+        The frames are not a replay of a finished decision. Each one is produced
+        by `Cascade.evaluate_iter` suspending after that stage, so a client
+        watching a `stage: 1` frame arrive knows Stage 2 has not run yet.
+        """
+        event = gateway.event(body)
+        return StreamingResponse(
+            gateway.stream(event),
+            media_type="text/event-stream",
+            headers={
+                "cache-control": "no-cache",
+                # Proxies that buffer would defeat the point of streaming.
+                "x-accel-buffering": "no",
+                "connection": "keep-alive",
+            })
+
+    @router.get("/v1/coverage", response_model=CoverageResponse,
+                summary="Capability coverage, with the gaps counted")
+    def coverage() -> JSONResponse:
+        """65 capabilities across 7 tenets, each in one of five states.
+
+        Five states rather than a covered/not bool because `implemented`,
+        `dependency-missing` and `cloud-not-configured` are three different
+        answers to "are we protected right now", and a single percentage would
+        round two of them up.
+        """
+        return JSONResponse(gateway.coverage())
+
+    @router.get("/v1/phases", summary="Roadmap phases against what is built")
+    def phase_status() -> JSONResponse:
+        """`present_in_platform` means a rail cites the repo as the source of a
+        pattern. That is provenance, not adoption - see the note each phase
+        carries."""
+        return JSONResponse(phases.status())
+
+    @router.get("/v1/rails", response_model=RailsResponse,
+                summary="Every mounted rail and its provenance")
+    def rails() -> JSONResponse:
+        return JSONResponse({
+            "protocol_version": PROTOCOL_VERSION,
+            "mounted": len(gateway.rails),
+            "rails": gateway.rail_rows(),
+            "tenets_not_loaded": list(gateway.problems),
+        })
+
+    @router.get("/healthz", response_model=HealthResponse,
+                summary="Liveness, plus what is missing")
+    def healthz() -> JSONResponse:
+        """`degraded` still serves traffic - and still fails closed, which is why
+        a missing dependency is a degradation and not an outage. Unversioned:
+        this describes the process, not the contract."""
+        return JSONResponse(gateway.health())
+
+    return router
+
+
+def create_app(**kwargs: Any) -> FastAPI:
+    """Build the app. Keyword arguments are forwarded to `Gateway`, which is how
+    a test injects fake rails, an in-memory audit store or a stub judge."""
+    gateway = Gateway(**kwargs)
+    app = FastAPI(
+        title="AFNI Responsible AI gateway",
+        version=f"1.0.0 (OpenGuardrails protocol {PROTOCOL_VERSION})",
+        description=(
+            "Guardrail decisions over HTTP. `verdict` is strict OpenGuardrails "
+            f"v{PROTOCOL_VERSION} and nothing is added to it; everything "
+            "AFNI-specific rides in `explanation` alongside. A non-empty "
+            "`unjudged` means 'could not look', which is not 'found nothing', "
+            "and on client-facing traffic it blocks."),
+    )
+    app.state.gateway = gateway
+    app.include_router(_router(gateway))
+
+    @app.middleware("http")
+    async def request_id(request: Request, call_next: Callable) -> Response:
+        """One id per request, echoed back. It is what a caller quotes to support
+        and what ties a client report to a line in this process's log.
+
+        Stashed on `request.state` before the route runs so the error handler
+        below reports the SAME id the caller gets in the header - two ids for one
+        request is worse than none, because it makes a support trace ambiguous.
+        """
+        rid = request.headers.get("x-request-id") or uuid.uuid4().hex
+        request.state.request_id = rid
+        response = await call_next(request)
+        response.headers["x-request-id"] = rid
+        return response
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_body(request: Request,
+                           exc: RequestValidationError) -> JSONResponse:
+        """FastAPI's default 422 body is `{"detail": [...]}`, which is a second
+        error shape. Mapped onto the one shape this API returns everywhere, with
+        the field-level detail kept - an integrator debugging their own client
+        needs to know WHICH field, not just that something was wrong.
+        """
+        rid = getattr(request.state, "request_id", None)
+        return JSONResponse(
+            status_code=422,
+            content=Error(
+                code="invalid_guard_event",
+                message="the request body is not a valid GuardEvent",
+                details={"fields": json.loads(json.dumps(exc.errors(), default=str))},
+                request_id=rid,
+            ).model_dump(exclude_none=True))
+
+    return app
+
+
+app_factory = create_app  # what `serve.py --factory` names

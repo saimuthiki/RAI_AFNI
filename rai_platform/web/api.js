@@ -1,0 +1,353 @@
+// The gateway client.
+//
+// Two jobs beyond plain fetch:
+//
+//  1. NORMALISE. The gateway's JSON is authored on the Python side; the same
+//     facts can arrive as `{tenets: {...}}`, `{by_tenet: {...}}` or a bare
+//     tenet-keyed object, and a per-tenet block can be a row list, a counts map,
+//     or both. Rather than guess one shape and render blank on the others, every
+//     reader here accepts the plausible shapes and reduces them to one internal
+//     form. Anything genuinely unrecognised raises, so the panel shows an error
+//     instead of an empty state that reads as "all clear".
+//
+//  2. STAY HONEST ABOUT WHERE DATA CAME FROM. `state.source` is either 'gateway'
+//     or 'fixtures', it is surfaced in the top bar and in a page-wide banner,
+//     and the streaming view refuses to describe a fixture run as a judgement.
+
+import { FIXTURES } from './demo-fixtures.js';
+
+export const state = {
+  base: '',            // same-origin by default: the gateway's own static mount
+  source: 'unknown',   // 'gateway' | 'fixtures' | 'unknown'
+  health: null,
+};
+
+const listeners = new Set();
+export const onSourceChange = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
+const announce = () => listeners.forEach((fn) => fn(state));
+
+function setSource(source, detail = null) {
+  if (state.source === source && state.health === detail) return;
+  state.source = source;
+  state.health = detail;
+  announce();
+}
+
+/** Query string wins, so the console can be pointed at a gateway on another
+ *  port while being served by `python3 -m http.server`. */
+export function readBaseFromLocation() {
+  const p = new URLSearchParams(location.search);
+  const api = p.get('api');
+  if (api) state.base = api.replace(/\/$/, '');
+  if (p.get('fixtures') === '1') setSource('fixtures', 'forced by ?fixtures=1');
+  return state.base;
+}
+
+const url = (path) => `${state.base}${path}`;
+
+async function getJSON(path, { timeout = 8000 } = {}) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeout);
+  try {
+    const res = await fetch(url(path), {
+      headers: { accept: 'application/json' }, signal: ctl.signal,
+    });
+    if (!res.ok) throw new Error(`${path} → HTTP ${res.status} ${res.statusText}`);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Probe /healthz once. Everything else keys off the answer. */
+export async function probe() {
+  if (new URLSearchParams(location.search).get('fixtures') === '1') {
+    setSource('fixtures', 'forced by ?fixtures=1');
+    return state;
+  }
+  try {
+    const body = await getJSON('/healthz', { timeout: 4000 });
+    setSource('gateway', body && typeof body === 'object' ? body : { ok: true });
+  } catch (err) {
+    setSource('fixtures', String(err.message || err));
+  }
+  return state;
+}
+
+/** Fetch, or fall back to the snapshot — and record which happened. */
+async function fetchOrFixture(path, fixtureKey) {
+  if (state.source !== 'fixtures') {
+    try {
+      return { data: await getJSON(path), live: true };
+    } catch (err) {
+      setSource('fixtures', `${path}: ${err.message || err}`);
+    }
+  }
+  return { data: structuredClone(FIXTURES[fixtureKey]), live: false };
+}
+
+// -------------------------------------------------------------- normalising --
+
+const COV_KEYS = ['implemented', 'dependency-missing', 'cloud-not-configured',
+  'offline-only', 'gap'];
+
+const zeroCounts = () => Object.fromEntries(COV_KEYS.map((k) => [k, 0]));
+
+function unwrap(body, keys) {
+  if (!body || typeof body !== 'object') throw new Error('response was not a JSON object');
+  for (const k of keys) if (body[k] && typeof body[k] === 'object') return body[k];
+  return body;
+}
+
+/** -> [{ tenet, counts, total, capabilities: [{name, status, note, rail, repo, tool, stage}] }] */
+export async function coverage() {
+  const { data, live } = await fetchOrFixture('/v1/coverage', 'coverage');
+  const block = unwrap(data, ['tenets', 'by_tenet', 'coverage']);
+  const tenets = [];
+
+  for (const [tenet, raw] of Object.entries(block)) {
+    if (!raw || typeof raw !== 'object') continue;
+    let rows = null;
+    let counts = null;
+
+    if (Array.isArray(raw)) rows = raw;
+    else if (Array.isArray(raw.capabilities)) rows = raw.capabilities;
+    else if (Array.isArray(raw.rows)) rows = raw.rows;
+
+    const rawCounts = raw.counts && typeof raw.counts === 'object' ? raw.counts : null;
+    if (rawCounts) {
+      counts = zeroCounts();
+      for (const k of COV_KEYS) counts[k] = Number(rawCounts[k] ?? rawCounts[k.replace(/-/g, '_')] ?? 0);
+    } else if (!rows && COV_KEYS.some((k) => k in raw)) {
+      counts = zeroCounts();
+      for (const k of COV_KEYS) counts[k] = Number(raw[k] ?? 0);
+    }
+
+    const capabilities = (rows || []).map((r) => {
+      const attr = r.attribution || r.attributed_to || null;
+      return {
+        name: r.capability ?? r.name ?? r.aspect ?? '(unnamed capability)',
+        status: r.status ?? r.state ?? r.coverage ?? 'gap',
+        note: r.note ?? r.reason ?? '',
+        rail: attr?.rail ?? r.rail ?? null,
+        repo: attr?.repo ?? attr?.source_repo ?? r.repo ?? null,
+        tool: attr?.tool ?? attr?.display_name ?? null,
+        stage: attr?.stage ?? r.stage ?? null,
+      };
+    });
+
+    if (!counts) {
+      counts = zeroCounts();
+      for (const c of capabilities) if (c.status in counts) counts[c.status] += 1;
+    }
+
+    tenets.push({
+      tenet, counts, capabilities,
+      total: Object.values(counts).reduce((a, b) => a + b, 0),
+    });
+  }
+
+  if (!tenets.length) throw new Error('/v1/coverage carried no tenets this console could read');
+  return { tenets, live };
+}
+
+/** -> [{ name, tenet, stage, repo, tool, mechanism, confidence_kind, evidence, capability }] */
+export async function rails() {
+  const { data, live } = await fetchOrFixture('/v1/rails', 'rails');
+  const list = Array.isArray(data) ? data
+    : Array.isArray(data?.rails) ? data.rails
+    : Object.values(data || {}).find(Array.isArray);
+  if (!Array.isArray(list)) throw new Error('/v1/rails did not carry a list of rails');
+
+  return {
+    live,
+    rails: list.map((r) => {
+      const a = r.attribution || r.attributed_to || {};
+      return {
+        name: r.name ?? r.rail ?? a.rail ?? '(unnamed rail)',
+        tenet: r.tenet ?? a.tenet ?? 'unattributed',
+        stage: Number(r.stage ?? a.stage ?? 0) || 0,
+        repo: a.repo ?? a.source_repo ?? r.repo ?? null,
+        tool: a.tool ?? a.display_name ?? r.tool ?? null,
+        mechanism: a.mechanism ?? r.mechanism ?? null,
+        confidence_kind: a.confidence_kind ?? r.confidence_kind ?? null,
+        evidence: a.evidence ?? r.evidence ?? null,
+        capability: a.capability ?? r.capability ?? null,
+      };
+    }),
+  };
+}
+
+/** -> [{ phase, repos: [...], notes: [...], unlinkable: [...] }] in roadmap order */
+export async function phases() {
+  const { data, live } = await fetchOrFixture('/v1/phases', 'phases');
+  const block = unwrap(data, ['phases', 'roadmap']);
+  const order = (name) => {
+    const m = /phase\s*([123])/i.exec(name);
+    return m ? Number(m[1]) : 9;
+  };
+  const out = Object.entries(block)
+    .filter(([, v]) => v && typeof v === 'object')
+    .map(([phase, v]) => ({
+      phase,
+      repos: (v.repos || v.entries || []).map((r) => ({
+        repo: r.repo ?? '',
+        display: r.display ?? r.repo ?? '(unnamed)',
+        adoption: r.adoption ?? 'unknown',
+        conditional: Boolean(r.conditional),
+        why: r.why ?? '',
+        implemented_as: [].concat(r.implemented_as ?? []),
+        present_in_platform: Boolean(r.present_in_platform),
+      })),
+      notes: [].concat(v.notes ?? []),
+      unlinkable: [].concat(v.unlinkable ?? []),
+    }))
+    .sort((a, b) => order(a.phase) - order(b.phase));
+  if (!out.length) throw new Error('/v1/phases carried no phases this console could read');
+  return { phases: out, live };
+}
+
+// ---------------------------------------------------------------- streaming --
+
+/** Build a GuardEvent. Field names follow guard-event.schema.json; the three
+ *  AFNI additions (client_facing, tenant, project) ride alongside it. */
+export function buildEvent({ text, kind, tenant, clientFacing }) {
+  const isResponse = kind === 'response';
+  const stepId = `console-${Date.now().toString(36)}`;
+  return {
+    kind: isResponse ? 'step/response' : 'step/request',
+    step_id: stepId,
+    agent_id: 'rai-console',
+    agent_type: 'operator-console',
+    agent_workspace: tenant || 'unassigned',
+    agent_user: 'operator',
+    llm_protocol: 'openai.chat',
+    payload: isResponse
+      ? { choices: [{ index: 0, message: { role: 'assistant', content: text } }] }
+      : { messages: [{ role: 'user', content: text }] },
+    client_facing: Boolean(clientFacing),
+    tenant: tenant || null,
+    project: null,
+  };
+}
+
+/** Classify one SSE payload object without assuming a field name for the type. */
+export function classify(obj) {
+  const t = String(obj?.event ?? obj?.type ?? obj?.kind ?? '').toLowerCase();
+  if (t.includes('done') || t === 'end' || t === 'complete') return 'done';
+  if (t.includes('verdict') || obj?.verdict || obj?.explanation) return 'verdict';
+  if (t.includes('stage') || obj?.stage !== undefined) return 'stage';
+  if (t.includes('error') || obj?.error) return 'error';
+  return 'unknown';
+}
+
+export function normalizeStage(obj) {
+  const src = obj?.stage_trace ?? obj?.trace ?? obj;
+  const stage = Number(src.stage ?? src.stage_number ?? obj.stage ?? 0) || 0;
+  const railsRun = [].concat(src.rails_run ?? src.ran ?? []);
+  const railsSkipped = [].concat(src.rails_skipped ?? src.skipped ?? []);
+  const unjudged = [].concat(src.unjudged_paths ?? src.unjudged ?? []);
+  const findings = Number(src.findings ?? src.finding_count ?? 0) || 0;
+  return {
+    stage,
+    railsRun,
+    railsSkipped,
+    unjudged,
+    findings,
+    latency_ms: src.latency_ms ?? null,
+    short_circuited: Boolean(src.short_circuited ?? src.short_circuit),
+    // A stage with no rails run either was never reached or had nothing mounted.
+    ran: railsRun.length > 0,
+  };
+}
+
+export function normalizeVerdict(obj) {
+  const verdict = obj?.verdict ?? obj?.result ?? {};
+  const ex = obj?.explanation ?? verdict?.explanation ?? {};
+  const findings = (list) => [].concat(list ?? []).map((f) => ({
+    entity: f.entity ?? f.category ?? 'unknown',
+    category: f.category ?? null,
+    action: f.action ?? null,
+    score: f.score ?? null,
+    location: f.location ?? null,
+    sentence: f.sentence ?? '',
+    attr: f.attributed_to ?? f.attribution ?? null,
+    fp: f.fp ?? null,
+  }));
+  return {
+    decision: ex.decision ?? verdict.decision ?? 'unknown',
+    stages_run: ex.stages_run ?? null,
+    latency_ms: ex.latency_ms ?? verdict.latency_ms ?? null,
+    could_not_judge: [].concat(ex.could_not_judge ?? verdict.unjudged ?? []),
+    blocked_by: findings(ex.blocked_by),
+    also_flagged: findings(ex.also_flagged),
+    modifications: verdict.modifications?.spans ?? verdict.modifications ?? [],
+    event_id: verdict.event_id ?? null,
+    provider: verdict.provider ?? null,
+  };
+}
+
+/**
+ * POST to /v1/guard/stream and hand each parsed `data:` object to `onEvent`.
+ * EventSource cannot POST, so this reads the body stream directly.
+ * Returns { live: true } when the gateway answered.
+ */
+export async function guardStream(event, onEvent, { signal } = {}) {
+  const res = await fetch(url('/v1/guard/stream'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'text/event-stream' },
+    body: JSON.stringify(event),
+    signal,
+  });
+  if (!res.ok) throw new Error(`/v1/guard/stream → HTTP ${res.status} ${res.statusText}`);
+  if (!res.body) throw new Error('/v1/guard/stream returned no readable body');
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+
+  const flushFrame = (frame) => {
+    const data = frame.split('\n')
+      .filter((l) => l.startsWith('data:'))
+      .map((l) => l.slice(5).trimStart())
+      .join('\n');
+    if (!data || data === '[DONE]') { if (data) onEvent('done', {}); return; }
+    let obj;
+    try { obj = JSON.parse(data); } catch { onEvent('error', { error: `unparseable SSE data: ${data.slice(0, 200)}` }); return; }
+    onEvent(classify(obj), obj);
+  };
+
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let cut;
+    // SSE frames are separated by a blank line; tolerate CRLF.
+    while ((cut = buf.search(/\r?\n\r?\n/)) !== -1) {
+      const frame = buf.slice(0, cut);
+      buf = buf.slice(cut + buf.slice(cut).match(/^\r?\n\r?\n/)[0].length);
+      if (frame.trim()) flushFrame(frame);
+    }
+  }
+  if (buf.trim()) flushFrame(buf);
+  return { live: true };
+}
+
+/** Replay a fixture run with the same event sequence and rough timing, so the
+ *  rendering path is exercised end to end. Never labelled a judgement. */
+export async function guardStreamFixture(event, onEvent, { signal } = {}) {
+  const script = FIXTURES.streams[pickScript(event)];
+  for (const step of script) {
+    if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
+    await new Promise((r) => setTimeout(r, step.after));
+    onEvent(step.event, step.data);
+  }
+  return { live: false };
+}
+
+function pickScript(event) {
+  const text = JSON.stringify(event.payload || '').toLowerCase();
+  if (/\d{3}-?\d{2}-?\d{4}|ssn|sk-[a-z0-9]/.test(text)) return 'block_stage1';
+  if (/ignore (all )?(previous|prior)|jailbreak|dan mode|system prompt/.test(text)) return 'escalate';
+  return 'clean_unjudged';
+}
