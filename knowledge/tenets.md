@@ -102,6 +102,45 @@ only if AFNI wants a dedicated vendor-managed AI-governance record store.
 
 ---
 
+## The single recommendation per tenet
+
+The deck previously carried **two** overlapping sets of per-tenet slides, both
+headed "AFNI RECOMMENDATION", and they did not agree. They have been merged into
+one slide per tenet (deck slides 39-45). The root cause of the apparent conflict:
+
+- the *recommendation* slides answered "which of the 23 reviewed repos do we adopt",
+  so their picks were repo names
+- the *cheat sheets* answered "what does the runtime stack look like", which mixes
+  repos with the **engines inside them** and the **cloud services beside them**
+
+For Privacy that produced "Presidio + Azure PII" on one slide and "LLM Guard +
+NeMo + garak" on another - the same stack at two different altitudes. The merged
+slide states all three layers explicitly, so nothing reads as a contradiction:
+
+| Layer | Question it answers |
+|---|---|
+| **ADOPT** | which of the 23 reviewed repos AFNI takes on |
+| **ENGINE UNDER IT** | the library or model those repos actually run (Presidio, the HF model ids) |
+| **CLOUD SECOND OPINION** | the managed Azure/vendor service layered beside them |
+| **WHERE IT RUNS** | the cascade stage, from [methodology.md](methodology.md) |
+
+Two tenets genuinely disagreed rather than differing in altitude:
+
+- **Accountability** - the cheat sheet named DeepTeam, the recommendation slide
+  named Promptfoo. **Promptfoo is the pick**: it maps 6 compliance frameworks
+  (OWASP LLM, NIST AI RMF, MITRE ATLAS, EU AI Act, ISO 42001, GDPR) against
+  DeepTeam's 5, and PyRIT ships no report generator at all. DeepTeam stays as a
+  secondary source of agentic findings.
+- **Hallucination** - the cheat sheet put Giskard in the runtime picture. Giskard
+  v3 is LLM-judge based and needs a paid API, so it is CI-only, never inline.
+
+Content Safety differed only by omission (the union is correct: LLM Guard for the
+local pass, NeMo for routing, Promptfoo for the CI corpus, Azure for the audit
+trail). Privacy, Security, Fairness and Explainability agreed once the altitude
+difference is accounted for.
+
+---
+
 ## At a glance
 
 | Tenet | Runtime primary | Offline / CI | Cloud second opinion |
