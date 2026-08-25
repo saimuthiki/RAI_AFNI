@@ -114,6 +114,10 @@ only if AFNI wants a dedicated vendor-managed AI-governance record store.
 | Hallucination | LLM Guard NLI | DeepEval, Giskard | Azure Groundedness |
 | Accountability | OpenGuardrails schema | PyRIT, promptfoo | Azure Monitor |
 
+For *how* each tool implements its check - module vs keyword vs classifier vs LLM judge vs
+cloud API - and which cascade stage that puts it in, see
+[methodology.md](methodology.md).
+
 **LLM Guard is the runtime primary for four of seven tenets.** That concentration is
 why D4 (fork it, pin the model revisions, own it) matters more than any other single
 adoption decision.
