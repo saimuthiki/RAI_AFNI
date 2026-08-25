@@ -15,7 +15,8 @@ _DATA_DIR = os.path.join(_ROOT, "data")
 with open(os.path.join(_DATA_DIR, "RAI_Synthesis.json"), encoding="utf-8") as f:
     SYN = json.load(f)
 
-OUT_PATH = os.path.join(_ROOT, "guardrail_atlas.html")
+_DELIVERABLES = os.path.join(os.path.dirname(_ROOT), "deliverables")
+OUT_PATH = os.path.join(_DELIVERABLES, "guardrail_atlas.html")
 
 SHORT_NAME = {
     "agentic_security-main": "Agentic Security", "AIF360-main": "AIF360",

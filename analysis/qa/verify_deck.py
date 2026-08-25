@@ -7,8 +7,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 from pptx import Presentation
 from repo_slide_content import REPO_SLIDES
 
-PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                     "AFNI_Responsible_AI_Framework.pptx")
+PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                     "deliverables", "AFNI_Responsible_AI_Framework.pptx")
 prs = Presentation(PATH)
 
 all_text = []
