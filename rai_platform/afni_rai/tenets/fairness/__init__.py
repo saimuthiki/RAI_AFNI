@@ -649,6 +649,7 @@ class LocalBiasClassifierRail:
     MODEL_PATH = "valurank/distilroberta-bias"
     MODEL_REVISION = "c1e4a2773522c3acc929a7b2c9af2b7e4137b96d"
     BIASED_LABEL = "BIASED"
+    source: str | None = None
 
     def __init__(self, threshold: float = 0.7,
                  pipeline_factory: Callable[[], Any] | None = None) -> None:
@@ -673,12 +674,16 @@ class LocalBiasClassifierRail:
         # path that must stay stdlib-only.
         from transformers import pipeline  # noqa: PLC0415
 
+        from ...models import resolve  # noqa: PLC0415
+
+        resolved = resolve(self.MODEL_PATH, self.MODEL_REVISION)
+        self.source = resolved.note
         return pipeline(
             task="text-classification",
-            model=self.MODEL_PATH,
-            revision=self.MODEL_REVISION,
+            model=resolved.target,
             truncation=True,
             max_length=512,
+            **resolved.kwargs,
         )
 
     def _ensure_pipeline(self) -> Any:

@@ -7,6 +7,7 @@ Command line entry point. The fastest way to see the gateway decide something.
     python3 rai_platform/cli.py check --json "..." | jq .
     python3 rai_platform/cli.py coverage
     python3 rai_platform/cli.py rails
+    python3 rai_platform/cli.py preflight
 
 `check` mounts every request-path rail from every tenet, runs the cascade, and
 prints the attribution: which repo made the call, how confident, which entity,
@@ -136,6 +137,18 @@ def cmd_rails(args) -> int:
     return 0
 
 
+def cmd_preflight(args) -> int:
+    """Every asset the platform needs but does not ship.
+
+    Exit code is the count of outstanding items, capped at 100, so a
+    provisioning script can gate on it.
+    """
+    from .preflight import collect, render
+    print(render())
+    outstanding = sum(1 for a in collect() if not a.present)
+    return min(outstanding, 100)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         prog="afni-rai", description="AFNI Responsible AI gateway")
@@ -157,6 +170,8 @@ def main(argv=None) -> int:
         func=cmd_coverage)
     sub.add_parser("rails", help="list every rail by cascade stage").set_defaults(
         func=cmd_rails)
+    sub.add_parser("preflight", help="what is missing, where it goes, where to "
+                                     "get it").set_defaults(func=cmd_preflight)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -861,6 +861,7 @@ class NliGroundednessRail:
     MODEL_ID = "MoritzLaurer/deberta-v3-base-zeroshot-v2.0"
     MODEL_REVISION = "8e7e5af5983a0ddb1a5b45a38b129ab69e2258e8"
     LABELS = ("entailment", "not_entailment")
+    source: str | None = None
 
     def __init__(self, *, name: str = "groundedness-nli",
                  context: str | None = None,
@@ -898,11 +899,16 @@ class NliGroundednessRail:
             self._load_error = f"{exc.__class__.__name__}: {exc}"
             return None
         try:
-            kwargs = {"revision": self.MODEL_REVISION,
-                      "local_files_only": not self._allow_download}
-            tokenizer = AutoTokenizer.from_pretrained(self.MODEL_ID, **kwargs)
+            from ...models import resolve  # noqa: PLC0415
+
+            resolved = resolve(self.MODEL_ID, self.MODEL_REVISION)
+            self.source = resolved.note
+            kwargs = resolved.kwargs
+            if self._allow_download and not resolved.local:
+                kwargs = {**kwargs, "local_files_only": False}
+            tokenizer = AutoTokenizer.from_pretrained(resolved.target, **kwargs)
             model = AutoModelForSequenceClassification.from_pretrained(
-                self.MODEL_ID, **kwargs)
+                resolved.target, **kwargs)
             model.eval()
         except Exception as exc:            # pragma: no cover - needs the weights
             self._load_error = f"{exc.__class__.__name__}: {exc}"

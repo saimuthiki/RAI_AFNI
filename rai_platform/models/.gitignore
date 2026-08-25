@@ -1,0 +1,5 @@
+# The weights themselves are large and vendor-owned - never committed.
+# MANIFEST.md says what goes here and where to fetch it.
+*
+!.gitignore
+!MANIFEST.md
