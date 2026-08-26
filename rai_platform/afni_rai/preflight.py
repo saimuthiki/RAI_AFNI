@@ -204,6 +204,11 @@ def render() -> str:
     assets = collect()
     lines: list[str] = []
     lines.append("AFNI Responsible AI - preflight")
+    try:
+        from .build_info import banner
+        lines.append(banner())
+    except Exception:  # noqa: BLE001
+        pass
     lines.append("")
     lines.append(f"Local model folder: {model_dir()}")
     lines.append(f"  (override with AFNI_MODEL_DIR)")
