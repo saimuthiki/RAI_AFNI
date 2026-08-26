@@ -1142,7 +1142,43 @@ class TestRegistration(unittest.TestCase):
         # starts empty rather than reading a file.
         self.assertEqual(len(acc.DEFAULT_CORPUS), 0)
         self.assertEqual(acc.DEFAULT_THRESHOLDS.reads, [])
-        self.assertNotIn("opentelemetry", sys.modules)
+
+    def test_importing_the_package_does_not_pull_opentelemetry(self):
+        """Tracing is opt-in: `SpanRecorder` must not drag the OTel SDK into a
+        deployment that never asked for it.
+
+        Checked in a subprocess. The in-process form - `assertNotIn(...,
+        sys.modules)` - measures the whole test run rather than this import, so
+        once ANY other module has touched opentelemetry it fails for a reason
+        that has nothing to do with the Accountability package. That is the third
+        instance of this mistake in this suite; `test_no_test_asserts_against_
+        this_process_sys_modules` now stops a fourth.
+
+        The stub makes the check mean the same thing whether or not the real
+        package is installed: without it, an accidental import on a machine
+        lacking opentelemetry raises and gets swallowed, and the test passes with
+        the bug present.
+        """
+        import subprocess
+        import tempfile
+
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with tempfile.TemporaryDirectory() as stubs:
+            with open(os.path.join(stubs, "opentelemetry.py"), "w",
+                      encoding="utf-8") as handle:
+                handle.write("def __getattr__(name): return None\n")
+            code = (
+                f"import sys; sys.path.insert(0, {stubs!r}); "
+                f"sys.path.insert(0, {root!r}); "
+                "import afni_rai.tenets.accountability; "
+                "print('PULLED' if 'opentelemetry' in sys.modules else 'CLEAN')"
+            )
+            proc = subprocess.run([sys.executable, "-c", code],
+                                  capture_output=True, text=True, timeout=120)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout.strip(), "CLEAN",
+                         "importing the accountability tenet pulled in "
+                         "opentelemetry - tracing must stay opt-in")
 
 
 # ------------------------------------------------- the whole path, end to end -- #

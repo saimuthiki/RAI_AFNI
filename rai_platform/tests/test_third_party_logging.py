@@ -269,5 +269,101 @@ class TestNoTenetEmitsASyntaxWarning(unittest.TestCase):
                          f"a tenet raised a SyntaxWarning:\n{proc.stderr}")
 
 
+class TestNoTestAssertsAgainstThisProcessSysModules(unittest.TestCase):
+    """A lint, earned by three separate occurrences of the same mistake.
+
+    "Importing X must not pull in Y" is a real and valuable property. Asserting
+    it as `assertNotIn("Y", sys.modules)` inside the test process is not a test
+    of it: `sys.modules` there reflects the ENTIRE run, so the assertion passes
+    or fails on module ORDER and on which optional packages the machine happens
+    to have. Green on a bare box, red on a provisioned one - backwards, and
+    invisible from the bare box where it gets written.
+
+    That cost four round trips across three files (test_security, test_privacy,
+    test_accountability) before it read as a pattern rather than three
+    coincidences. The correct form is a subprocess with the banned modules
+    stubbed importable; several tests in this file show it.
+
+    Uses the AST rather than a regex, for two reasons found the hard way: a
+    regex matched this file's own prose about the anti-pattern, and it missed
+    `assertNotIn(banned, sys.modules, "message")` because the argument list did
+    not end at the second argument. The AST sees calls, not text, so neither
+    happens.
+    """
+
+    def _offenders(self):
+        import ast
+
+        tests_dir = os.path.dirname(os.path.abspath(__file__))
+        found = []
+        for name in sorted(os.listdir(tests_dir)):
+            if not name.startswith("test_") or not name.endswith(".py"):
+                continue
+            path = os.path.join(tests_dir, name)
+            source = open(path, encoding="utf-8").read()
+            for node in ast.walk(ast.parse(source, filename=name)):
+                if not isinstance(node, ast.Call):
+                    continue
+                func = node.func
+                if not isinstance(func, ast.Attribute):
+                    continue
+                if func.attr not in ("assertIn", "assertNotIn"):
+                    continue
+                if len(node.args) < 2:
+                    continue
+                if self._is_sys_modules(node.args[1]):
+                    found.append(f"{name}:{node.lineno}")
+        return found
+
+    @staticmethod
+    def _is_sys_modules(node):
+        import ast
+
+        return (isinstance(node, ast.Attribute) and node.attr == "modules"
+                and isinstance(node.value, ast.Name) and node.value.id == "sys")
+
+    def test_no_test_file_checks_sys_modules_in_process(self):
+        offenders = self._offenders()
+        self.assertEqual(
+            offenders, [],
+            "these assertions read THIS process's sys.modules, so they depend on "
+            "test order and on what is installed. Run the import in a subprocess "
+            "with the banned modules stubbed instead. Offenders: "
+            + ", ".join(offenders))
+
+    def test_the_lint_detects_the_shape_it_bans(self):
+        """A lint that matches nothing is worse than none - it reads as a
+        guarantee. So prove the detector fires on every real form, including the
+        three-argument one a regex missed."""
+        import ast
+
+        for snippet in (
+            'self.assertNotIn("opentelemetry", sys.modules)',
+            "self.assertNotIn('presidio_analyzer', sys.modules)",
+            'self.assertNotIn(banned, sys.modules, "a message")',
+            'self.assertIn("torch", sys.modules)',
+        ):
+            with self.subTest(snippet=snippet):
+                call = ast.parse(snippet).body[0].value
+                self.assertIn(call.func.attr, ("assertIn", "assertNotIn"))
+                self.assertTrue(self._is_sys_modules(call.args[1]),
+                                "the detector missed a real case")
+
+    def test_the_lint_ignores_the_correct_form(self):
+        import ast
+
+        for snippet in (
+            'self.assertEqual(proc.stdout.strip(), "CLEAN")',
+            'self.assertNotIn("torch", result.stdout)',
+            'self.assertIn("torch", sorted(other.modules))',
+        ):
+            with self.subTest(snippet=snippet):
+                call = ast.parse(snippet).body[0].value
+                if call.func.attr not in ("assertIn", "assertNotIn"):
+                    continue
+                self.assertFalse(self._is_sys_modules(call.args[1]),
+                                 "the detector fired on a correct check")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
