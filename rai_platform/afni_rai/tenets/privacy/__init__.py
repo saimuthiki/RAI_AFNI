@@ -68,7 +68,14 @@ from typing import Callable, Iterable, Sequence
 from ...cascade.rail import RailResult, Stage
 from ...contract.explanation import RailAttribution
 from ...contract.models import Action, Finding, Severity, Span, Tenet
+from ...third_party_logging import quieten as _quieten
 from ...registry.capabilities import Coverage
+
+# Silence presidio and spacy model-load chatter before any model is built. See
+# afni_rai/third_party_logging.py - it is a privacy decision as much
+# as a readability one.
+_quieten()
+
 
 TENET = Tenet.PRIVACY
 
@@ -1062,6 +1069,11 @@ class PresidioPiiRail:
     def dependency_available() -> bool:
         """True when `presidio-analyzer` is importable. No import performed."""
         return importlib.util.find_spec("presidio_analyzer") is not None
+
+    def preload(self) -> bool:
+        """Build the Presidio engine and load the spaCy pipeline now. Measured
+        at ~3.5 s cold, which is 3.5 s the first request should not pay."""
+        return self._engine() is not None
 
     def _engine(self):
         if self._analyzer is not None or self._unavailable is not None:

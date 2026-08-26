@@ -98,7 +98,14 @@ from collections import Counter
 from ...cascade.rail import RailResult, Stage
 from ...contract.explanation import RailAttribution
 from ...contract.models import Action, Finding, Severity, Span, Tenet
+from ...third_party_logging import quieten as _quieten
 from ...registry.capabilities import Coverage
+
+# Silence transformers' pipeline chatter before any model is built. See
+# afni_rai/third_party_logging.py - it is a privacy decision as much
+# as a readability one.
+_quieten()
+
 
 TENET = Tenet.SECURITY
 
@@ -1075,6 +1082,11 @@ class DebertaInjectionRail:
                                  f"{exc.__class__.__name__}: {exc}")
             return None
         return self._pipeline
+
+    def preload(self) -> bool:
+        """Build the pipeline now so the first request does not pay for it.
+        Measured: this model alone is several seconds cold."""
+        return self._load() is not None
 
     def check(self, path: str, text: str,
               ctx: CheckContext | None = None) -> RailResult:

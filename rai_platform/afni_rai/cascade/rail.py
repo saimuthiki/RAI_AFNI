@@ -59,13 +59,44 @@ class RailResult:
     escalate: bool = False
     reason: str | None = None
 
+    # Set when the check does not APPLY to this input, as distinct from having
+    # failed to run. See `not_applicable`.
+    inapplicable: bool = False
+
     @classmethod
     def clean(cls) -> "RailResult":
         return cls(judged=True)
 
     @classmethod
     def unjudged(cls, reason: str) -> "RailResult":
+        """"I should have looked and could not." A real gap in coverage.
+
+        Reserve this for a rail that was SUPPOSED to assess this input and
+        failed: absent weights, an unconfigured credential, a timeout, a
+        misconfigured threshold. The engine turns it into `unjudged` on the
+        verdict and fails closed on client-facing traffic.
+        """
         return cls(judged=False, reason=reason)
+
+    @classmethod
+    def not_applicable(cls, reason: str) -> "RailResult":
+        """"This check does not apply to this input." NOT a gap.
+
+        The distinction is not pedantry, it is what keeps the fail-loud signal
+        worth reading. Groundedness is a *relation* between an answer and a
+        retrieved source; a user prompt with no RAG context has nothing to be
+        grounded in. Reporting that as "could not judge" made every single
+        request arrive stamped `COULD NOT JUDGE 1 path(s)` - and a warning that
+        fires on 100% of traffic conveys exactly nothing. Worse, it teaches an
+        operator to skip the line that is supposed to be the loudest one on the
+        page.
+
+        `judged=True`, so it never fails closed; `inapplicable=True`, so the
+        trace can still show that the rail declined rather than passed. Distinct
+        from `clean()`, which claims "I looked and found nothing" - a claim a
+        rail with no input to look at has not earned.
+        """
+        return cls(judged=True, inapplicable=True, reason=reason)
 
 
 @dataclass

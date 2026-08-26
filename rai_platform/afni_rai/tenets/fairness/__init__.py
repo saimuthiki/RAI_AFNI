@@ -66,7 +66,14 @@ from typing import Any, Callable, Protocol, Sequence, runtime_checkable
 from ...cascade.rail import RailResult, Stage
 from ...contract.explanation import RailAttribution
 from ...contract.models import Action, Finding, Severity, Tenet
+from ...third_party_logging import quieten as _quieten
 from ...registry.capabilities import Coverage
+
+# Silence transformers' device and revision chatter before any model is built. See
+# afni_rai/third_party_logging.py - it is a privacy decision as much
+# as a readability one.
+_quieten()
+
 
 # --------------------------------------------------------------------- shared --
 
@@ -685,6 +692,10 @@ class LocalBiasClassifierRail:
             max_length=512,
             **resolved.kwargs,
         )
+
+    def preload(self) -> bool:
+        """Build the pipeline now rather than inside the first request."""
+        return self._ensure_pipeline() is not None
 
     def _ensure_pipeline(self) -> Any:
         if self._pipeline is not None or self._tried:
