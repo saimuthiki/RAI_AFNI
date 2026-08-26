@@ -140,7 +140,7 @@ def gateway(**kwargs):
 
 def client(**kwargs):
     kwargs.setdefault("env", {})
-    return TestClient(create_app(**kwargs))
+    return TestClient(create_app(warm=False, **kwargs))
 
 
 # --------------------------------------------------------------------------- #
@@ -238,7 +238,7 @@ class TestTheTrustBoundary(unittest.TestCase):
 
     def _client(self, **env):
         rails = [flagging("privacy.stub", Stage.STAGE_1, subject=SSN)]
-        return TestClient(create_app(rails=rails, attributions={}, env=env))
+        return TestClient(create_app(warm=False, rails=rails, attributions={}, env=env))
 
     def test_the_subject_is_withheld_by_default(self):
         payload = self._client().post("/v1/guard", json=body()).json()
@@ -287,7 +287,7 @@ class TestNoMatchedValueReachesTheDatabase(unittest.TestCase):
     def test_the_store_contains_no_subject_after_a_request(self):
         store = VerdictStore(":memory:")
         rails = [flagging("privacy.stub", Stage.STAGE_1, subject=SSN)]
-        app_client = TestClient(create_app(rails=rails, attributions={},
+        app_client = TestClient(create_app(warm=False, rails=rails, attributions={},
                                            verdict_store=store, env={}))
         app_client.post("/v1/guard", json=body())
         self.assertEqual(store.count("verdicts"), 1)
@@ -299,7 +299,7 @@ class TestNoMatchedValueReachesTheDatabase(unittest.TestCase):
         reversible."""
         store = VerdictStore(":memory:")
         rails = [flagging("privacy.stub", Stage.STAGE_1, subject=SSN)]
-        app_client = TestClient(create_app(
+        app_client = TestClient(create_app(warm=False, 
             rails=rails, attributions={}, verdict_store=store,
             env={"AFNI_REVEAL_SUBJECT": "1"}))
         app_client.post("/v1/guard", json=body())
@@ -385,7 +385,7 @@ class TestStreamingIsReal(unittest.TestCase):
         rails = [StubRail("s1", Stage.STAGE_1), StubRail("s2", Stage.STAGE_2),
                  StubRail("s3", Stage.STAGE_3)]
         frames = read_stream(
-            TestClient(create_app(rails=rails, attributions={}, env={})), body())
+            TestClient(create_app(warm=False, rails=rails, attributions={}, env={})), body())
         self.assertEqual([f["event"] for f in frames],
                          ["stage", "stage", "stage", "verdict", "done"])
         self.assertEqual([f["stage"] for f in frames if f["event"] == "stage"],
@@ -396,7 +396,7 @@ class TestStreamingIsReal(unittest.TestCase):
         reported rather than omitted."""
         rails = [StubRail("s1", Stage.STAGE_1), StubRail("s2", Stage.STAGE_2)]
         frames = read_stream(
-            TestClient(create_app(rails=rails, attributions={}, env={})), body())
+            TestClient(create_app(warm=False, rails=rails, attributions={}, env={})), body())
         stages = [f for f in frames if f["event"] == "stage"]
         self.assertTrue(stages[0]["ran"])
         self.assertFalse(stages[1]["ran"])
@@ -407,7 +407,7 @@ class TestStreamingIsReal(unittest.TestCase):
         rails = [StubRail("s1", Stage.STAGE_1,
                           RailResult(judged=True, block=True)), stage_2]
         frames = read_stream(
-            TestClient(create_app(rails=rails, attributions={}, env={})), body())
+            TestClient(create_app(warm=False, rails=rails, attributions={}, env={})), body())
         stages = [f for f in frames if f["event"] == "stage"]
         self.assertTrue(stages[0]["short_circuited"])
         self.assertFalse(stages[1]["ran"])
@@ -426,7 +426,7 @@ class TestStreamingIsReal(unittest.TestCase):
         rails = [escalating("s1", Stage.STAGE_1),
                  flagging("s2", Stage.STAGE_2)]
         frames = read_stream(
-            TestClient(create_app(rails=rails, attributions={}, env={})), body())
+            TestClient(create_app(warm=False, rails=rails, attributions={}, env={})), body())
         stages = [f for f in frames if f["event"] == "stage"]
         self.assertEqual(stages[0]["findings"], [])
         self.assertEqual(len(stages[1]["findings"]), 1)
@@ -453,7 +453,7 @@ class TestThresholdStoreIsWired(unittest.TestCase):
             return RailResult.clean()
 
     def _client(self, store):
-        return TestClient(create_app(rails=[self.ThresholdRail()], attributions={},
+        return TestClient(create_app(warm=False, rails=[self.ThresholdRail()], attributions={},
                                      threshold_store=store, env={}))
 
     def test_a_tenant_override_changes_the_http_answer(self):
@@ -493,7 +493,7 @@ class TestIntrospectionEndpoints(unittest.TestCase):
         self.assertIsInstance(payload["rails_unavailable"], list)
 
     def test_healthz_never_reports_a_credential(self):
-        app_client = TestClient(create_app(env={
+        app_client = TestClient(create_app(warm=False, env={
             "AFNI_JUDGE_PROVIDER": "openai,gemini",
             "OPENAI_API_KEYS": "sk-secret-one,sk-secret-two",
             "GOOGLE_API_KEYS": "goog-secret"}))
@@ -591,14 +591,14 @@ class TestRequestContract(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
 
     def test_client_facing_defaults_to_true_so_omitting_it_fails_closed(self):
-        app_client = TestClient(create_app(
+        app_client = TestClient(create_app(warm=False, 
             rails=[StubRail("s1", Stage.STAGE_1, RailResult.unjudged("no model"))],
             attributions={}, env={}))
         payload = app_client.post("/v1/guard", json=body()).json()
         self.assertEqual(payload["verdict"]["decision"], "block")
 
     def test_internal_traffic_is_allowed_but_still_reports_the_gap(self):
-        app_client = TestClient(create_app(
+        app_client = TestClient(create_app(warm=False, 
             rails=[StubRail("s1", Stage.STAGE_1, RailResult.unjudged("no model"))],
             attributions={}, env={}))
         payload = app_client.post(
@@ -662,7 +662,7 @@ class TestJudgeProviders(unittest.TestCase):
         self.assertEqual(len(skipped), 3)
 
     def test_the_gateway_still_serves_with_an_unusable_chain(self):
-        app_client = TestClient(create_app(
+        app_client = TestClient(create_app(warm=False, 
             env={"AFNI_JUDGE_PROVIDER": "openai,gemini"}))
         health = app_client.get("/healthz").json()
         self.assertEqual(health["status"], "degraded")
@@ -727,7 +727,7 @@ class TestJudgeProviders(unittest.TestCase):
     def test_a_bound_judge_produces_a_finding_over_http(self):
         from afni_rai.tenets.content_safety import TOXICITY_JUDGE_RAIL
 
-        app_client = TestClient(create_app(
+        app_client = TestClient(create_app(warm=False, 
             rails=[escalating("s1", Stage.STAGE_1), TOXICITY_JUDGE_RAIL],
             attributions={}, judge_provider=StubJudge(0.99), env={}))
         payload = app_client.post("/v1/guard", json=body("you are awful")).json()
@@ -749,7 +749,7 @@ class TestJudgeProviders(unittest.TestCase):
     def test_a_judge_failure_becomes_unjudged_over_http(self):
         from afni_rai.tenets.content_safety import TOXICITY_JUDGE_RAIL
 
-        app_client = TestClient(create_app(
+        app_client = TestClient(create_app(warm=False, 
             rails=[escalating("s1", Stage.STAGE_1), TOXICITY_JUDGE_RAIL],
             attributions={}, judge_provider=BrokenJudge(), env={}))
         payload = app_client.post("/v1/guard", json=body("anything")).json()
@@ -890,7 +890,7 @@ class TestTheFallbackChain(unittest.TestCase):
 
         chain = providers.JudgeChain([(self.openai(429, {}), "openai", 0),
                                       (self.openai(429, {}), "openai", 1)])
-        app_client = TestClient(create_app(
+        app_client = TestClient(create_app(warm=False, 
             rails=[escalating("s1", Stage.STAGE_1), TOXICITY_JUDGE_RAIL],
             attributions={}, judge_provider=chain, env={}))
         payload = app_client.post("/v1/guard", json=body("anything")).json()
@@ -921,7 +921,7 @@ class TestTheFallbackChain(unittest.TestCase):
             (self.openai(429, {}), "openai", 0),
             (self.openai(200, self.ANSWER), "openai", 1)])
         chain.score("p", "t")
-        app_client = TestClient(create_app(rails=[], attributions={},
+        app_client = TestClient(create_app(warm=False, rails=[], attributions={},
                                            judge_provider=chain, env={}))
         judge = app_client.get("/healthz").json()["judge_provider"]
         self.assertEqual(judge["chain"], ["openai[0]", "openai[1]"])
@@ -1035,7 +1035,7 @@ class TestTheOperatorConsoleIsServed(unittest.TestCase):
     def setUp(self):
         from fastapi.testclient import TestClient
         from afni_rai.gateway.app import create_app
-        self.client = TestClient(create_app())
+        self.client = TestClient(create_app(warm=False))
 
     def test_the_console_is_served_from_the_gateway_origin(self):
         response = self.client.get("/")

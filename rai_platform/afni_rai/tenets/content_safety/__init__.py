@@ -83,8 +83,15 @@ from typing import Callable, Sequence
 from ...cascade.rail import RailResult, RailSpec, Stage
 from ...contract.explanation import RailAttribution
 from ...contract.models import Action, Finding, Severity, Tenet
+from ...third_party_logging import quieten as _quieten
 
 TENET = Tenet.CONTENT_SAFETY
+
+# Silence llm-guard's structlog output before any model is built. See
+# afni_rai/third_party_logging.py - it is a privacy decision as much
+# as a readability one.
+_quieten()
+
 
 # ============================================================== taxonomy ====
 # The canonical multi-category harm taxonomy. A faithful port of the `safety.*`
@@ -1105,6 +1112,15 @@ class ToxicityClassifier:
             return None
         return self._scanners[key]
 
+    def preload(self) -> bool:
+        """Warm at this rail's default threshold.
+
+        A tenant override builds a second scanner (llm-guard takes the threshold
+        at construction), but by then the weights are in the OS page cache, so
+        that build is cheap. Warming the default is what removes the seconds.
+        """
+        return self._load() is not None
+
     def check(self, path: str, text: str,
               ctx: CheckContext | None = None) -> RailResult:
         # Per-tenant threshold, falling back to the ported default when no
@@ -1213,6 +1229,10 @@ class ZeroShotTopics:
             return None
         return self._scanners[key]
 
+    def preload(self) -> bool:
+        """Warm at this rail's default threshold. See ToxicityClassifier."""
+        return self._load() is not None
+
     def check(self, path: str, text: str,
               ctx: CheckContext | None = None) -> RailResult:
         # Per-tenant threshold, falling back to the ported default when no
@@ -1221,7 +1241,14 @@ class ZeroShotTopics:
         threshold = (ctx.threshold(self.THRESHOLD_KEY, self.threshold)
                      if ctx is not None else self.threshold)
         if not self.topics:
-            return RailResult.clean()
+            # Not applicable rather than clean. `clean()` asserts "I looked and
+            # found nothing"; with no topic list there is no question to ask, and
+            # a rail should not claim an assessment it did not make. Nor is it a
+            # coverage gap - the topic list is deployment policy, and its absence
+            # is recorded as such by `preflight`.
+            return RailResult.not_applicable(
+                "no topic list configured - on-topic scope is deployment policy, "
+                "so there is nothing for this rail to check")
         if not text or not text.strip():
             return RailResult.clean()
         scanner = self._load(threshold)

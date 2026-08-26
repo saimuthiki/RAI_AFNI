@@ -463,11 +463,39 @@ class TestNliGroundedness(unittest.TestCase):
         self.assertEqual(H.NliGroundednessRail.LABELS,
                          ("entailment", "not_entailment"))
 
-    def test_no_grounding_source_is_unjudged_not_a_pass(self):
+    def test_no_grounding_source_is_not_applicable_and_not_a_pass(self):
+        """Three states, not two, and this is the third.
+
+        With no retrieved source there is nothing to be grounded in, so the rail
+        has neither found the output clean nor failed to assess it. It declines.
+
+        This used to report `unjudged`, which stamped COULD NOT JUDGE on every
+        request carrying no RAG context - most of them - and a fail-loud warning
+        that fires on all traffic conveys nothing. But it must not read as
+        `clean` either: that asserts "I looked and found nothing", which a rail
+        with no input to compare against has not earned.
+        """
         rail = H.NliGroundednessRail(entailment_scorer=lambda s, o: 0.99)
         out = rail.check("payload.output", "The invoice total is 412 EUR.")
-        self.assertFalse(out.judged)
+        self.assertTrue(out.judged, "a declined check must not fail closed")
+        self.assertTrue(out.inapplicable, "the decline must be recorded as such")
+        self.assertEqual(out.findings, [])
         self.assertIn("groundedness is a relation", out.reason)
+
+    def test_declining_is_distinguishable_from_finding_nothing(self):
+        """The two must not be the same object, or the trace cannot tell an
+        operator which happened."""
+        from afni_rai.cascade.rail import RailResult
+
+        declined = H.NliGroundednessRail(
+            entailment_scorer=lambda s, o: 0.99).check("payload.output", "x")
+        looked = H.NliGroundednessRail(
+            context=self.SOURCE,
+            entailment_scorer=lambda s, o: 0.99).check("payload.output", "x")
+        self.assertTrue(declined.inapplicable)
+        self.assertFalse(looked.inapplicable)
+        self.assertNotEqual(declined, RailResult.clean())
+        self.assertEqual(looked, RailResult.clean())
 
     def test_entailed_output_is_clean(self):
         rail = H.NliGroundednessRail(context=self.SOURCE,
@@ -511,7 +539,11 @@ class TestNliGroundedness(unittest.TestCase):
                                     entailment_scorer=lambda s, o: 0.10)
         self.assertEqual(categories(rail.check("payload.output", "x")),
                          ["safety.hallucination"])
-        self.assertFalse(rail.check("payload.other", "x").judged)
+        # A path the provider has no source for is DECLINED, not failed - see
+        # test_no_grounding_source_is_not_applicable_and_not_a_pass.
+        other = rail.check("payload.other", "x")
+        self.assertTrue(other.judged)
+        self.assertTrue(other.inapplicable)
         self.assertEqual(seen, ["payload.output", "payload.other"])
 
     def test_threshold_bounds_are_validated(self):

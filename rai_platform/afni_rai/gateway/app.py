@@ -68,6 +68,7 @@ from ..contract.models import (
 )
 from ..registry import phases
 from ..registry.capabilities import CapabilityRegistry
+from ..warmup import warm_all
 from ..tenets.accountability.audit import ORIGIN_LIVE, VerdictStore
 from ..tenets.accountability.policy import FailurePolicy
 from ..tenets.accountability.thresholds import ThresholdStore
@@ -760,8 +761,24 @@ def _router(gateway: Gateway) -> APIRouter:
 
 def create_app(**kwargs: Any) -> FastAPI:
     """Build the app. Keyword arguments are forwarded to `Gateway`, which is how
-    a test injects fake rails, an in-memory audit store or a stub judge."""
+    a test injects fake rails, an in-memory audit store or a stub judge.
+
+    `warm=False` skips the Stage-2 model warm-up. Tests pass it: they inject stub
+    rails with nothing to warm, and paying a real model load per test case would
+    make the suite unusable.
+    """
+    warm = kwargs.pop("warm", True)
     gateway = Gateway(**kwargs)
+    if warm:
+        # BEFORE the app is returned, so uvicorn cannot start accepting traffic
+        # until the models are resident. A guardrail that is slow to become ready
+        # is fine; one that is ready and slow is not - and the measurement that
+        # prompted this was a 15,568 ms first request on a freshly provisioned
+        # machine, against a documented Stage-2 latency class of 10-500 ms.
+        # A rail that fails to warm is not fatal: it reports `unjudged` at request
+        # time and fails closed, the same honest degrade as never having the
+        # weights at all.
+        gateway.warm_results = warm_all(gateway.rails)
     app = FastAPI(
         title="AFNI Responsible AI gateway",
         version=f"1.0.0 (OpenGuardrails protocol {PROTOCOL_VERSION})",

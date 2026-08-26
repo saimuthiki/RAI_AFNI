@@ -93,7 +93,14 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from ...cascade.rail import RailResult, RailSpec, Stage
 from ...contract.explanation import RailAttribution
 from ...contract.models import Action, Finding, Severity, Tenet
+from ...third_party_logging import quieten as _quieten
 from ...registry.capabilities import Coverage
+
+# Silence transformers' model-load chatter before any model is built. See
+# afni_rai/third_party_logging.py - it is a privacy decision as much
+# as a readability one.
+_quieten()
+
 
 _TENET = Tenet.HALLUCINATION
 
@@ -370,6 +377,13 @@ class JsonSchemaRail:
         self.name = name
         self._schemas = dict(schemas or {})
         self._default = default_schema
+
+    def preload(self) -> bool:
+        """Import `jsonschema` now. There is no model here, so this is cheap -
+        but the hook exists on every Stage-2 rail deliberately, so the invariant
+        "a Stage-2 rail never loads its dependency inside the first request" is
+        one a test can enforce rather than a convention that decays."""
+        return self._validator() is not None
 
     def _schema_for(self, path: str) -> dict | None:
         return self._schemas.get(path, self._default)
@@ -944,7 +958,14 @@ class NliGroundednessRail:
                 + (f" ({self._load_error})" if self._load_error else ""))
         source = self._premise(path)
         if not source or not source.strip():
-            return RailResult.unjudged(
+            # NOT a coverage gap - this check does not apply. Groundedness is a
+            # relation between an answer and a retrieved source, so a prompt with
+            # no RAG context has nothing to be grounded in. Reporting `unjudged`
+            # here stamped COULD NOT JUDGE on every request that carried no
+            # context, which is most of them, and a warning that fires on all
+            # traffic conveys nothing. The rail declining is recorded in the
+            # trace either way.
+            return RailResult.not_applicable(
                 f"no grounding source for {path} - groundedness is a relation, "
                 "not a property of the output alone")
         try:
