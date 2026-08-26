@@ -60,7 +60,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from ..cascade.engine import PROVIDER, Cascade, CascadeOutcome
-from ..cascade.rail import Stage
+from ..cascade.rail import Direction, Stage
 from ..cli import TENET_PACKAGES, load_tenets
 from ..contract.explanation import Explanation, RailAttribution, explain
 from ..contract.models import (
@@ -537,6 +537,14 @@ class Gateway:
                 "attribution": _attribution_dict(self.attributions.get(rail.name)),
                 "available": available,
                 "unavailable_reason": reason,
+                # Which side of the AI system this rail guards. The engine has
+                # gated on this since the input/output split, but the endpoint
+                # did not expose it - so the console could not say which rails
+                # guard a prompt and which guard a response without making a
+                # live request and reading `rails_skipped` back out of the
+                # trace. A rail with no declaration is BOTH; see
+                # cascade/rail.py::Direction.
+                "direction": getattr(rail, "direction", Direction.BOTH).value,
             })
         return rows
 

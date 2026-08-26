@@ -26,10 +26,16 @@
    would have been the wrong fix: two axes that look different in FORM cannot be
    swapped by a reader who is colour-blind, tired, or looking at a projector.
 
-   THE TYPE LAW. Sans is for sentences a human wrote. Mono is for facts the
-   gateway produced — rail names, payload paths, counts, latencies, fingerprints,
-   coverage keys, repo slugs. Nothing crosses over. In a console whose whole job
-   is telling a measurement from a claim, that distinction is worth a typeface.
+   THE TYPE LAW. Sans sets prose — headlines, ledes, and every sentence written
+   for a person to read. Mono sets everything the system named and everything
+   that indexes it: rail ids, payload paths, counts, latencies, fingerprints,
+   coverage keys, repo slugs, and the small-caps field labels above them. So a
+   line in mono is always a fact or the name of one, and a line in sans is always
+   an argument about facts. In a console whose whole job is telling a measurement
+   apart from a claim, that distinction is worth a typeface. There is no third
+   face and no web font: the console is served from the gateway's own origin with
+   no build step and no CDN, so it uses the two stacks every OS already has and
+   spends its typographic budget on scale, weight and tracking instead.
    ========================================================================== */
 
 :root {
@@ -123,6 +129,7 @@
   --r-sm: 3px; --r-md: 7px; --r-lg: 12px;
   --shadow: 0 1px 0 rgb(255 255 255 / 0.03), 0 8px 24px -12px rgb(0 0 0 / 0.6);
   --nav-w: 15rem;
+  --scroll-shade: rgb(0 0 0 / 0.55);
 }
 
 @media (prefers-color-scheme: light) {
@@ -161,6 +168,7 @@
     --allow: #0f7a52; --allow-ink: #0a5c3e; --allow-bed: #e2f3ec;
 
     --shadow: 0 1px 2px rgb(14 24 29 / 0.05), 0 10px 24px -16px rgb(14 24 29 / 0.25);
+    --scroll-shade: rgb(14 24 29 / 0.18);
   }
 }
 
@@ -199,6 +207,7 @@
   --allow: #0f7a52; --allow-ink: #0a5c3e; --allow-bed: #e2f3ec;
 
   --shadow: 0 1px 2px rgb(14 24 29 / 0.05), 0 10px 24px -16px rgb(14 24 29 / 0.25);
+  --scroll-shade: rgb(14 24 29 / 0.18);
 }
 
 /* ============================ base ======================================= */
@@ -333,7 +342,9 @@ a:hover { text-decoration-thickness: 2px; }
   border-left: 3px solid var(--cov-2);
   font-size: var(--t-small);
 }
-.health__top { display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap; }
+.health__top { display: flex; align-items: baseline; gap: var(--sp-2) var(--sp-3); flex-wrap: wrap; }
+.health__top > span:nth-child(2) { flex: 1 1 26rem; min-width: 0; }
+.health__cfg { font-size: var(--t-micro); }
 .health__word {
   font: 700 var(--t-eyebrow)/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase;
   color: var(--cov-2-ink); background: var(--cov-2-bed);
@@ -464,13 +475,13 @@ a:hover { text-decoration-thickness: 2px; }
 .stag__n {
   display: inline-grid; place-items: center;
   width: 1.05rem; height: 1.05rem; border-radius: 50%;
-  background: currentColor; color: var(--surface);
+  background: var(--tone); color: var(--surface);
   font-size: 0.625rem; font-weight: 700;
 }
-.stag--1 { color: var(--s1-ink); background: var(--s1-bed); }
-.stag--2 { color: var(--s2-ink); background: var(--s2-bed); }
-.stag--3 { color: var(--s3-ink); background: var(--s3-bed); }
-.stag--off { color: var(--soff-ink); background: none; border-style: dashed; }
+.stag--1 { --tone: var(--s1-ink); color: var(--s1-ink); background: var(--s1-bed); }
+.stag--2 { --tone: var(--s2-ink); color: var(--s2-ink); background: var(--s2-bed); }
+.stag--3 { --tone: var(--s3-ink); color: var(--s3-ink); background: var(--s3-bed); }
+.stag--off { --tone: var(--soff-ink); color: var(--soff-ink); background: none; border-style: dashed; }
 
 /* ============================ coverage chips ============================= */
 /* Ordinal position is carried by the pip meter (4 -> 0) and the label, so the
@@ -633,7 +644,8 @@ textarea:focus, select:focus, input:focus { border-color: var(--accent); }
 }
 .rung--off .rung__node { color: var(--soff-ink); background: var(--bg); border-style: dashed; border-radius: var(--r-sm); }
 
-.rung[data-state="pending"] { opacity: 0.5; }
+.rung[data-state="pending"] .rung__node { background: none; border-style: dashed; }
+.rung[data-state="pending"] .rung__name { color: var(--ink-2); }
 .rung[data-state="pending"] .rung__stat { color: var(--ink-3); }
 
 .rung[data-state="ran"] .rung__stat,
@@ -652,7 +664,6 @@ textarea:focus, select:focus, input:focus { border-color: var(--accent); }
 }
 @keyframes sweep { from { background-position: 200% 0; } to { background-position: -100% 0; } }
 
-.rung[data-state="skipped"] { opacity: 0.72; }
 .rung[data-state="skipped"] .rung__node { border-style: dashed; background: none; }
 .rung[data-state="skipped"] .rung__name { color: var(--ink-3); text-decoration: line-through; text-decoration-thickness: 1px; }
 .rung[data-state="skipped"] .rung__stat { color: var(--ink-3); }
@@ -754,7 +765,7 @@ textarea:focus, select:focus, input:focus { border-color: var(--accent); }
   background: color-mix(in oklab, var(--hazard) 12%, transparent);
   border-left: 2px solid var(--hazard);
 }
-.blind__foot { margin-top: var(--sp-4); font-size: var(--t-small); color: var(--hazard-ink); opacity: 0.9; }
+.blind__foot { margin-top: var(--sp-4); font-size: var(--t-small); color: var(--hazard-ink); }
 
 /* ---- findings ---------------------------------------------------------- */
 
@@ -1019,9 +1030,9 @@ td.t-nowrap { white-space: nowrap; }
   --rig-node: 1fr;
   display: grid;
   grid-template-columns:
-    minmax(5.5rem, 0.8fr) 2.25rem minmax(11rem, 1.35fr)
-    2.25rem minmax(7.5rem, 1fr)
-    2.25rem minmax(11rem, 1.35fr) 2.25rem minmax(5.5rem, 0.8fr);
+    minmax(6rem, 0.78fr) 4rem minmax(10.5rem, 1.4fr)
+    4rem minmax(6.5rem, 0.8fr)
+    4rem minmax(10.5rem, 1.4fr) 4rem minmax(6rem, 0.78fr);
   align-items: stretch;
   gap: 0;
   padding: var(--sp-5) var(--sp-4) var(--sp-4);
@@ -1115,7 +1126,7 @@ td.t-nowrap { white-space: nowrap; }
 .lamp[data-stage="3"][data-state="ran"], .lamp[data-stage="3"][data-state="stopped"] { border-color: var(--s3); background: var(--s3-bed); }
 .lamp[data-stage="3"][data-state="ran"] .lamp__n, .lamp[data-stage="3"][data-state="stopped"] .lamp__n,
 .lamp[data-stage="3"][data-state="ran"] .lamp__s, .lamp[data-stage="3"][data-state="stopped"] .lamp__s { color: var(--s3-ink); }
-.lamp[data-state="skipped"] { border-style: dashed; background: none; opacity: 0.65; }
+.lamp[data-state="skipped"] { border-style: dashed; background: none; }
 .lamp[data-state="skipped"] .lamp__n { text-decoration: line-through; }
 .lamp[data-state="running"] { border-color: var(--accent); }
 .lamp[data-state="running"] .lamp__s { color: var(--accent); }
@@ -1136,16 +1147,23 @@ td.t-nowrap { white-space: nowrap; }
 }
 .link__lab {
   position: relative; z-index: 1;
-  padding: 1px 5px; margin-bottom: 1.15rem;
-  font: 500 9px/1.4 var(--mono); letter-spacing: 0.09em; text-transform: uppercase;
+  max-width: 100%;
+  padding: 1px 4px; margin-bottom: 1.1rem;
+  font: 500 9px/1.35 var(--mono); letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--ink-3); background: var(--surface); border-radius: 2px;
-  white-space: nowrap;
+  text-align: center; overflow-wrap: anywhere;
 }
 .link[data-flow="live"] .link__line,
 .link[data-flow="live"] .link__line::after { border-color: var(--accent); }
 .link[data-flow="live"] .link__lab { color: var(--accent); }
-.link[data-flow="idle"] .link__line { border-top-style: dashed; opacity: 0.55; }
-.link[data-flow="idle"] .link__line::after { opacity: 0.55; }
+.link[data-flow="idle"] .link__line,
+.link[data-flow="idle"] .link__line::after {
+  border-color: color-mix(in oklab, var(--ink-3) 70%, transparent);
+  border-top-style: dashed; border-right-style: dashed;
+}
+.link[data-flow="idle"] .link__line::after { border-style: solid; }
+.link__line { border-color: color-mix(in oklab, var(--ink-3) 85%, transparent); }
+.link__line::after { border-color: color-mix(in oklab, var(--ink-3) 85%, transparent); }
 /* A blocked edge does not fade — it terminates. Two bars across the line, in
    the block colour, plus the word. Colour is never the only channel. */
 .link[data-flow="blocked"] .link__line { border-color: var(--block); opacity: 0.35; border-top-style: dotted; }
@@ -1183,6 +1201,18 @@ td.t-nowrap { white-space: nowrap; }
   font-size: var(--t-micro); color: var(--ink-3);
 }
 .rig__foot b { color: var(--ink-2); font-weight: 600; }
+.rig__say {
+  grid-column: 1 / -1; margin-top: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 3px solid var(--line); border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: var(--surface-2);
+  font-size: var(--t-small); color: var(--ink-2);
+}
+.rig__say b { color: var(--ink); font-weight: 650; }
+.rig__say[data-outcome="block"] { border-left-color: var(--block); background: var(--block-bed); }
+.rig__say[data-outcome="block"] b { color: var(--block-ink); }
+.rig__say[data-outcome="allow"] { border-left-color: var(--allow); background: var(--allow-bed); }
+.rig__say[data-outcome="allow"] b { color: var(--allow-ink); }
 
 @media (max-width: 74rem) {
   .rig { grid-template-columns: 1fr; }
@@ -1252,26 +1282,34 @@ td.t-nowrap { white-space: nowrap; }
 }
 .claim__v--word { font-size: var(--t-body); letter-spacing: 0.02em; text-transform: uppercase; }
 .claim__scale {
+  position: relative;
   display: grid; grid-template-columns: repeat(4, 1fr);
   gap: 0; align-items: start;
-  border-top: 1px solid var(--line); padding-top: 5px;
+  padding-top: 7px;
   max-width: 15rem;
 }
-.claim__scale li { display: grid; justify-items: center; gap: 2px; }
-.claim__scale i { width: 1px; height: 6px; background: var(--line); }
+.claim__scale::before {
+  content: ""; position: absolute; top: 0; left: 12.5%; right: 12.5%;
+  border-top: 1px solid var(--line);
+}
+.claim__scale li { position: relative; display: grid; justify-items: center; gap: 3px; }
+.claim__scale i {
+  width: 7px; height: 7px; border-radius: 1px;
+  border: 1px solid color-mix(in oklab, var(--ink-3) 65%, transparent);
+  background: var(--surface); margin-top: -4px;
+}
 .claim__scale span {
   font: 500 8.5px/1.2 var(--mono); letter-spacing: 0.05em;
-  text-transform: uppercase; color: transparent; text-align: center;
+  text-transform: uppercase; color: var(--ink-2); text-align: center;
 }
-.claim__scale li.on i { width: 7px; height: 7px; border-radius: 1px; background: currentColor; }
-.claim__scale li.on span { color: var(--ink-2); }
+.claim__scale .claim__pad { display: block; min-height: 1.2em; }
+.claim__scale li.on i { background: currentColor; border-color: currentColor; }
 .claim[data-kind="deterministic"] .claim__scale li.on { color: var(--s1); }
 .claim[data-kind="classifier"]  .claim__scale li.on,
 .claim[data-kind="entailment"]  .claim__scale li.on { color: var(--s2); }
 .claim[data-kind="judge"]       .claim__scale li.on { color: var(--s3); }
 .claim__gloss { font-size: var(--t-micro); line-height: 1.5; color: var(--ink-3); }
 .notcomparable {
-  display: flex; gap: 0.5rem; align-items: baseline;
   padding: var(--sp-3) var(--sp-4);
   border: 1px dashed var(--line); border-radius: var(--r-md);
   font-size: var(--t-small); color: var(--ink-2);
@@ -1339,7 +1377,9 @@ td.t-nowrap { white-space: nowrap; }
 .lcell__cost { font: 500 var(--t-eyebrow)/1.4 var(--mono); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3); }
 .lcell[data-paid="no"] { background: var(--surface-2); }
 .lcell[data-paid="no"] .lcell__what { color: var(--ink-3); text-decoration: line-through; text-decoration-thickness: 1px; }
-.lcell[data-paid="no"] .stag { opacity: 0.6; }
+/* The strike-through on the line below already says "not spent"; dimming the
+   stage tag as well only cost contrast. */
+.lcell[data-paid="no"] .stag { filter: saturate(0.55); }
 .lcell__verdict {
   font: 600 var(--t-eyebrow)/1.4 var(--mono); letter-spacing: 0.1em;
   text-transform: uppercase; margin-left: auto;
@@ -1354,8 +1394,28 @@ td.t-nowrap { white-space: nowrap; }
    axis that has none. The colour lives in the column head only.
    ========================================================================== */
 
-.mx th.mx__state { text-align: right; }
-.mx th.mx__state .cov { margin-left: auto; }
+.mx { min-width: 46rem; }
+.mx th.mx__state {
+  text-align: right; vertical-align: bottom;
+  padding-top: var(--sp-2); white-space: normal; min-width: 6.5rem;
+}
+.mx__rule { display: block; height: 3px; border-radius: 2px; margin-bottom: 5px; }
+.mx th[data-state="implemented"]          .mx__rule { background: var(--cov-1); }
+.mx th[data-state="dependency-missing"]   .mx__rule { background: var(--cov-2); }
+.mx th[data-state="cloud-not-configured"] .mx__rule { background: var(--cov-3); }
+.mx th[data-state="offline-only"]         .mx__rule { background: var(--cov-4); }
+.mx th[data-state="gap"]                  .mx__rule { background: var(--cov-5); }
+.mx__short { display: block; color: var(--ink-2); font-size: var(--t-micro); letter-spacing: 0.04em; }
+.mx__key { display: block; font-size: 9px; letter-spacing: 0.06em; color: var(--ink-3); margin-top: 1px; }
+.mx td.mx__tot { border-left: 1px solid var(--line); }
+.mx th:last-child { border-left: 1px solid var(--line); }
+
+.railfold > summary {
+  cursor: pointer; display: flex; align-items: baseline; gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+}
+.railfold > summary::marker { color: var(--ink-3); }
+.railfold__n { font: 500 var(--t-micro)/1 var(--mono); color: var(--ink-3); letter-spacing: 0.03em; }
 .mx td.mx__n {
   text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums;
   font-size: var(--t-small); font-weight: 600; white-space: nowrap;
@@ -1431,7 +1491,7 @@ td.t-nowrap { white-space: nowrap; }
 
 .figure { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); overflow: hidden; }
 .figure__scroll { overflow-x: auto; padding: var(--sp-5); }
-.figure__scroll > .diagram { min-width: 46rem; }
+.figure__scroll > .diagram { min-width: 62rem; }
 .figure figcaption {
   padding: var(--sp-3) var(--sp-5); border-top: 1px solid var(--line-soft);
   background: var(--surface-2); font-size: var(--t-small); color: var(--ink-2);
@@ -1479,3 +1539,107 @@ td.t-nowrap { white-space: nowrap; }
   color: var(--ink-2); text-decoration: none; background: var(--surface);
 }
 .jump a:hover { color: var(--ink); border-color: var(--ink-3); }
+
+/* The lane you are not exercising keeps its lamps, dimmed. Deleting them would
+   make the rig re-flow on every direction change, and a diagram that moves when
+   you point at it is harder to trust than one that dims. */
+.guard[aria-pressed="false"] .lamp { border-style: dashed; background: none; }
+.guard[aria-pressed="false"] .node__name { color: var(--ink-2); }
+
+/* ==========================================================================
+   90-DAY TIMELINE  —  the roadmap's own axis, in ink
+   Three equal windows because they ARE equal: 0-30, 30-60, 60-90. Sizing them
+   by repo count would turn a calendar into a bar chart of something else.
+   ========================================================================== */
+
+.tl { display: grid; gap: var(--sp-3); }
+.tl__scale {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid var(--line);
+}
+.tl__tick {
+  position: relative; padding-bottom: var(--sp-2);
+  font: 500 var(--t-eyebrow)/1 var(--mono); letter-spacing: 0.1em; color: var(--ink-3);
+}
+.tl__tick::after {
+  content: ""; position: absolute; left: 0; bottom: -1px; width: 1px; height: 7px;
+  background: var(--line);
+}
+.tl__tick:last-child span { float: right; }
+.tl__win { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-3); }
+.tlcell {
+  display: grid; gap: var(--sp-2); align-content: start;
+  padding: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--surface);
+  border-top-width: 3px; border-top-color: var(--ink-2);
+}
+.tlcell--off { border-style: dashed; border-top-width: 1px; background: var(--surface-2); }
+.tlcell__n { font: 650 1.5rem/1 var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.tlcell__lab { font: 600 var(--t-small)/1.3 var(--sans); }
+.tlcell__days { font: 500 var(--t-eyebrow)/1.3 var(--mono); letter-spacing: 0.09em; color: var(--ink-3); }
+.tlcell__meter { height: 5px; border-radius: 2px; background: var(--surface-3); border: 1px solid var(--line); position: relative; }
+.tlcell__meter i { position: absolute; inset: 0 auto 0 0; background: var(--ink-2); border-radius: 1px; }
+.tlcell__note { font-size: var(--t-micro); color: var(--ink-3); line-height: 1.5; }
+@media (max-width: 62rem) {
+  .tl__scale { display: none; }
+  .tl__win { grid-template-columns: 1fr; }
+}
+
+.navphase { margin-top: var(--sp-3); }
+.navphase .pbr { min-width: 100%; }
+
+/* Six nav items at the collapsed breakpoint no longer fit one row of columns. */
+@media (max-width: 68rem) {
+  .nav__list { grid-auto-flow: row dense; grid-template-columns: repeat(3, 1fr); grid-auto-columns: auto; }
+}
+@media (max-width: 46rem) {
+  .nav__list { grid-template-columns: repeat(2, 1fr); }
+}
+
+.diagram .d-lozenge { fill: var(--surface); stroke: var(--ink-3); stroke-width: 1.25; }
+.diagram .d-sever { stroke: var(--soff); stroke-width: 1.5; stroke-dasharray: none; fill: none; }
+
+.tl__scale { position: relative; }
+.tl__end {
+  position: absolute; right: 0; bottom: var(--sp-2);
+  font: 500 var(--t-eyebrow)/1 var(--mono); letter-spacing: 0.1em; color: var(--ink-3);
+}
+.tl__end::after {
+  content: ""; position: absolute; right: 0; bottom: -0.6rem; width: 1px; height: 7px;
+  background: var(--line);
+}
+
+/* The frameworks table holds seven columns and the last one is the one that
+   answers the question, so it must not be the one that gets clipped. */
+table.fw { min-width: 56rem; }
+table.fw td .tag { white-space: nowrap; }
+
+/* A chip inside a grid track stretches to the track. These are labels, not bars. */
+.railcard__id > .stag,
+.railcard__id > .cannotrun,
+.railcard__mid > .conf__k { justify-self: start; }
+
+/* A table that scrolls inside its own box has to LOOK scrollable, or a clipped
+   chip at the right edge reads as a rendering bug. Local-background shadows
+   appear only when there is something off-screen in that direction. */
+.tablewrap, .figure__scroll {
+  background-image:
+    linear-gradient(to right, var(--surface) 30%, transparent),
+    linear-gradient(to left,  var(--surface) 30%, transparent),
+    linear-gradient(to right, var(--scroll-shade), transparent 14px),
+    linear-gradient(to left,  var(--scroll-shade), transparent 14px);
+  background-position: 0 0, 100% 0, 0 0, 100% 0;
+  background-repeat: no-repeat;
+  background-size: 42px 100%, 42px 100%, 14px 100%, 14px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+/* Seven columns earn a tighter gutter than four do. */
+table.fw td, table.fw th { padding-left: var(--sp-3); padding-right: var(--sp-3); }
+
+/* Two kinds of "skipped" live in the same chip row, so they need a visible
+   break and their own weight. A rail that does not apply to this direction has
+   not failed at anything — it is drawn quiet and hollow, not alarmed. */
+.railbreak { flex-basis: 100%; height: 0; }
+.railchip--head { border-style: dashed; }
+.railchip--na { background: none; color: var(--ink-3); border-color: var(--line); border-style: dashed; }
+.railchip--na.railchip--head { color: var(--ink-2); }
