@@ -434,13 +434,26 @@ class TestNliGroundedness(unittest.TestCase):
     SOURCE = "The invoice total is 412 EUR and it was paid on 3 March."
 
     def test_missing_dependency_is_unjudged_never_clean(self):
-        # transformers/torch are genuinely absent in the stdlib-only tier, so
-        # this is the live behaviour rather than a simulated one.
+        if H.nli_backend_available():  # pragma: no cover - provisioned machine
+            self.skipTest("transformers/torch and the weights are present; the "
+                          "degrade path cannot be exercised here")
         rail = H.NliGroundednessRail(context=self.SOURCE)
         out = rail.check("payload.output", "The invoice total is 9000 EUR.")
         self.assertFalse(out.judged)
         self.assertEqual(out.findings, [])
         self.assertIn("MoritzLaurer/deberta-v3-base-zeroshot-v2.0", out.reason)
+
+    def test_with_the_backend_present_it_returns_a_judgement(self):
+        """The complementary half. Between this and the test above, one always
+        runs - so neither a bare box nor a provisioned one leaves the rail's
+        behaviour unasserted."""
+        if not H.nli_backend_available():
+            self.skipTest("no NLI backend on this machine")
+        rail = H.NliGroundednessRail(context=self.SOURCE)
+        out = rail.check("payload.output", "The invoice total is 9000 EUR.")
+        self.assertTrue(out.judged,
+                        f"backend is present but the rail still cannot look: "
+                        f"{out.reason}")
 
     def test_the_model_id_and_revision_are_pinned(self):
         self.assertEqual(H.NliGroundednessRail.MODEL_ID,
@@ -665,17 +678,29 @@ class TestRegistration(unittest.TestCase):
     def test_the_counts_add_up(self):
         counts = self.report.counts(Tenet.HALLUCINATION)
         self.assertEqual(sum(counts.values()), 10)
-        self.assertEqual(counts[Coverage.IMPLEMENTED], 3)
-        self.assertEqual(counts[Coverage.DEPENDENCY], 1)
+        # The NLI capability moves between IMPLEMENTED and DEPENDENCY with its
+        # weights, so those two are asserted as a sum. Pinning the unprovisioned
+        # numbers turned this red the moment the models were installed - which is
+        # the documented next step, not an unusual state.
+        self.assertEqual(counts[Coverage.IMPLEMENTED] + counts[Coverage.DEPENDENCY], 4)
+        self.assertGreaterEqual(counts[Coverage.IMPLEMENTED], 3)
         self.assertEqual(counts[Coverage.CLOUD], 1)
         self.assertEqual(counts[Coverage.OFFLINE], 4)
         self.assertEqual(counts[Coverage.GAP], 1)
 
-    def test_only_the_stage_1_rails_are_claimed_as_implemented(self):
+    def test_only_the_stage_1_rails_and_a_provisioned_nli_are_implemented(self):
         implemented = {r.capability for r in self.rows
                        if r.status is Coverage.IMPLEMENTED}
-        self.assertEqual(implemented, {H.CAP_STRUCTURED, H.CAP_REFUSAL,
-                                       H.CAP_PACKAGE})
+        stdlib = {H.CAP_STRUCTURED, H.CAP_REFUSAL, H.CAP_PACKAGE}
+        self.assertTrue(stdlib <= implemented,
+                        f"stdlib capabilities not implemented: {stdlib - implemented}")
+        # Only the NLI capability may join them, and only with its weights there.
+        extra = implemented - stdlib
+        self.assertTrue(extra <= {H.CAP_NLI},
+                        f"unexpected IMPLEMENTED capabilities: {extra}")
+        if extra:
+            self.assertTrue(H.nli_backend_available(),
+                            "NLI is claimed IMPLEMENTED with no backend present")
 
     def test_the_nli_rail_is_dependency_missing_not_implemented(self):
         # It has a rail and it reports unjudged today. Claiming IMPLEMENTED

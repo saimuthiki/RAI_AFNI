@@ -3,7 +3,18 @@
 Everything the platform needs but does not ship — what to fetch, from where, and
 exactly where to put it.
 
-**Generate this live at any time, from the code rather than from this file:**
+**Step-by-step setup, in three levels:**
+[`rai_platform/docs/01-setup.md`](../docs/01-setup.md). Start there if you are
+provisioning a machine.
+
+**One command downloads all five models:**
+
+```bash
+python rai_platform/scripts/fetch_models.py            # --dry-run to preview
+python rai_platform/scripts/fetch_models.py --only security   # or one at a time
+```
+
+**Generate this list live at any time, from the code rather than from this file:**
 
 ```bash
 python3 rai_platform/cli.py preflight
@@ -68,7 +79,7 @@ Total ≈ **2.8 GB**. Ordered by what you get for the download.
 | **Tenet** | Security |
 | **Folder** | `rai_platform/models/protectai__deberta-v3-base-prompt-injection-v2/` |
 | **Size** | ~740 MB |
-| **Revision** | **not pinned yet** — see the warning below |
+| **Revision** | `90c9989b1a342275dd0d1a95aad283c04e075671` |
 
 Why first: **no Stage-1 rail blocks a prompt injection.** That is deliberate —
 PyRIT documents a high false-positive rate for the regex patterns, so a Stage-1
@@ -76,13 +87,12 @@ hit flags and escalates rather than refusing. This model is what the escalation
 escalates *to*. Without it, a textbook injection produces four HIGH findings and
 is **allowed** on internal traffic.
 
-> **This one has no pinned revision, and that is a supply-chain hole on a
-> security control.** Every other model here is pinned to a commit sha, so the
-> upstream author cannot change the weights under us. This rail was the
-> exception. When you download it, record the commit sha and set
-> `DebertaInjectionRail.MODEL_REVISION` in
-> `rai_platform/afni_rai/tenets/security/__init__.py`. Tell me the sha and I
-> will set it.
+> **Now pinned.** This was the one model with no revision, which on a security
+> control is a supply-chain hole — upstream could replace the weights and the
+> gateway would adopt them on the next cold start with no diff anywhere. The sha
+> above is the commit AFNI actually downloaded and verified, reported by
+> `fetch_models.py`, not read off the model card: a card can be edited, a commit
+> cannot.
 
 ### 1.2 `unitary/unbiased-toxic-roberta`
 
