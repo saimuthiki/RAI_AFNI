@@ -18,6 +18,18 @@
    Each stage also gets its own geometry: stage 1 is square and deterministic,
    stage 2 is hatched (probabilistic), stage 3 glows (expensive), offline is
    dashed and hollow (not in the request path).
+
+   ROADMAP PHASES get NO HUE AT ALL. A phase is a calendar window; a stage is a
+   cost tier. They were previously drawn in the stage colours, which is exactly
+   the confusion this console keeps having to correct in words. Phases are now a
+   90-day track in ink only (.pbr), with a day range printed. A third hue family
+   would have been the wrong fix: two axes that look different in FORM cannot be
+   swapped by a reader who is colour-blind, tired, or looking at a projector.
+
+   THE TYPE LAW. Sans is for sentences a human wrote. Mono is for facts the
+   gateway produced — rail names, payload paths, counts, latencies, fingerprints,
+   coverage keys, repo slugs. Nothing crosses over. In a console whose whole job
+   is telling a measurement from a claim, that distinction is worth a typeface.
    ========================================================================== */
 
 :root {
@@ -102,6 +114,8 @@
   --t-h2:      1.5rem;
   --t-h1:      2.125rem;
   --t-hero:    2.75rem;
+  --t-display: clamp(2.25rem, 3.1vw, 3rem);
+  --t-mega:    clamp(2.75rem, 4.4vw, 4rem);
 
   /* ---- space & shape --------------------------------------------------- */
   --sp-1: 0.25rem;  --sp-2: 0.5rem;  --sp-3: 0.75rem; --sp-4: 1rem;
@@ -370,6 +384,10 @@ a:hover { text-decoration-thickness: 2px; }
 
 .main { padding: var(--sp-6) var(--sp-6) var(--sp-8); min-width: 0; }
 .main:focus { outline: none; }
+/* Left-aligned, capped: at 1920 an uncapped column runs measure past 140ch and
+   the eye loses the line. Left, not centred — a console is read from a fixed
+   edge, and centring makes the nav look detached from the content. */
+.view { max-width: 94rem; min-width: 0; }
 
 /* ============================ page furniture ============================= */
 
@@ -378,7 +396,7 @@ a:hover { text-decoration-thickness: 2px; }
 .head__title {
   margin-top: var(--sp-2);
   font: 650 var(--t-h1)/1.08 var(--sans); letter-spacing: -0.028em;
-  max-width: 34ch;
+  max-width: 40ch;
 }
 .head__lede { margin-top: var(--sp-3); max-width: 68ch; color: var(--ink-2); font-size: var(--t-lead); }
 
@@ -855,10 +873,12 @@ textarea:focus, select:focus, input:focus { border-color: var(--accent); }
   padding: 0.32rem 0.5rem; border-radius: var(--r-sm);
   border: 1px solid currentColor;
 }
-.phase--p1 .phase__tag { color: var(--s1-ink); background: var(--s1-bed); }
-.phase--p2 .phase__tag { color: var(--s2-ink); background: var(--s2-bed); }
-.phase--p3 .phase__tag { color: var(--s3-ink); background: var(--s3-bed); }
-.phase--none .phase__tag { color: var(--soff-ink); border-style: dashed; }
+/* Deliberately identical for p1/p2/p3: a phase is not a tier, so nothing here
+   ranks them by colour. The day range and the bracket position carry the order. */
+.phase--p1 .phase__tag,
+.phase--p2 .phase__tag,
+.phase--p3 .phase__tag { color: var(--ink); background: var(--surface-3); border-color: var(--line); }
+.phase--none .phase__tag { color: var(--ink-3); border-style: dashed; background: none; }
 .phase__name { font: 650 var(--t-h3)/1.2 var(--sans); letter-spacing: -0.02em; }
 
 .notes { display: grid; gap: var(--sp-2); }
@@ -981,3 +1001,481 @@ td.t-nowrap { white-space: nowrap; }
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
   .rung[data-state="running"] .rung__name::after { background: currentColor; }
 }
+
+/* ==========================================================================
+   THE GUARD RIG  —  the console's signature object
+   --------------------------------------------------------------------------
+   The gateway guards two directions, and the picture of that is the product:
+   an AI system with a guardrail on each side of it. Built in CSS grid rather
+   than SVG for one reason that matters — the two guard boxes are real
+   <button>s, so choosing a direction is choosing a place in the topology
+   instead of ticking a control that happens to be near a diagram.
+
+   The inactive lane is never deleted. A guardrail you are not exercising is
+   still there, and a picture that hid it would be describing half a product.
+   ========================================================================== */
+
+.rig {
+  --rig-node: 1fr;
+  display: grid;
+  grid-template-columns:
+    minmax(5.5rem, 0.8fr) 2.25rem minmax(11rem, 1.35fr)
+    2.25rem minmax(7.5rem, 1fr)
+    2.25rem minmax(11rem, 1.35fr) 2.25rem minmax(5.5rem, 0.8fr);
+  align-items: stretch;
+  gap: 0;
+  padding: var(--sp-5) var(--sp-4) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background:
+    linear-gradient(var(--surface-2), var(--surface)) padding-box,
+    var(--surface);
+  overflow: hidden;
+}
+
+/* --- the five nodes ------------------------------------------------------ */
+
+.node {
+  display: grid; align-content: start; gap: 2px;
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  min-width: 0;
+}
+.node__eyebrow {
+  font: 500 var(--t-eyebrow)/1.3 var(--mono);
+  letter-spacing: 0.13em; text-transform: uppercase; color: var(--ink-3);
+}
+.node__name { font: 650 var(--t-small)/1.25 var(--sans); letter-spacing: -0.01em; color: var(--ink); }
+.node__say  { font: 400 var(--t-micro)/1.45 var(--sans); color: var(--ink-3); }
+.node--end  { background: var(--surface-3); border-style: dashed; }
+.node--model {
+  border-color: color-mix(in oklab, var(--ink-3) 40%, var(--line));
+  background: var(--bg-deep);
+  align-content: center; text-align: center;
+}
+.node--model .node__name { font-size: var(--t-body); }
+
+/* --- the guard boxes (buttons) ------------------------------------------ */
+
+.guard {
+  display: grid; align-content: start; gap: var(--sp-2);
+  padding: var(--sp-3);
+  text-align: left;
+  font: inherit; color: inherit;
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+  min-width: 0;
+}
+.guard:hover { border-color: var(--ink-3); }
+.guard[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 7%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 30%, transparent);
+}
+.guard[aria-pressed="true"] .node__eyebrow { color: var(--accent); }
+/* Second channel for "this lane is the one under test": a filled marker, not
+   only the accent border. */
+.guard__armed {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  font: 500 var(--t-eyebrow)/1 var(--mono); letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.guard__armed::before {
+  content: ""; width: 7px; height: 7px; flex: none;
+  border: 1.5px solid currentColor; border-radius: 1px;
+}
+.guard[aria-pressed="true"] .guard__armed { color: var(--accent); }
+.guard[aria-pressed="true"] .guard__armed::before { background: currentColor; }
+.guard__ep { font: 400 var(--t-micro)/1.4 var(--mono); color: var(--ink-3); }
+
+/* --- stage lamps inside the active guard -------------------------------- */
+
+.lamps { display: flex; gap: 0.3rem; margin-top: 2px; }
+.lamp {
+  flex: 1 1 0; min-width: 0;
+  display: grid; gap: 1px; justify-items: center;
+  padding: 0.3rem 0.15rem 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+.lamp__n { font: 650 var(--t-micro)/1 var(--mono); color: var(--ink-3); }
+.lamp__s { font: 500 9px/1.2 var(--mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); }
+.lamp[data-stage="1"][data-state="ran"], .lamp[data-stage="1"][data-state="stopped"] { border-color: var(--s1); background: var(--s1-bed); }
+.lamp[data-stage="1"][data-state="ran"] .lamp__n, .lamp[data-stage="1"][data-state="stopped"] .lamp__n,
+.lamp[data-stage="1"][data-state="ran"] .lamp__s, .lamp[data-stage="1"][data-state="stopped"] .lamp__s { color: var(--s1-ink); }
+.lamp[data-stage="2"][data-state="ran"], .lamp[data-stage="2"][data-state="stopped"] { border-color: var(--s2); background: var(--s2-bed); }
+.lamp[data-stage="2"][data-state="ran"] .lamp__n, .lamp[data-stage="2"][data-state="stopped"] .lamp__n,
+.lamp[data-stage="2"][data-state="ran"] .lamp__s, .lamp[data-stage="2"][data-state="stopped"] .lamp__s { color: var(--s2-ink); }
+.lamp[data-stage="3"][data-state="ran"], .lamp[data-stage="3"][data-state="stopped"] { border-color: var(--s3); background: var(--s3-bed); }
+.lamp[data-stage="3"][data-state="ran"] .lamp__n, .lamp[data-stage="3"][data-state="stopped"] .lamp__n,
+.lamp[data-stage="3"][data-state="ran"] .lamp__s, .lamp[data-stage="3"][data-state="stopped"] .lamp__s { color: var(--s3-ink); }
+.lamp[data-state="skipped"] { border-style: dashed; background: none; opacity: 0.65; }
+.lamp[data-state="skipped"] .lamp__n { text-decoration: line-through; }
+.lamp[data-state="running"] { border-color: var(--accent); }
+.lamp[data-state="running"] .lamp__s { color: var(--accent); }
+.lamp[data-state="stopped"] { box-shadow: 0 0 0 2px color-mix(in oklab, var(--ink) 12%, transparent); }
+
+/* --- connectors --------------------------------------------------------- */
+
+.link { position: relative; display: grid; align-content: center; justify-items: center; }
+.link__line {
+  position: absolute; left: 0; right: 0; top: 50%;
+  height: 0; border-top: 1.5px solid var(--line);
+}
+.link__line::after {                       /* arrowhead */
+  content: ""; position: absolute; right: -1px; top: 50%;
+  width: 6px; height: 6px;
+  border-top: 1.5px solid var(--line); border-right: 1.5px solid var(--line);
+  transform: translateY(-50%) rotate(45deg);
+}
+.link__lab {
+  position: relative; z-index: 1;
+  padding: 1px 5px; margin-bottom: 1.15rem;
+  font: 500 9px/1.4 var(--mono); letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--ink-3); background: var(--surface); border-radius: 2px;
+  white-space: nowrap;
+}
+.link[data-flow="live"] .link__line,
+.link[data-flow="live"] .link__line::after { border-color: var(--accent); }
+.link[data-flow="live"] .link__lab { color: var(--accent); }
+.link[data-flow="idle"] .link__line { border-top-style: dashed; opacity: 0.55; }
+.link[data-flow="idle"] .link__line::after { opacity: 0.55; }
+/* A blocked edge does not fade — it terminates. Two bars across the line, in
+   the block colour, plus the word. Colour is never the only channel. */
+.link[data-flow="blocked"] .link__line { border-color: var(--block); opacity: 0.35; border-top-style: dotted; }
+.link[data-flow="blocked"] .link__line::after { display: none; }
+.link[data-flow="blocked"] .link__lab { color: var(--block-ink); background: var(--block-bed); }
+.link__stop {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  display: flex; gap: 3px;
+}
+.link__stop i { width: 3px; height: 1.4rem; background: var(--block); border-radius: 1px; }
+.link[data-flow="running"] .link__line {
+  border-top-style: dashed;
+  border-color: var(--accent);
+  background-image: none;
+}
+.link[data-flow="running"] .link__lab { color: var(--accent); }
+@media (prefers-reduced-motion: no-preference) {
+  .link[data-flow="running"] .link__line {
+    border-top: 0;
+    height: 1.5px;
+    background-image: repeating-linear-gradient(90deg,
+      var(--accent) 0 8px, transparent 8px 16px);
+    animation: rigflow 700ms linear infinite;
+  }
+  .link[data-flow="running"] .link__line::after { border-color: var(--accent); }
+}
+@keyframes rigflow { from { background-position: 0 0; } to { background-position: 16px 0; } }
+
+/* The rig's own caption row, spanning all nine columns. */
+.rig__foot {
+  grid-column: 1 / -1;
+  margin-top: var(--sp-3); padding-top: var(--sp-3);
+  border-top: 1px solid var(--line-soft);
+  display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4);
+  font-size: var(--t-micro); color: var(--ink-3);
+}
+.rig__foot b { color: var(--ink-2); font-weight: 600; }
+
+@media (max-width: 74rem) {
+  .rig { grid-template-columns: 1fr; }
+  .link { min-height: 2.5rem; }
+  .link__line { left: 50%; right: auto; top: 0; bottom: 0; width: 0; height: auto;
+    border-top: 0; border-left: 1.5px solid var(--line); }
+  .link__line::after { right: auto; left: 50%; top: auto; bottom: -1px;
+    transform: translateX(-50%) rotate(135deg); }
+  .link__lab { margin: 0; }
+  .link__stop { flex-direction: column; }
+  .link__stop i { width: 1.4rem; height: 3px; }
+  .link[data-flow="blocked"] .link__line { border-left-style: dotted; }
+  @media (prefers-reduced-motion: no-preference) {
+    .link[data-flow="running"] .link__line {
+      border-left: 0; width: 1.5px; height: auto;
+      background-image: repeating-linear-gradient(180deg,
+        var(--accent) 0 8px, transparent 8px 16px);
+      animation-name: rigflowv;
+    }
+  }
+}
+@keyframes rigflowv { from { background-position: 0 0; } to { background-position: 0 16px; } }
+
+/* ==========================================================================
+   STAT ROW  —  hard numbers, tabular, with the tone always spelled out
+   ========================================================================== */
+
+.stats {
+  display: grid; gap: 1px;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  background: var(--line-soft);
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  overflow: hidden;
+}
+.stat { padding: var(--sp-3) var(--sp-4); background: var(--surface); }
+.stat dt {
+  font: 500 var(--t-eyebrow)/1.3 var(--mono);
+  letter-spacing: 0.11em; text-transform: uppercase; color: var(--ink-3);
+}
+.stat dd { margin-top: 3px; display: flex; align-items: baseline; gap: 0.3rem; }
+.stat__v {
+  font: 650 1.65rem/1 var(--mono); font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em; color: var(--ink);
+}
+.stat__u { font: 500 var(--t-micro)/1 var(--mono); color: var(--ink-3); }
+.stat__note { margin-top: 4px; font-size: var(--t-micro); line-height: 1.45; color: var(--ink-3); }
+.stat[data-tone="good"]   { box-shadow: inset 3px 0 0 var(--allow); }
+.stat[data-tone="good"] .stat__v { color: var(--allow-ink); }
+.stat[data-tone="warn"]   { box-shadow: inset 3px 0 0 var(--cov-2); }
+.stat[data-tone="warn"] .stat__v { color: var(--cov-2-ink); }
+.stat[data-tone="hazard"] { box-shadow: inset 3px 0 0 var(--hazard); background: color-mix(in oklab, var(--hazard) 6%, var(--surface)); }
+.stat[data-tone="hazard"] .stat__v { color: var(--hazard-ink); }
+.stat[data-tone="block"]  { box-shadow: inset 3px 0 0 var(--block); }
+.stat[data-tone="block"] .stat__v { color: var(--block-ink); }
+
+/* ==========================================================================
+   CLAIM STRENGTH  —  a score is meaningless without its mechanism
+   The scale is a MARKER, not a fill: filling to the position would read as
+   "more is better", and a judge at 0.9 is not better than a regex.
+   ========================================================================== */
+
+.claim { display: grid; gap: 0.35rem; }
+.claim__top { display: flex; align-items: baseline; gap: 0.45rem; flex-wrap: wrap; }
+.claim__v {
+  font: 650 var(--t-h3)/1 var(--mono); font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.claim__v--word { font-size: var(--t-body); letter-spacing: 0.02em; text-transform: uppercase; }
+.claim__scale {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 0; align-items: start;
+  border-top: 1px solid var(--line); padding-top: 5px;
+  max-width: 15rem;
+}
+.claim__scale li { display: grid; justify-items: center; gap: 2px; }
+.claim__scale i { width: 1px; height: 6px; background: var(--line); }
+.claim__scale span {
+  font: 500 8.5px/1.2 var(--mono); letter-spacing: 0.05em;
+  text-transform: uppercase; color: transparent; text-align: center;
+}
+.claim__scale li.on i { width: 7px; height: 7px; border-radius: 1px; background: currentColor; }
+.claim__scale li.on span { color: var(--ink-2); }
+.claim[data-kind="deterministic"] .claim__scale li.on { color: var(--s1); }
+.claim[data-kind="classifier"]  .claim__scale li.on,
+.claim[data-kind="entailment"]  .claim__scale li.on { color: var(--s2); }
+.claim[data-kind="judge"]       .claim__scale li.on { color: var(--s3); }
+.claim__gloss { font-size: var(--t-micro); line-height: 1.5; color: var(--ink-3); }
+.notcomparable {
+  display: flex; gap: 0.5rem; align-items: baseline;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px dashed var(--line); border-radius: var(--r-md);
+  font-size: var(--t-small); color: var(--ink-2);
+}
+.notcomparable b { color: var(--ink); font-weight: 650; }
+
+/* ==========================================================================
+   PHASE BRACKET  —  the calendar axis. No stage hue, ever.
+   ========================================================================== */
+
+.pbr { display: inline-grid; gap: 3px; min-width: 7.5rem; }
+.pbr__lab { font: 600 var(--t-micro)/1.2 var(--sans); letter-spacing: -0.005em; color: var(--ink); }
+.pbr__track {
+  position: relative; height: 5px; border-radius: 2px;
+  background: var(--surface-3); border: 1px solid var(--line);
+}
+.pbr__fill { position: absolute; top: 0; bottom: 0; background: var(--ink-2); border-radius: 1px; }
+.pbr__days { font: 500 var(--t-eyebrow)/1.2 var(--mono); letter-spacing: 0.07em; color: var(--ink-3); }
+.pbr--none .pbr__track { border-style: dashed; background: none; }
+.pbr--none .pbr__lab { color: var(--ink-3); }
+
+/* The two-axis explainer. Same component both sides so the DIFFERENCE is the
+   only thing that varies. */
+.axes { display: grid; gap: 1px; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+  background: var(--line-soft); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+.axis { padding: var(--sp-4) var(--sp-5); background: var(--surface); display: grid; gap: var(--sp-2); align-content: start; }
+.axis__q { font: 500 var(--t-eyebrow)/1.3 var(--mono); letter-spacing: 0.11em; text-transform: uppercase; color: var(--ink-3); }
+.axis__t { font: 650 var(--t-h3)/1.2 var(--sans); letter-spacing: -0.02em; }
+.axis__ex { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-1); }
+.axis__say { font-size: var(--t-small); color: var(--ink-2); }
+.axis dl { display: grid; gap: 2px; margin-top: var(--sp-2); }
+.axis dl div { display: grid; grid-template-columns: 7.5rem 1fr; gap: var(--sp-3); }
+.axis dt { font: 500 var(--t-micro)/1.6 var(--mono); color: var(--ink-3); }
+.axis dd { font-size: var(--t-micro); line-height: 1.6; color: var(--ink-2); }
+
+/* ==========================================================================
+   EVIDENCE  —  the file:line that was actually opened
+   ========================================================================== */
+
+.ev {
+  margin-top: var(--sp-3); padding: var(--sp-2) var(--sp-3);
+  border-left: 2px solid var(--line);
+  background: var(--surface-2); border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+.ev__lab {
+  display: block; font: 500 var(--t-eyebrow)/1.4 var(--mono);
+  letter-spacing: 0.11em; text-transform: uppercase; color: var(--ink-3);
+}
+.ev__cite, .ev code {
+  display: block; font-family: var(--mono); font-size: var(--t-micro);
+  line-height: 1.55; color: var(--ink-2); word-break: break-word;
+}
+.ev__more summary { cursor: pointer; font: 500 var(--t-micro)/1.6 var(--sans); color: var(--ink-3); margin-top: 3px; }
+.ev__more ul { display: grid; gap: 3px; margin-top: 3px; }
+
+/* ==========================================================================
+   COST LEDGER  —  the cascade's economics, as cells you can strike through
+   ========================================================================== */
+
+.ledger { display: grid; gap: 1px; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  background: var(--line-soft); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+.lcell { padding: var(--sp-3) var(--sp-4); background: var(--surface); display: grid; gap: 3px; align-content: start; }
+.lcell__top { display: flex; align-items: center; gap: var(--sp-2); }
+.lcell__what { font: 500 var(--t-micro)/1.5 var(--mono); color: var(--ink-2); }
+.lcell__cost { font: 500 var(--t-eyebrow)/1.4 var(--mono); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3); }
+.lcell[data-paid="no"] { background: var(--surface-2); }
+.lcell[data-paid="no"] .lcell__what { color: var(--ink-3); text-decoration: line-through; text-decoration-thickness: 1px; }
+.lcell[data-paid="no"] .stag { opacity: 0.6; }
+.lcell__verdict {
+  font: 600 var(--t-eyebrow)/1.4 var(--mono); letter-spacing: 0.1em;
+  text-transform: uppercase; margin-left: auto;
+}
+.lcell[data-paid="yes"] .lcell__verdict { color: var(--ink); }
+.lcell[data-paid="no"] .lcell__verdict { color: var(--ink-3); }
+
+/* ==========================================================================
+   COVERAGE MATRIX  —  7 tenets x 5 states, as numbers
+   Numbers, not a heatmap: five ordinal states across the columns are a
+   categorical axis, and shading a grid by count would encode magnitude on an
+   axis that has none. The colour lives in the column head only.
+   ========================================================================== */
+
+.mx th.mx__state { text-align: right; }
+.mx th.mx__state .cov { margin-left: auto; }
+.mx td.mx__n {
+  text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: var(--t-small); font-weight: 600; white-space: nowrap;
+}
+.mx td.mx__n[data-zero="1"] { color: var(--ink-3); font-weight: 400; }
+.mx td.mx__n[data-flag="hazard"] {
+  color: var(--hazard-ink); background: color-mix(in oklab, var(--hazard) 9%, transparent);
+  box-shadow: inset -3px 0 0 var(--hazard);
+}
+.mx td.mx__n[data-flag="hazard"]::before { content: "▲ "; font-size: 0.7em; vertical-align: 0.1em; }
+.mx tfoot td { padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--line);
+  font-family: var(--mono); font-size: var(--t-small); font-weight: 650; }
+.mx tfoot td:first-child { font-family: var(--sans); }
+.mx .mx__tenet { font-weight: 600; }
+.mx .mx__bar { min-width: 7rem; }
+
+/* ==========================================================================
+   RAIL INDEX
+   ========================================================================== */
+
+.rails { display: grid; gap: 1px; background: var(--line-soft);
+  border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
+.railcard {
+  display: grid; gap: var(--sp-2);
+  grid-template-columns: 8.5rem minmax(0, 1fr) minmax(0, 1.15fr);
+  padding: var(--sp-4); background: var(--surface);
+}
+.railcard:hover { background: var(--surface-2); }
+.railcard--dead { box-shadow: inset 3px 0 0 var(--hazard); }
+.railcard__id { display: grid; gap: 4px; align-content: start; }
+.railcard__name { font: 600 var(--t-small)/1.4 var(--mono); word-break: break-word; }
+.railcard__mid { display: grid; gap: 4px; align-content: start; min-width: 0; }
+.railcard__mech { font-size: var(--t-small); color: var(--ink-2); line-height: 1.5; }
+.railcard__tool { font: 500 var(--t-micro)/1.5 var(--sans); color: var(--ink); }
+.railcard__repo { font: 400 var(--t-micro)/1.5 var(--mono); color: var(--ink-3); }
+.railcard__right { display: grid; gap: var(--sp-2); align-content: start; min-width: 0; }
+@media (max-width: 74rem) { .railcard { grid-template-columns: 1fr; } }
+
+.cannotrun {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font: 600 var(--t-eyebrow)/1.4 var(--mono); letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--hazard-ink); background: color-mix(in oklab, var(--hazard) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--hazard) 45%, transparent);
+  border-radius: var(--r-sm); padding: 1px 6px;
+}
+.cannotrun::before { content: "▲"; font-size: 0.85em; }
+
+/* ==========================================================================
+   ARCHITECTURE DIAGRAM  —  one SVG, theme-aware through currentColor + tokens
+   ========================================================================== */
+
+.diagram { width: 100%; height: auto; display: block; }
+.diagram text { font-family: var(--mono); fill: var(--ink-2); }
+.diagram .d-title { font-family: var(--sans); font-weight: 650; fill: var(--ink); }
+.diagram .d-lab { font-size: 11px; letter-spacing: 0.09em; text-transform: uppercase; fill: var(--ink-3); }
+.diagram .d-body { font-size: 12px; fill: var(--ink-2); }
+.diagram .d-box { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+.diagram .d-box--deep { fill: var(--bg-deep); }
+.diagram .d-box--s1 { fill: var(--s1-bed); stroke: var(--s1); }
+.diagram .d-box--s2 { fill: var(--s2-bed); stroke: var(--s2); }
+.diagram .d-box--s3 { fill: var(--s3-bed); stroke: var(--s3); }
+.diagram .d-box--off { fill: none; stroke: var(--soff); stroke-dasharray: 5 4; }
+.diagram .d-box--haz { fill: color-mix(in oklab, var(--hazard) 12%, var(--surface)); stroke: var(--hazard); }
+.diagram .d-edge { stroke: var(--ink-3); stroke-width: 1.25; fill: none; }
+.diagram .d-edge--off { stroke: var(--soff); stroke-dasharray: 4 4; }
+.diagram .d-head { fill: var(--ink-3); }
+.diagram .d-gate { fill: var(--surface-3); stroke: var(--line); }
+.diagram .d-s1 { fill: var(--s1-ink); }
+.diagram .d-s2 { fill: var(--s2-ink); }
+.diagram .d-s3 { fill: var(--s3-ink); }
+.diagram .d-haz { fill: var(--hazard-ink); }
+.diagram .d-mono-big { font-size: 15px; font-weight: 650; }
+
+.figure { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); overflow: hidden; }
+.figure__scroll { overflow-x: auto; padding: var(--sp-5); }
+.figure__scroll > .diagram { min-width: 46rem; }
+.figure figcaption {
+  padding: var(--sp-3) var(--sp-5); border-top: 1px solid var(--line-soft);
+  background: var(--surface-2); font-size: var(--t-small); color: var(--ink-2);
+}
+.figure figcaption b { color: var(--ink); font-weight: 650; }
+
+/* ==========================================================================
+   MISC ADDITIONS
+   ========================================================================== */
+
+.numline { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-5); }
+.numline > div { display: grid; gap: 1px; }
+.numline dt, .numline .nl__k {
+  font: 500 var(--t-eyebrow)/1.3 var(--mono); letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.numline dd, .numline .nl__v {
+  font: 600 var(--t-small)/1.3 var(--mono); font-variant-numeric: tabular-nums; color: var(--ink);
+}
+
+.kicker {
+  font: 650 var(--t-display)/1.03 var(--sans); letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+.subtle-sep { margin-top: var(--sp-6); padding-top: var(--sp-5); border-top: 1px solid var(--line-soft); }
+
+.chipwrap { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.railchip--dead {
+  color: var(--hazard-ink);
+  border-color: color-mix(in oklab, var(--hazard) 45%, transparent);
+  background: color-mix(in oklab, var(--hazard) 9%, transparent);
+}
+.railchip--dead::after { content: " ▲"; }
+
+.stack { display: grid; gap: var(--sp-5); }
+.stack--tight { gap: var(--sp-4); }
+
+.jump {
+  display: flex; flex-wrap: wrap; gap: var(--sp-2);
+  padding-bottom: var(--sp-2);
+}
+.jump a {
+  font: 500 var(--t-micro)/1 var(--mono); letter-spacing: 0.03em;
+  padding: 0.4rem 0.6rem; border: 1px solid var(--line); border-radius: var(--r-sm);
+  color: var(--ink-2); text-decoration: none; background: var(--surface);
+}
+.jump a:hover { color: var(--ink); border-color: var(--ink-3); }

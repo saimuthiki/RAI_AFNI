@@ -81,7 +81,10 @@ python3 rai_platform/cli.py preflight
 off the rail that loads it, so it cannot drift from what the platform actually
 asks for, and it names the destination path for each missing asset.
 **`rai_platform/docs/01-setup.md` is the step-by-step version**, in three levels
-you can stop after any of.
+you can stop after any of. **`rai_platform/docs/00-architecture.md` answers "a
+prompt arrives — what actually happens to it?"** — the input/output guardrail
+split, the seven branches, one branch traced end to end, every framework by
+stage, and sample outputs for jailbroken vs clean.
 
 Then bring up the HTTP service and the UI:
 
@@ -1079,6 +1082,7 @@ shape:
 
 | Document | For |
 |---|---|
+| `rai_platform/docs/00-architecture.md` | **how it works** — input/output guardrails, the 7 branches, one branch in full, every framework by stage, and sample outputs |
 | `rai_platform/docs/01-setup.md` | **step-by-step setup in three levels** — bare, gateway, Stage-2 models |
 | `rai_platform/models/MANIFEST.md` | every downloadable asset, with fetch commands |
 | `rai_platform/docs/02-cascade.md` | the cascade in depth, with the source evidence behind every rule |
