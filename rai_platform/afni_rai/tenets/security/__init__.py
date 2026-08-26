@@ -1029,10 +1029,25 @@ class DebertaInjectionRail:
     # Pinned like every other Stage-2 model here. An unpinned revision on a
     # SECURITY control is a supply-chain hole: the upstream author can replace
     # the weights and this gateway would adopt them on the next cold start,
-    # silently, with no diff anywhere. `None` means "pin not yet established" -
-    # set it to the sha you actually downloaded, which `preflight` prints.
-    MODEL_REVISION: str | None = None
+    # silently, with no diff anywhere.
+    #
+    # This sha is the commit AFNI actually downloaded and verified, reported by
+    # `scripts/fetch_models.py` on 2026-08-26. It was not read from the model
+    # card - a card can be edited, a commit cannot.
+    MODEL_REVISION: str | None = "90c9989b1a342275dd0d1a95aad283c04e075671"
     source: str | None = None
+
+    @classmethod
+    def dependency_available(cls) -> bool:
+        """True only when this rail can actually produce a judgement offline.
+
+        Both halves are required: the library AND the weights. `/healthz`, the
+        coverage registry and the preflight report all read this, so an
+        over-optimistic answer here becomes an over-stated coverage number
+        everywhere at once.
+        """
+        return (_transformers_available()
+                and _weights_reachable(cls.MODEL_ID, cls.MODEL_REVISION))
 
     def __init__(self, threshold: float = 0.9) -> None:
         self.threshold = threshold
@@ -1299,14 +1314,49 @@ RAILS = [
 
 
 def _transformers_available() -> bool:
-    """Availability probe for the Stage-2 rail. `find_spec` does not execute the
-    package, so this stays free of import side effects."""
+    """Is `transformers` importable? `find_spec` does not execute the package, so
+    this stays free of import side effects.
+
+    NOT sufficient on its own to claim the Stage-2 capability - see
+    `DebertaInjectionRail.dependency_available`. The library being importable
+    says nothing about whether the weights are here.
+    """
     import importlib.util
 
     try:
         return importlib.util.find_spec("transformers") is not None
     except (ImportError, ValueError):
         return False
+
+
+def _weights_reachable(repo_id: str, revision: str | None) -> bool:
+    """Can the pinned model be loaded WITHOUT touching the network?
+
+    Two ways it can be: a drop-in folder under `rai_platform/models/`, or an
+    entry in the HuggingFace cache. Checking only the first would under-report
+    for anyone using the cache; checking only `transformers` would over-report,
+    which is worse - the registry would claim IMPLEMENTED while the rail
+    returned `unjudged` on every request, and a capability that fails closed is
+    not a capability.
+
+    When `huggingface_hub` is absent the cache cannot be inspected, so this
+    answers on the folder alone. That under-reports rather than over-reports,
+    which is the right direction to be wrong in.
+    """
+    from ...models import resolve  # noqa: PLC0415
+
+    if resolve(repo_id, revision).local:
+        return True
+    try:
+        from huggingface_hub import try_to_load_from_cache  # noqa: PLC0415
+    except ImportError:
+        return False
+    try:
+        hit = try_to_load_from_cache(
+            repo_id=repo_id, filename="config.json", revision=revision)
+    except Exception:  # noqa: BLE001 - a probe must never raise
+        return False
+    return isinstance(hit, str)
 
 
 def register(registry) -> None:
@@ -1340,7 +1390,7 @@ def register(registry) -> None:
     classifier = by_name["security.injection.deberta_v3_v2"]
     registry.register_rail(
         classifier, ATTRIBUTIONS[classifier.name],
-        available=_transformers_available(),
+        available=DebertaInjectionRail.dependency_available(),
         note=f"needs transformers + torch and the {classifier.MODEL_ID} weights; "
              "returns unjudged until then, which fail-closed turns into a block on "
              "client-facing traffic")

@@ -710,7 +710,15 @@ class TestCoverageRegistration(unittest.TestCase):
     def test_counts_add_up_and_the_report_renders(self):
         counts = self.report.counts(Tenet.CONTENT_SAFETY)
         self.assertEqual(sum(counts.values()), len(self.rows))
-        self.assertEqual(counts[Coverage.IMPLEMENTED], 3)
+        # Two capabilities here - the toxicity classifier and the zero-shot topic
+        # filter - move between IMPLEMENTED and DEPENDENCY with their weights, so
+        # the pair is asserted as a sum rather than pinned to the unprovisioned
+        # numbers. Pinning them turned this red the moment the models were
+        # installed, which is the documented next step.
+        self.assertEqual(counts[Coverage.IMPLEMENTED] + counts[Coverage.DEPENDENCY], 6)
+        self.assertGreaterEqual(counts[Coverage.IMPLEMENTED], 3,
+                                "the three stdlib lexical capabilities must always "
+                                "be implemented")
         self.assertEqual(counts[Coverage.CLOUD], 1)
         self.assertEqual(counts[Coverage.OFFLINE], 1)
         self.assertEqual(counts[Coverage.GAP], 1)
