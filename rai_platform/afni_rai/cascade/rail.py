@@ -17,10 +17,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import IntEnum
+from enum import Enum, IntEnum
 from typing import Protocol, runtime_checkable
 
-from ..contract.models import Finding, Span, Tenet
+from ..contract.models import EventKind, Finding, Span, Tenet
 
 
 class Stage(IntEnum):
@@ -36,6 +36,50 @@ class Stage(IntEnum):
     STAGE_2 = 2   # local model, or a cloud second opinion on borderline input
     STAGE_3 = 3   # paid API or LLM judge - last resort
     OFFLINE = 4   # CI and red-team only; never reachable from the request path
+
+
+class Direction(str, Enum):
+    """Which side of the AI system a rail belongs on.
+
+    The gateway is called TWICE per interaction - once on the prompt heading for
+    the model, once on the response heading for the person:
+
+        user -> [INPUT guardrail] -> AI system -> [OUTPUT guardrail] -> user
+
+    Most rails belong on both sides. An SSN is an SSN whether a support agent
+    pasted it in or the model repeated it back. But some checks are meaningless
+    in one direction and were, until now, running there anyway:
+
+      * Groundedness compares an answer to its retrieved source. A user prompt
+        has no answer to ground.
+      * Refusal detection looks for a model declining. A user does not refuse.
+      * Package hallucination looks for an invented import in generated code.
+      * Schema and format validators check the shape of a MODEL's output against
+        what the caller asked for.
+      * The attack corpus holds confirmed attack PROMPTS.
+
+    Running those in the wrong direction is not merely wasted work. Before this
+    existed, `groundedness-nli` reported `unjudged` on every request that carried
+    no retrieved context - which stamped COULD NOT JUDGE on nearly all traffic
+    and made the loudest signal in the product meaningless.
+
+    BOTH is the default, and deliberately so: restricting a rail REMOVES
+    protection, so a rail is narrowed only where running it the other way is
+    genuinely incoherent. Where the direction is arguable - prompt injection
+    echoed back in a response, say - it stays BOTH.
+    """
+
+    INPUT = "input"
+    OUTPUT = "output"
+    BOTH = "both"
+
+    def covers(self, kind: "EventKind") -> bool:
+        """Does this rail apply to an event of `kind`?"""
+        if self is Direction.BOTH:
+            return True
+        if self is Direction.INPUT:
+            return kind is EventKind.REQUEST
+        return kind is EventKind.RESPONSE
 
 
 @dataclass

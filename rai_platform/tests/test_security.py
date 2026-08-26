@@ -50,6 +50,21 @@ BENIGN = [
 ]
 
 
+def response_event(text, client_facing=True):
+    """The same text judged as a MODEL RESPONSE rather than a user prompt.
+
+    Needed because rails now declare a `Direction`, so which side of the AI
+    system an event is on decides which rails even run.
+    """
+    return GuardEvent(
+        kind=EventKind.RESPONSE, step_id="step-1", agent_id="agent-1",
+        agent_type="chat", agent_workspace="afni", agent_user="tester",
+        llm_protocol=LLMProtocol.OPENAI_CHAT,
+        payload={"choices": [{"message": {"role": "assistant", "content": text}}]},
+        client_facing=client_facing,
+    )
+
+
 def event(text, client_facing=True):
     return GuardEvent(
         kind=EventKind.REQUEST, step_id="step-1", agent_id="agent-1",
@@ -521,13 +536,36 @@ class TestRailsAndAttributions(unittest.TestCase):
                 self.assertIsNotNone(attribution.capability)
 
     def test_findings_join_to_their_rail_through_the_detector_field(self):
-        # explain() joins on Finding.detector, so a rail that forgets to set it
-        # produces an unattributed block - a decision nobody can trace.
-        out = Cascade(RAILS[:6]).evaluate(event("'; DROP TABLE customers; --"))
+        """explain() joins on Finding.detector, so a rail that forgets to set it
+        produces an unattributed block - a decision nobody can trace.
+
+        Judged as a RESPONSE, not a request, and that is the point rather than a
+        detail. `'; DROP TABLE customers; --` coming OUT of a model is the threat
+        `InsecureOutputRail` exists for; a user typing it into a support chat is
+        a question about SQL. The rail is `Direction.OUTPUT` for exactly that
+        reason, and this test asserted the false-positive direction until the
+        direction gate landed and exposed it.
+        """
+        out = Cascade(RAILS[:6]).evaluate(
+            response_event("'; DROP TABLE customers; --"))
         explanation = explain(out.verdict, ATTRIBUTIONS, out.stages_run)
-        self.assertTrue(explanation.blocked_by)
+        self.assertTrue(explanation.blocked_by,
+                        "nothing blocked - has InsecureOutputRail's direction "
+                        "changed, or is it no longer in RAILS[:6]?")
         for fe in explanation.findings:
             self.assertIsNotNone(fe.attribution, fe.finding.category)
+
+    def test_a_user_asking_about_sql_is_not_treated_as_an_attack(self):
+        """The complement, and the reason the direction gate is worth having.
+
+        Support traffic contains questions about SQL, scripts and file paths.
+        Running the output-injection rail on input turns every one of them into
+        an incident."""
+        out = Cascade(RAILS[:6]).evaluate(
+            event("How do I stop '; DROP TABLE customers; -- from working?"))
+        self.assertIs(out.verdict.decision, Decision.ALLOW)
+        self.assertNotIn("x.afni.insecure_output.sqli",
+                         [f.category for f in out.verdict.findings])
 
     def test_stage_1_rails_import_nothing_third_party(self):
         """The Stage-1 promise: useful before anyone installs torch.

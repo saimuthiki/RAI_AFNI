@@ -48,7 +48,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
 
-from ...cascade.rail import Rail, RailResult, Stage
+from ...cascade.rail import Direction, Rail, RailResult, Stage
 from ...contract.explanation import RailAttribution, explain
 from ...contract.models import Action, Decision, Finding, Severity, Tenet, Verdict
 from ...registry.capabilities import Coverage
@@ -344,6 +344,9 @@ class SchemaExplainRail:
     name = "afni-schema-explain"
     tenet = TENET
     stage = Stage.STAGE_1
+    # Explains which field of the MODEL's structured output failed
+    # validation.
+    direction = Direction.OUTPUT
 
     def __init__(self, schema: dict[str, Any] | None = None,
                  paths: Sequence[str] = (), block_on_failure: bool = False,
@@ -583,6 +586,9 @@ class FormatValidatorRail:
     name = "afni-format-validators"
     tenet = TENET
     stage = Stage.STAGE_1
+    # Format validators check the model's output against the caller's
+    # declared format. Input carries no such contract.
+    direction = Direction.OUTPUT
 
     def __init__(self, rules: Sequence[FormatRule] = DEFAULT_FORMAT_RULES) -> None:
         for rule in rules:

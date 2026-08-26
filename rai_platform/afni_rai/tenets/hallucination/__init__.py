@@ -90,7 +90,7 @@ import sys
 import xml.etree.ElementTree as ElementTree
 from collections.abc import Callable, Iterable, Mapping, Sequence
 
-from ...cascade.rail import RailResult, RailSpec, Stage
+from ...cascade.rail import Direction, RailResult, RailSpec, Stage
 from ...contract.explanation import RailAttribution
 from ...contract.models import Action, Finding, Severity, Tenet
 from ...third_party_logging import quieten as _quieten
@@ -223,6 +223,9 @@ class StructuredOutputRail:
 
     tenet = _TENET
     stage = Stage.STAGE_1
+    # Validates the shape of the MODEL's output against the caller's
+    # declared format. A user's prose need not be well-formed JSON.
+    direction = Direction.OUTPUT
 
     def __init__(self, *, name: str = "structured-output-wellformed",
                  expect: str = "auto", max_candidates: int = 8,
@@ -371,6 +374,9 @@ class JsonSchemaRail:
 
     tenet = _TENET
     stage = Stage.STAGE_2
+    # The schema describes the model's contract with the caller, not the
+    # user's input.
+    direction = Direction.OUTPUT
 
     def __init__(self, *, name: str = "structured-output-schema",
                  schemas: Mapping[str, dict] | None = None,
@@ -607,6 +613,9 @@ class RefusalRail:
 
     tenet = _TENET
     stage = Stage.STAGE_1
+    # A refusal is something a MODEL does. A user declining to answer is not
+    # a guardrail concern.
+    direction = Direction.OUTPUT
 
     def __init__(self, *, name: str = "refusal-phrases",
                  expect_refusal: bool | None = None,
@@ -759,6 +768,9 @@ class PackageHallucinationRail:
 
     tenet = _TENET
     stage = Stage.STAGE_1
+    # An invented import is something a model emits. A user naming a real
+    # package they want is not a finding.
+    direction = Direction.OUTPUT
 
     def __init__(self, *, name: str = "package-hallucination",
                  ecosystems: Sequence[str] = ("python",),
@@ -872,6 +884,10 @@ class NliGroundednessRail:
 
     tenet = _TENET
     stage = Stage.STAGE_2
+    # Groundedness compares an ANSWER to its retrieved source. A prompt has
+    # no answer to ground, which is why this rail used to report `unjudged`
+    # on nearly every request.
+    direction = Direction.OUTPUT
 
     MODEL_ID = "MoritzLaurer/deberta-v3-base-zeroshot-v2.0"
     MODEL_REVISION = "8e7e5af5983a0ddb1a5b45a38b129ab69e2258e8"
