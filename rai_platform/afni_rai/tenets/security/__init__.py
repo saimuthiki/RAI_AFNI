@@ -99,6 +99,7 @@ from ...cascade.rail import RailResult, Stage
 from ...contract.explanation import RailAttribution
 from ...contract.models import Action, Finding, Severity, Span, Tenet
 from ...third_party_logging import quieten as _quieten
+from ...third_party_logging import quieten_loaded as _quieten_loaded
 from ...registry.capabilities import Coverage
 
 # Silence transformers' pipeline chatter before any model is built. See
@@ -1066,6 +1067,8 @@ class DebertaInjectionRail:
             return self._pipeline
         try:
             from transformers import pipeline  # noqa: PLC0415 - lazy on purpose
+            
+            _quieten_loaded()
         except ImportError as exc:
             self._unavailable = f"transformers not installed ({exc.__class__.__name__})"
             return None

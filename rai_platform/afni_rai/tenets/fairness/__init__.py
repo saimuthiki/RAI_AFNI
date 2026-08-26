@@ -67,6 +67,7 @@ from ...cascade.rail import RailResult, Stage
 from ...contract.explanation import RailAttribution
 from ...contract.models import Action, Finding, Severity, Tenet
 from ...third_party_logging import quieten as _quieten
+from ...third_party_logging import quieten_loaded as _quieten_loaded
 from ...registry.capabilities import Coverage
 
 # Silence transformers' device and revision chatter before any model is built. See
@@ -680,6 +681,8 @@ class LocalBiasClassifierRail:
         # and would pull a multi-hundred-megabyte dependency into the Stage 1
         # path that must stay stdlib-only.
         from transformers import pipeline  # noqa: PLC0415
+        
+        _quieten_loaded()
 
         from ...models import resolve  # noqa: PLC0415
 

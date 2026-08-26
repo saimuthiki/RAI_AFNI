@@ -304,5 +304,68 @@ class TestTheReportedEntityIsInformative(unittest.TestCase):
                     f"{category} reports an uninformative entity")
 
 
+class TestTheReportedLocationKeepsThePath(unittest.TestCase):
+    """A whole-text classifier has no character span, and that used to cost it
+    the path as well.
+
+    Observed on a real block from a provisioned machine: the toxicity and bias
+    findings came back with `"location": null`, because `location` returned None
+    whenever start or end was missing. But a toxicity model legitimately has no
+    span - it scores the input as a unit - while the path is always known. An
+    operator triaging a payload with a system prompt, three turns of history and
+    an attachment could not tell which of them the classifier objected to.
+    """
+
+    def _location(self, **kwargs):
+        from afni_rai.contract.explanation import FindingExplanation
+        from afni_rai.contract.models import Action, Finding
+        return FindingExplanation(
+            Finding(category="safety.toxicity", action=Action.BLOCK,
+                    detector="d", **kwargs), None).location
+
+    def test_a_spanless_classifier_finding_still_reports_its_path(self):
+        self.assertEqual(
+            self._location(path="payload.messages[0].content", score=1.0),
+            "payload.messages[0].content")
+
+    def test_a_span_is_reported_when_there_is_one(self):
+        self.assertEqual(
+            self._location(path="payload.messages[0].content", start=58, end=62),
+            "payload.messages[0].content chars 58-62")
+
+    def test_no_span_is_invented_where_none_exists(self):
+        # `chars 0-N` would imply a precision the classifier does not have.
+        location = self._location(path="payload.text", score=0.9)
+        self.assertNotIn("chars", location)
+
+    def test_a_finding_with_neither_reports_nothing_rather_than_guessing(self):
+        self.assertIsNone(self._location())
+
+    def test_every_live_stage_2_rail_reports_a_path(self):
+        """The property that matters in production: whatever a Stage-2 rail finds,
+        the caller can tell WHERE. Rails whose dependency is absent are skipped -
+        they have no findings to inspect."""
+        from afni_rai.cascade.rail import Stage
+        from afni_rai.cli import load_tenets
+
+        rails, _, _ = load_tenets()
+        checked = 0
+        for rail in rails:
+            if rail.stage is not Stage.STAGE_2:
+                continue
+            result = rail.check("payload.messages[0].content",
+                                "You are a stupid idiot, damn it.")
+            if not result.judged or not result.findings:
+                continue
+            checked += 1
+            for finding in result.findings:
+                with self.subTest(rail=rail.name):
+                    self.assertTrue(
+                        finding.path,
+                        f"{rail.name} produced a finding with no path - the "
+                        f"caller cannot tell which field it objected to")
+        # No assertion on `checked`: on a bare machine it is legitimately 0.
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

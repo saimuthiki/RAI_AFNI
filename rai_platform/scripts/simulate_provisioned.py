@@ -128,11 +128,13 @@ fake("llm_guard.input_scanners.ban_topics",
 fake("presidio_analyzer", AnalyzerEngine=lambda *a, **k: types.SimpleNamespace(
     analyze=lambda *a, **k: []))
 
-modules = ["tests.test_accountability", "tests.test_content_safety",
-           "tests.test_contract_conformance", "tests.test_explainability",
-           "tests.test_fairness", "tests.test_hallucination",
-           "tests.test_models", "tests.test_privacy", "tests.test_security",
-           "tests.test_threshold_wiring", "tests.test_foundation"]
+# Discovered rather than listed. A hardcoded list silently stops covering any
+# test module added after it was written - which had already happened twice by
+# the time this comment was needed.
+loader_probe = unittest.TestLoader()
+modules = sorted(
+    f"tests.{path.stem}"
+    for path in (ROOT / "tests").glob("test_*.py"))
 loader = unittest.TestLoader()
 suite = unittest.TestSuite()
 for m in modules:
