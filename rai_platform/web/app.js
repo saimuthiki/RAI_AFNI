@@ -6,11 +6,19 @@ import { probe, readBaseFromLocation, state, onSourceChange } from './api.js';
 import { el, clear } from './ui.js';
 
 import * as live from './views/live.js';
+import * as architecture from './views/architecture.js';
 import * as tenets from './views/tenets.js';
+import * as rails from './views/rails.js';
 import * as roadmap from './views/roadmap.js';
 import * as frameworks from './views/frameworks.js';
 
-const VIEWS = { live, tenets, roadmap, frameworks };
+const VIEWS = { live, architecture, tenets, rails, roadmap, frameworks };
+// The route name is a URL slug; the tab title is prose. "Architecture" is the
+// slug, "How it works" is what the nav calls it, and the two should agree.
+const TITLES = {
+  live: 'Live check', architecture: 'How it works', tenets: 'Tenets',
+  rails: 'Rails', roadmap: 'Roadmap', frameworks: 'Frameworks',
+};
 const DEFAULT = 'live';
 
 const view = document.getElementById('view');
@@ -116,15 +124,14 @@ function paintHealth() {
       el('span', { class: 'health__word', text: h.status || 'degraded' }),
       el('span', {}, [
         el('strong', { text: cannotRun
-          ? `${cannotRun} of ${mounted ?? '?'} mounted rails cannot run right now. `
+          ? `${cannotRun} of ${mounted ?? '?'} mounted rails cannot judge on this host. `
           : 'The gateway reports itself degraded. ' }),
         el('span', { class: 'mute', text:
-          'They stay mounted, so they report “could not judge” — which fails closed on '
-          + 'client-facing traffic without protecting anything. A tenet counting these as '
-          + 'cover would be reading them wrong.' }),
+          'They stay mounted, run, and return “could not judge” — which fails closed without '
+          + 'protecting anything.' }),
       ]),
-      el('span', { class: 'micro mute', style: 'margin-left:auto;white-space:nowrap',
-        text: `judge provider: ${h.judge_provider || 'none'}  ·  reveal_subject: ${h.reveal_subject ? 'ON' : 'off'}` }),
+      el('span', { class: 'health__cfg mute',
+        text: `judge provider: ${h.judge_provider || 'none'} · reveal_subject: ${h.reveal_subject ? 'ON' : 'off'}` }),
     ]),
     el('details', {}, [
       el('summary', { text: 'What exactly is missing' }),
@@ -163,7 +170,7 @@ async function route() {
     if (a.dataset.view === name) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
-  document.title = `${name[0].toUpperCase()}${name.slice(1)} · AFNI Responsible AI`;
+  document.title = `${TITLES[name] || name} · AFNI Responsible AI`;
 
   clear(view);
   try {

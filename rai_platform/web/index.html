@@ -54,31 +54,49 @@
     <ul class="nav__list">
       <li><a class="nav__item" href="#/live" data-view="live">
         <span class="nav__label">Live check</span>
-        <span class="nav__hint">watch the cascade escalate</span>
+        <span class="nav__hint">watch one decision resolve</span>
+      </a></li>
+      <li><a class="nav__item" href="#/architecture" data-view="architecture">
+        <span class="nav__label">How it works</span>
+        <span class="nav__hint">the request path, drawn</span>
       </a></li>
       <li><a class="nav__item" href="#/tenets" data-view="tenets">
         <span class="nav__label">Tenets</span>
         <span class="nav__hint">coverage, honestly counted</span>
       </a></li>
+      <li><a class="nav__item" href="#/rails" data-view="rails">
+        <span class="nav__label">Rails</span>
+        <span class="nav__hint">every detector and its evidence</span>
+      </a></li>
       <li><a class="nav__item" href="#/roadmap" data-view="roadmap">
         <span class="nav__label">Roadmap</span>
-        <span class="nav__hint">named vs actually adopted</span>
+        <span class="nav__hint">90 days vs what is wired</span>
       </a></li>
       <li><a class="nav__item" href="#/frameworks" data-view="frameworks">
         <span class="nav__label">Frameworks</span>
-        <span class="nav__hint">23 repos, what each contributes</span>
+        <span class="nav__hint">23 read, 16 contributing</span>
       </a></li>
     </ul>
 
     <div class="nav__legend">
-      <p class="eyebrow">Cascade stages</p>
+      <p class="eyebrow">Cascade stages — what one request costs</p>
       <ul class="stagekey">
         <li><span class="sbadge sbadge--1"><span class="sbadge__n">1</span></span>free · deterministic · every request</li>
         <li><span class="sbadge sbadge--2"><span class="sbadge__n">2</span></span>local model · only if asked for</li>
         <li><span class="sbadge sbadge--3"><span class="sbadge__n">3</span></span>paid judge · last resort</li>
         <li><span class="sbadge sbadge--off"><span class="sbadge__n">◇</span></span>offline · never in the request path</li>
       </ul>
+
+      <p class="eyebrow" style="margin-top:var(--sp-5)">Roadmap phases — a calendar</p>
+      <div class="navphase">
+        <span class="pbr"><span class="pbr__lab">Phase 2</span><span class="pbr__track"><span class="pbr__fill" style="left:33.33%;width:33.33%"></span></span><span class="pbr__days">days 30–60</span></span>
+      </div>
+      <p class="micro mute" style="margin-top:var(--sp-2);line-height:1.55;max-width:22ch">
+        A phase is a 90-day adoption window for a repository. It is not a cascade
+        stage, and it carries no stage colour anywhere in this console.
+      </p>
     </div>
+
   </nav>
 
   <main id="main" class="main" tabindex="-1">

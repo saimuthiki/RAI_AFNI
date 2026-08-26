@@ -88,8 +88,13 @@ const COV_BY_KEY = new Map(COVERAGE.map((c) => [c.key, c]));
 export const coverageMeta = (key) => COV_BY_KEY.get(key) ?? {
   key, pips: 0, short: 'unknown state', say: 'The gateway reported a coverage state this console does not know.' };
 
-/** A coverage chip: pip meter + always-present text label + optional count. */
-export function covChip(state, count = null, { title = true } = {}) {
+/** A coverage chip: pip meter + always-present text label + optional count.
+ *
+ *  `short` swaps the registry key for the plain-English short form ("not wired"
+ *  for "cloud-not-configured"). It is for narrow table cells, and it trades one
+ *  word for another — never the word for the colour. The full key stays in the
+ *  title, and the pip meter is unchanged, so both non-colour channels survive. */
+export function covChip(state, count = null, { title = true, short = false } = {}) {
   const meta = coverageMeta(state);
   const pips = el('span', { class: 'cov__pips', 'aria-hidden': 'true' },
     [0, 1, 2, 3].map((i) => el('i', { class: i < meta.pips ? 'on' : '' })));
@@ -98,7 +103,7 @@ export function covChip(state, count = null, { title = true } = {}) {
     title: title ? `${state} — ${meta.say}` : null,
   }, [
     pips,
-    el('span', { class: 'cov__label', text: state }),
+    el('span', { class: 'cov__label', text: short ? meta.short : state }),
     count === null ? null : el('span', { class: 'cov__n', text: String(count) }),
   ]);
 }
@@ -242,7 +247,9 @@ export function claim(score, kind) {
       class: k.key === m.key ? 'on' : '', data: { k: k.key }, title: k.gloss,
     }, [
       el('i', {}),
-      el('span', { text: k.word }),
+      // Only the marked position is labelled. The others reserve their height in
+      // CSS rather than carrying transparent text.
+      k.key === m.key ? el('span', { text: k.word }) : el('span', { class: 'claim__pad' }),
     ]))),
     el('p', { class: 'claim__gloss', text: m.gloss }),
   ]);

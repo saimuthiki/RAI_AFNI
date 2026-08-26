@@ -259,5 +259,98 @@ class TestTheRealRails(unittest.TestCase):
         self.assertIs(outcome.verdict.decision, Decision.ALLOW)
 
 
+class TestSecretsBlockInBothDirections(unittest.TestCase):
+    """A leaked credential must block as hard leaving the model as arriving.
+
+    Written because a reviewer reported the opposite: that `security.secrets`
+    fired on a prompt and not on a response, which would have been a real hole
+    in the direction split. It did not reproduce. The reported string was
+    `sk-live-9f2c41ab7d5e0c1874bbaa03e1`, which matches NO pattern in either
+    direction - Stripe's live key is `sk_live_` with UNDERSCORES, and OpenAI's
+    are `sk-proj-` / `sk-svcacct-` / `sk-admin-` or legacy `sk-` plus 32
+    alphanumerics. `sk-live-` with hyphens is a shape no vendor issues.
+
+    So the finding was a false alarm - but a plausible-looking one, and the only
+    way to retire that doubt permanently is a test that pins the property
+    instead of an argument that it holds.
+    """
+
+    KEY = "sk-proj-Xq7SvT2mNbLp9RdKzWyE4HcJ8FgAuQ3T"
+
+    def setUp(self):
+        from afni_rai.tenets.security import SecretsRail
+        self.rail = SecretsRail()
+
+    def test_the_rail_is_declared_both(self):
+        self.assertIs(getattr(self.rail, "direction", Direction.BOTH),
+                      Direction.BOTH)
+
+    def test_a_real_key_blocks_as_a_prompt_and_as_a_response(self):
+        stage_1 = [r for r in load_tenets()[0] if r.stage is Stage.STAGE_1]
+        text = f"the admin credential is {self.KEY}"
+        for build, label in ((request, "prompt"), (response, "response")):
+            with self.subTest(direction=label):
+                outcome = Cascade(stage_1).evaluate(build(text))
+                self.assertIs(outcome.verdict.decision, Decision.BLOCK,
+                              f"a leaked key did not block as a {label}")
+                blocking = [f for f in outcome.verdict.findings
+                            if f.detector == "security.secrets"
+                            and f.action is not None
+                            and f.action.value == "block"]
+                self.assertTrue(blocking,
+                                f"nothing from security.secrets blocked the "
+                                f"{label}")
+
+    def test_the_block_is_the_secrets_rail_and_not_fail_closed(self):
+        """The distinction the false report turned on. A block caused by an
+        unjudged path looks identical from outside, so assert the finding."""
+        stage_1 = [r for r in load_tenets()[0] if r.stage is Stage.STAGE_1]
+        outcome = Cascade(stage_1).evaluate(response(f"key: {self.KEY}"))
+        self.assertEqual(outcome.verdict.unjudged, [],
+                         "this must block on the FINDING, not on a gap")
+        self.assertIn("security.secret_leak.api_key",
+                      [f.category for f in outcome.verdict.findings])
+
+    def test_a_vendor_shape_nobody_issues_is_not_a_finding_either_way(self):
+        """The reported string, pinned as a non-finding in BOTH directions - so
+        this cannot be misread as a direction bug again."""
+        text = "the admin credential is sk-live-9f2c41ab7d5e0c1874bbaa03e1"
+        for build, label in ((request, "prompt"), (response, "response")):
+            with self.subTest(direction=label):
+                self.assertEqual(self.rail.check("p", text).findings, [],
+                                 f"sk-live- matched something as a {label}")
+
+
+class TestTheRailsEndpointExposesDirection(unittest.TestCase):
+    """The console could not tell which rails guard a prompt and which guard a
+    response without making a live request and reading `rails_skipped` back out
+    of the trace. The engine has gated on direction since the split; the
+    endpoint simply did not report it."""
+
+    def setUp(self):
+        from afni_rai.gateway.app import Gateway
+        self.rows = Gateway().rail_rows()  # `warm` is a create_app kwarg, not a Gateway one
+
+    def test_every_row_carries_a_direction(self):
+        for row in self.rows:
+            with self.subTest(rail=row["name"]):
+                self.assertIn(row["direction"], ("input", "output", "both"))
+
+    def test_the_counts_match_the_mounted_rails(self):
+        from collections import Counter
+
+        counts = Counter(row["direction"] for row in self.rows)
+        self.assertEqual(counts["output"], 8)
+        self.assertEqual(counts["input"], 1)
+        self.assertEqual(counts["both"], len(self.rows) - 9)
+
+    def test_it_agrees_with_the_rails_themselves(self):
+        rails = {r.name: getattr(r, "direction", Direction.BOTH)
+                 for r in load_tenets()[0]}
+        for row in self.rows:
+            with self.subTest(rail=row["name"]):
+                self.assertEqual(row["direction"], rails[row["name"]].value)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
