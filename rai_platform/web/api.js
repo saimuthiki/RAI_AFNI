@@ -33,6 +33,36 @@ function setSource(source, detail = null) {
   announce();
 }
 
+/** The parsed /healthz body, or null when the gateway did not answer with one.
+ *  Views read this rather than re-fetching: one probe, one truth. */
+export const health = () =>
+  (state.source === 'gateway' && state.health && typeof state.health === 'object')
+    ? state.health : null;
+
+/** /healthz reports rails that are mounted but cannot run, as strings shaped
+ *  "rail.name: why". /v1/rails does NOT carry that fact — its `available` field
+ *  is null for every rail — so without this join the console would render 32
+ *  healthy-looking rails on a gateway that can only run 25. Parse it once here
+ *  rather than in each view.
+ *  -> Map<railName, reason> */
+export function unavailableRails() {
+  const h = health();
+  const out = new Map();
+  for (const line of [].concat(h?.rails_unavailable ?? [])) {
+    const s = String(line);
+    const cut = s.indexOf(':');
+    if (cut === -1) { out.set(s.trim(), 'reported unavailable'); continue; }
+    out.set(s.slice(0, cut).trim(), s.slice(cut + 1).trim());
+  }
+  return out;
+}
+
+/** Judge rails with no configured judge are a second, different failure: the
+ *  rail can run, there is simply nothing to call. Kept separate from the map
+ *  above so the console does not report one cause as the other. */
+export const judgelessRails = () =>
+  new Set([].concat(health()?.judge_rails_without_a_judge ?? []).map(String));
+
 /** Query string wins, so the console can be pointed at a gateway on another
  *  port while being served by `python3 -m http.server`. */
 export function readBaseFromLocation() {
@@ -192,6 +222,29 @@ export async function rails() {
       };
     }),
   };
+}
+
+/** rails() plus the /healthz verdict on each one, and the per-stage totals the
+ *  live view needs to say "22 of 22 rails invoked" rather than just "22". */
+export async function railsWithHealth() {
+  const { rails: list, live } = await rails();
+  const dead = unavailableRails();
+  const judgeless = judgelessRails();
+  const out = list.map((r) => {
+    const why = dead.get(r.name) ?? null;
+    return {
+      ...r,
+      available: why ? false : r.available,
+      unavailable_reason: why ?? r.unavailable_reason,
+      judgeless: judgeless.has(r.name),
+    };
+  });
+  const byStage = new Map();
+  for (const r of out) {
+    if (!byStage.has(r.stage)) byStage.set(r.stage, []);
+    byStage.get(r.stage).push(r);
+  }
+  return { rails: out, byStage, live, deadCount: out.filter((r) => r.available === false).length };
 }
 
 /** -> [{ phase, repos: [...], notes: [...], unlinkable: [...] }] in roadmap order */

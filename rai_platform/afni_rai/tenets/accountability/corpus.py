@@ -66,7 +66,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Iterable, Iterator
 
-from ...cascade.rail import RailResult, Stage
+from ...cascade.rail import Direction, RailResult, Stage
 from ...cascade.rail import CheckContext
 from ...contract.explanation import RailAttribution
 from ...contract.models import Action, Finding, Severity, Tenet
@@ -310,6 +310,9 @@ class AttackCorpusRail:
 
     tenet = Tenet.ACCOUNTABILITY
     stage = Stage.STAGE_1
+    # The corpus holds confirmed attack PROMPTS. Matching a response against
+    # it would compare the wrong text to the wrong corpus.
+    direction = Direction.INPUT
 
     def __init__(self, corpus: AttackCorpus | None = None,
                  thresholds: ThresholdStore | None = None,

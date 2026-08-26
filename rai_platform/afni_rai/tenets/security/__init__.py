@@ -95,7 +95,7 @@ import urllib.error
 import urllib.request
 from collections import Counter
 
-from ...cascade.rail import RailResult, Stage
+from ...cascade.rail import Direction, RailResult, Stage
 from ...contract.explanation import RailAttribution
 from ...contract.models import Action, Finding, Severity, Span, Tenet
 from ...third_party_logging import quieten as _quieten
@@ -962,6 +962,10 @@ class InsecureOutputRail:
     name = "security.insecure_output"
     tenet = TENET
     stage = Stage.STAGE_1
+    # Catches a MODEL emitting a script tag, a DROP TABLE or a path
+    # traversal. A user ASKING about SQL injection is a support question,
+    # not an attack - running this on input is a false-positive generator.
+    direction = Direction.OUTPUT
 
     def check(self, path: str, text: str) -> RailResult:
         findings: list[Finding] = []

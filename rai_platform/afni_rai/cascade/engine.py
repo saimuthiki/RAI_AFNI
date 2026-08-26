@@ -132,6 +132,22 @@ def _dedupe(findings: Iterable[Finding]) -> list[Finding]:
     return out
 
 
+def _applies(rail, kind) -> bool:
+    """Does this rail belong on this side of the AI system?
+
+    A rail with no `direction` is treated as BOTH. That keeps every existing
+    rail and every third-party rail working unchanged, and it is the safe way
+    round: an absent declaration must never silently REMOVE a check.
+    """
+    direction = getattr(rail, "direction", None)
+    if direction is None:
+        return True
+    try:
+        return direction.covers(kind)
+    except AttributeError:      # someone set a plain string
+        return str(direction) in ("both", str(getattr(kind, "value", kind)))
+
+
 def _blocking(findings: Iterable[Finding]) -> bool:
     return any(f.action is Action.BLOCK for f in findings)
 
@@ -268,11 +284,21 @@ class Cascade:
 
             stage_started = time.perf_counter()
             ran: list[str] = []
+            not_applicable: list[str] = []
             stage_findings: list[Finding] = []
             stage_unjudged: list[str] = []
             asked_to_escalate = False
 
             for rail in self._by_stage[stage]:
+                # Direction gate. A rail that does not apply to this side of the
+                # AI system is not run and not counted as coverage - and, crucially,
+                # does NOT contribute an `unjudged` path. Before this gate,
+                # output-only rails ran on prompts and reported "could not judge",
+                # which stamped a coverage warning on almost every request and
+                # trained operators to ignore the loudest line in the product.
+                if not _applies(rail, event.kind):
+                    not_applicable.append(rail.name)
+                    continue
                 ran.append(rail.name)
                 for path, text in texts.items():
                     result = self._run(rail, path, text,
@@ -292,7 +318,7 @@ class Cascade:
             entry = StageTrace(
                 stage=stage,
                 rails_run=ran,
-                rails_skipped=[],
+                rails_skipped=not_applicable,
                 findings=len(stage_findings),
                 unjudged_paths=stage_unjudged,
                 latency_ms=int((time.perf_counter() - stage_started) * 1000),
