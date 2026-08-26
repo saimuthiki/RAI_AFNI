@@ -313,7 +313,7 @@ rail declares its stage; it does not get to invent one.
 | Stage | Mechanism | Latency | Cost | Runs on | Rails |
 |---|---|---|---|---|---|
 | **Stage 1** | regex, keyword lists, checksums, unicode normalisation, schema validation | sub-ms | free | 100% of requests | 23 |
-| **Stage 2** | locally-run classifier or NLI model | ~10–500 ms | free once installed | borderline only | 7 |
+| **Stage 2** | locally-run classifier or NLI model | **~1–3 s on CPU**, 10–500 ms batched/GPU | free once installed | borderline only | 7 |
 | **Stage 3** | paid API or LLM-as-judge | ~1–5 s | metered | last resort | 3 |
 | **Offline** | red-team attacks, fairness metrics, drift, SHAP | unbounded | CI budget | never in the request path | 0 mountable |
 
@@ -1025,10 +1025,18 @@ shape:
   Krippendorff's alpha against a human-labelled sample of real AFNI traffic,
   quarterly. Until that runs, **no accuracy figure in this platform should be
   quoted to a client.**
-- **Latency classes are estimated from mechanism, not benchmarked.** A regex is
-  sub-millisecond and an LLM judge is seconds; those are safe. The middle of the
-  range depends on hardware, batch size and quantisation, and nothing here has
-  been measured on AFNI's infrastructure.
+- **The documented Stage-2 latency class is wrong on CPU, and now measured.**
+  The table above says 10-500 ms. On an AFNI Windows laptop with the CPU torch
+  wheel, one request through two transformer rails took **2,954 ms warm** - the
+  models resident, no loading involved. Cold, before the startup warm-up existed,
+  the first request took **15,568 ms**. So: 10-500 ms is a GPU or batched figure.
+  Budget seconds per request for the Stage-2 tier on CPU, and treat the warm-up
+  at boot as mandatory rather than an optimisation. Stage-1 remains
+  sub-millisecond and is what carries the traffic.
+- **Model load is paid at startup, not by the first caller.** The gateway warms
+  every Stage-2 rail before accepting traffic - measured at ~11 s for seven rails
+  - and `/healthz` reports which ones succeeded. A rail that fails to warm is not
+  fatal: it reports `unjudged` at request time and fails closed.
 - **Judge provider calls are unverified end to end.** The build environment's
   proxy blocks outbound provider traffic, so the OpenAI and Gemini adapters are
   unit-tested against a mocked transport and the model ids in `.env.example` are

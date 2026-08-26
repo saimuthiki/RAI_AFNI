@@ -275,7 +275,7 @@
       "name": "content_safety_profanity",
       "tenet": "Profanity / Content Safety",
       "summary": "Content safety - abusive language in a user turn",
-      "why": "The tiered lexical filter. Flag-tier terms escalate rather than decide, because a wordlist has no context; the Stage-2 classifier is the second opinion and reports unjudged here with no model weights installed.",
+      "why": "The tiered lexical filter. Flag-tier terms escalate rather than decide, because a wordlist has no context; the Stage-2 classifier is the second opinion - with the weights installed it blocks this outright at confidence 1.00, and without them it reports unjudged, which fails closed on client-facing traffic.",
       "expect_detectors": [
         "content_safety.profanity"
       ],

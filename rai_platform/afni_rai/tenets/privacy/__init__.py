@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""
+# Raw docstring: it quotes regexes containing \d, and a plain string makes
+# those invalid escape sequences - a SyntaxWarning on every single run.
+r"""
 Privacy rails.
 
 Privacy has the strongest Stage-1 story of the seven tenets: of the 17 tools that
@@ -69,6 +71,7 @@ from ...cascade.rail import RailResult, Stage
 from ...contract.explanation import RailAttribution
 from ...contract.models import Action, Finding, Severity, Span, Tenet
 from ...third_party_logging import quieten as _quieten
+from ...third_party_logging import quieten_loaded as _quieten_loaded
 from ...registry.capabilities import Coverage
 
 # Silence presidio and spacy model-load chatter before any model is built. See
@@ -1087,6 +1090,8 @@ class PresidioPiiRail:
             return None
         try:
             from presidio_analyzer import AnalyzerEngine  # noqa: PLC0415
+
+            _quieten_loaded()
             self._analyzer = AnalyzerEngine(
                 default_score_threshold=self.score_threshold)
         except Exception as exc:                          # noqa: BLE001

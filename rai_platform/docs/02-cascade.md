@@ -18,7 +18,7 @@ That is the whole cost argument, and it is enforced in
 | Stage | What runs | Latency | Cost | Runs on |
 |---|---|---|---|---|
 | **Stage 1** | regex, keyword lists, checksums, unicode normalisation, schema checks | sub-millisecond | free | every request |
-| **Stage 2** | a locally-run classifier or NLI model; or a cloud second opinion | ~10–500 ms | free (local) or per-call | borderline input only |
+| **Stage 2** | a locally-run classifier or NLI model; or a cloud second opinion | ~1–3 s on CPU (measured) | free (local) or per-call | borderline input only |
 | **Stage 3** | a paid API or an LLM-as-judge | ~1–5 s | per-call, the dearest | last resort |
 | **Offline** | red-team attacks, fairness metrics, drift, SHAP | unbounded | CI budget | never in the request path |
 
@@ -149,11 +149,17 @@ BLOCKED after 1 cascade stage(s) in 1ms
 
 ## Honest limits
 
-- **Latency classes are estimated from mechanism, not benchmarked.** A regex is
-  sub-millisecond and an LLM judge is seconds; those are safe. The middle of the
-  range depends on hardware, batch size and model quantisation, and nothing here
-  has been measured on AFNI's infrastructure. Setting a real latency budget is an
-  open item.
+- **Stage 2 is seconds on CPU, not the 10-500 ms in the table above.** Now
+  measured rather than estimated: on an AFNI Windows laptop with the CPU torch
+  wheel, one request through two transformer rails took **2,954 ms warm** - models
+  resident, no loading involved - and **15,568 ms cold**, before the startup
+  warm-up existed. The 10-500 ms figure is a GPU or batched number.
+
+  Stage 1 remains sub-millisecond, which is what makes the cascade worth having:
+  the cheap tier carries the traffic and the expensive tier only sees the thin
+  slice that survives. But budget seconds, not milliseconds, for anything that
+  escalates on this hardware, and treat the boot warm-up as mandatory rather than
+  an optimisation. A real per-tenant latency budget is still an open item.
 - **A rail with its dependency missing reports `unjudged`, which fails closed.**
   That is correct, and it also means a fresh install with no model weights will
   block client-facing traffic until either the weights are installed or the rail

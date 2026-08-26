@@ -84,6 +84,7 @@ from ...cascade.rail import RailResult, RailSpec, Stage
 from ...contract.explanation import RailAttribution
 from ...contract.models import Action, Finding, Severity, Tenet
 from ...third_party_logging import quieten as _quieten
+from ...third_party_logging import quieten_loaded as _quieten_loaded
 
 TENET = Tenet.CONTENT_SAFETY
 
@@ -1103,6 +1104,10 @@ class ToxicityClassifier:
         try:
             from llm_guard.input_scanners.toxicity import (  # noqa: PLC0415
                 DEFAULT_MODEL, Toxicity)
+            # Now that structlog is genuinely in memory, silence it. This cannot
+            # happen at module import: doing it there is what pulled transformers
+            # into the Stage-1 path. See third_party_logging.quieten.
+            _quieten_loaded()
             model, note = _localise(DEFAULT_MODEL, _TOXICITY_MODEL,
                                     _TOXICITY_REVISION)
             self.source = note
@@ -1218,6 +1223,7 @@ class ZeroShotTopics:
         try:
             from llm_guard.input_scanners.ban_topics import (  # noqa: PLC0415
                 MODEL_ROBERTA_BASE_C_V2, BanTopics)
+            _quieten_loaded()
             model, note = _localise(MODEL_ROBERTA_BASE_C_V2, self.model,
                                     self.revision)
             self.source = note

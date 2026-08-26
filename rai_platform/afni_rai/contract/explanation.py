@@ -91,9 +91,23 @@ class FindingExplanation:
 
     @property
     def location(self) -> str | None:
+        """Where the finding is. A span when there is one, the path otherwise.
+
+        A whole-text classifier scores the input as a unit and legitimately has
+        no character span - a toxicity model does not say WHICH four characters
+        were toxic. The path, though, is always known, and returning None for the
+        whole location threw it away: a real block came back reading
+        `"location": null`, so an operator triaging a payload with a system
+        prompt, three turns of history and an attachment could not tell which of
+        them the classifier objected to.
+
+        No span is stated where none exists - inventing `chars 0-N` would imply a
+        precision the classifier does not have.
+        """
+        path = self.finding.path
         if self.finding.start is None or self.finding.end is None:
-            return None
-        return f"{self.finding.path or 'payload'} chars {self.finding.start}-{self.finding.end}"
+            return path or None
+        return f"{path or 'payload'} chars {self.finding.start}-{self.finding.end}"
 
     def sentence(self, reveal_subject: bool = False) -> str:
         """One line an operator can act on.
