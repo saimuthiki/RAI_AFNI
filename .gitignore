@@ -28,3 +28,10 @@ afni_audit.sqlite-wal
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+
+# Redirected command output. `> output.txt` while debugging is normal; committing
+# it is not - and on Windows PowerShell writes it as UTF-16, which reads as
+# binary noise in a diff.
+output.txt
+*.out
+*.log
