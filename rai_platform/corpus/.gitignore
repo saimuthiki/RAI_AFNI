@@ -1,0 +1,6 @@
+
+# The corpus data itself is a decision not yet taken - see SCHEMA.md.
+# Ingested/baselined JSONL stays out of git until the harmful-content question
+# is settled. The schema, the ingester and the tests are the committed part.
+*.jsonl
+!samples/*.jsonl
