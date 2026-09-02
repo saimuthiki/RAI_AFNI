@@ -9,8 +9,29 @@ platform stalling in Phase 1.
 | # | Item | Owner | Why it blocks |
 |---|---|---|---|
 | ~~1~~ | ~~**Deepchecks AGPL-3.0 ruling**~~ — **CLOSED 2026-09-02** | Legal | AFNI confirmed it holds licences covering Apache-2.0, MIT and AGPL-3.0 and that no repository in this review is licence-restricted. Deepchecks stays at "Bench for later" for a technical reason instead: every check is a batch `SingleDatasetCheck`/`TrainTestCheck` over a `Dataset`, so it has no per-request API to put on a request path at all. |
-| 2 | **promptfoo remote-only plugin data residency** | Legal | Some redteam plugins call promptfoo-hosted services. Needs a ruling before AFNI puts client data through them or ships a promptfoo-generated report as a client deliverable. |
+| ~~2~~ | ~~**promptfoo remote-only plugin data residency**~~ — **CLOSED 2026-09-02** | Legal | AFNI confirmed that sending data to an external service is acceptable, and that external plugins may be used. So this no longer blocks Phase 1. Two consequences worth keeping on the record rather than losing with the question: (a) it is a *per-dataset* clearance in practice — the harm corpus is the one asset still held back, and not on residency grounds (see below); (b) an external plugin is a **reliability** dependency as well as a data one, so a remote-only redteam plugin cannot be the sole evidence for a capability the platform claims. Pair each one with a local check. |
 | 3 | **One accountable owner per tenet** | Kiran / AFNI | Seven names. Phase 1 action 4. Without them there is no governance register and no escalation path — the framework is a document, not a standard. |
+
+### The one dataset still held back, and why it is not a residency question
+
+`rai_platform/corpus/harm-intents.jsonl` holds **11,369 genuinely harmful prompts**.
+`AFNI_CORPUS_ALLOW_CLOUD` defaults to **off**, so a corpus run is capped at Stage 2 and
+cannot reach a paid third-party judge. With external transport now cleared, that default
+stands for three reasons that are **not** about residency, and the flag exists so AFNI can
+override it deliberately rather than by accident:
+
+1. **Volume.** 11,369 prompts through a paid judge, twice per prompt (two judge rails), is
+   a bill nobody has approved. The cap is a spend control before it is anything else.
+2. **What the content is.** Sending a vendor 11,369 requests for bomb-making and
+   drug-synthesis instructions will trip their own abuse detection. The likely outcome is
+   a suspended AFNI account, not a scored corpus.
+3. **It is not needed for the measurement.** The comparison that makes the business case
+   is Stage 1 versus Stage 1 + 2 — both entirely local. Stage 3 adds cost to a number we
+   can already produce.
+
+Set `AFNI_CORPUS_ALLOW_CLOUD=1` on the server when AFNI wants a Stage-3 pass; the run then
+reports which provider served each call. It is server-side, not a request field, so it is
+a deployment decision and not a checkbox in the console.
 
 ## Vendor and supply-chain risks on the record
 

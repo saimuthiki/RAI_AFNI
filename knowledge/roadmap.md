@@ -22,10 +22,13 @@ ramp only as trust in the earlier layers is proven.
    assertions and PyRIT regex output scorers, **under five minutes on every PR**.
 7. ~~**Legal ruling needed** on Deepchecks' AGPL-3.0~~ — **CLEARED 2026-09-02.**
    AFNI confirmed it holds licences covering Apache-2.0, MIT and AGPL-3.0, and that
-   no repository in this review is licence-restricted. promptfoo's remote-only
-   plugin question is **not** a licence question and still stands: those plugins
-   call promptfoo-hosted services, so it is a data-residency decision about what
-   leaves AFNI's network, and it applies equally to any paid judge.
+   no repository in this review is licence-restricted. **The promptfoo remote-only
+   plugin question is closed too** — AFNI confirmed on the same date that sending data
+   to an external service is acceptable and that external plugins may be used. What
+   survives is not a permission question but an engineering one: a remote-only plugin
+   is a reliability dependency, so it cannot be the sole evidence for a capability the
+   platform claims. Pair each one with a local check. The single carve-out is the harm
+   corpus, for spend and vendor-abuse-detection reasons set out in open-questions.md.
 8. **Log the two vendor-risk items** for the record: Guardrails AI's documented PyPI
    supply-chain compromise, and `agentic_security-main`'s hard-coded third-party
    bearer token.
