@@ -73,6 +73,7 @@ from ..tenets.accountability.audit import ORIGIN_LIVE, VerdictStore
 from ..tenets.accountability.policy import FailurePolicy
 from ..tenets.accountability.thresholds import ThresholdStore
 from . import providers
+from .corpus_api import corpus_router
 from .models import (
     CoverageResponse, Error, GuardRequest, GuardResponse, HealthResponse,
     RailsResponse,
@@ -818,6 +819,11 @@ def create_app(**kwargs: Any) -> FastAPI:
     )
     app.state.gateway = gateway
     app.include_router(_router(gateway))
+    # The corpus routes live in their own module: they are the only routes
+    # that read a 6 MB data file and spend minutes of CPU on one request,
+    # and keeping their schemas and their two hard caps next to each other
+    # makes both reviewable in one screen.
+    app.include_router(corpus_router(gateway))
 
     @app.middleware("http")
     async def request_id(request: Request, call_next: Callable) -> Response:
