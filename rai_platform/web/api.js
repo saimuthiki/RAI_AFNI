@@ -396,15 +396,31 @@ export function normalizeVerdict(obj) {
  * EventSource cannot POST, so this reads the body stream directly.
  * Returns { live: true } when the gateway answered.
  */
-export async function guardStream(event, onEvent, { signal } = {}) {
-  const res = await fetch(url('/v1/guard/stream'), {
+// One SSE reader, shared by every streaming endpoint. Extracted rather than
+// copied because the fiddly parts — CRLF-tolerant frame splitting, multi-line
+// `data:` folding, the trailing partial frame after the reader closes — are
+// exactly the parts that get subtly wrong in the second copy, and a stream that
+// drops its last frame drops the verdict.
+async function sseStream(path, body, onEvent, { signal, classify: kindOf } = {}) {
+  const res = await fetch(url(path), {
     method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'text/event-stream' },
-    body: JSON.stringify(event),
+    body: JSON.stringify(body),
     signal,
   });
-  if (!res.ok) throw new Error(`/v1/guard/stream → HTTP ${res.status} ${res.statusText}`);
-  if (!res.body) throw new Error('/v1/guard/stream returned no readable body');
+  if (!res.ok) {
+    // The gateway answers a rejected corpus selection with a JSON body that
+    // explains itself (the sample cap, the empty filter). Surfacing "HTTP 422"
+    // and throwing that away would leave the operator guessing at a number the
+    // server already told us.
+    let detail = `HTTP ${res.status} ${res.statusText}`;
+    try {
+      const err = await res.json();
+      if (err && err.message) detail = err.message;
+    } catch { /* not JSON — keep the status line */ }
+    throw new Error(`${path} → ${detail}`);
+  }
+  if (!res.body) throw new Error(`${path} returned no readable body`);
 
   const reader = res.body.getReader();
   const dec = new TextDecoder();
@@ -418,7 +434,7 @@ export async function guardStream(event, onEvent, { signal } = {}) {
     if (!data || data === '[DONE]') { if (data) onEvent('done', {}); return; }
     let obj;
     try { obj = JSON.parse(data); } catch { onEvent('error', { error: `unparseable SSE data: ${data.slice(0, 200)}` }); return; }
-    onEvent(classify(obj), obj);
+    onEvent(kindOf ? kindOf(obj) : String(obj.event || 'message'), obj);
   };
 
   for (;;) {
@@ -435,6 +451,29 @@ export async function guardStream(event, onEvent, { signal } = {}) {
   }
   if (buf.trim()) flushFrame(buf);
   return { live: true };
+}
+
+export async function guardStream(event, onEvent, { signal } = {}) {
+  return sseStream('/v1/guard/stream', event, onEvent, { signal, classify });
+}
+
+// ------------------------------------------------------------------ corpus --
+// The regression corpus is 11,369 records and a Stage-2 pass is 1-3 s each, so
+// the sample size is a control, not a detail. `corpusSummary()` feeds the picker
+// the counts needed to choose one — including the server's own cap, which the UI
+// must not let anyone exceed only to be refused after they hit Run.
+
+export const corpusSummary = () => getJSON('/v1/corpus', { timeout: 15000 });
+
+/** Run a sample, one callback per record as it is judged.
+ *
+ *  Streamed rather than awaited because a 200-record Stage-2 run is ten minutes.
+ *  A fetch that returns nothing for ten minutes is indistinguishable from a hung
+ *  gateway, and an operator watching an empty panel reloads the page — which
+ *  abandons the run and wastes the ten minutes.
+ */
+export async function corpusRunStream(request, onEvent, { signal } = {}) {
+  return sseStream('/v1/corpus/run/stream', request, onEvent, { signal });
 }
 
 /** Replay a fixture run with the same event sequence and rough timing, so the

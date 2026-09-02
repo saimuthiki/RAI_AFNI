@@ -1643,3 +1643,136 @@ table.fw td, table.fw th { padding-left: var(--sp-3); padding-right: var(--sp-3)
 .railchip--head { border-style: dashed; }
 .railchip--na { background: none; color: var(--ink-3); border-color: var(--line); border-style: dashed; }
 .railchip--na.railchip--head { color: var(--ink-2); }
+
+/* ============================ corpus =================================== */
+/* The sample-size control is the loudest thing on the corpus page on purpose.
+   The corpus is 11,369 records and a Stage-2 pass is about three seconds each,
+   so the number in this box is the difference between a half-second run and a
+   nine-hour one. A projected runtime sits directly above the slider, in the same
+   visual block, because a size control whose cost you have to work out elsewhere
+   is a size control people set wrongly. */
+
+.panel {
+  padding: var(--sp-5);
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+  background: var(--surface-2);
+  margin-bottom: var(--sp-5);
+}
+.panel__actions { display: flex; gap: var(--sp-3); align-items: center; flex-wrap: wrap; }
+.panel__actions .micro { max-width: 44ch; line-height: 1.5; }
+
+.sizer {
+  padding-bottom: var(--sp-4); margin-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--line-soft);
+}
+.sizer__head { display: flex; gap: var(--sp-4); align-items: baseline; flex-wrap: wrap; }
+.sizer__eta { margin: 0; font: 500 var(--t-small)/1.5 var(--mono); color: var(--ink-2); }
+.sizer__eta strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+.sizer__eta .eta--long { color: var(--cov-2-ink); }
+.sizer__eta .eta--warn { color: var(--hazard-ink); }
+
+.sizer__row { display: flex; gap: var(--sp-4); align-items: center; margin-top: var(--sp-3); }
+.sizer__range { flex: 1 1 18rem; min-width: 12rem; accent-color: var(--accent); }
+.sizer__num {
+  width: 6.5rem; padding: 0.45rem var(--sp-3);
+  background: var(--surface-3); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  font: 650 var(--t-lead)/1.2 var(--mono); font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.filters--corpus { margin-bottom: var(--sp-4); }
+.filters--corpus .field { min-width: 13rem; flex: 1 1 13rem; }
+
+/* ---- run progress ------------------------------------------------------ */
+.runbar { margin-bottom: var(--sp-4); }
+.runbar__track {
+  height: 6px; border-radius: 999px; overflow: hidden;
+  background: var(--surface-3); border: 1px solid var(--line);
+}
+.runbar__fill {
+  display: block; height: 100%; width: 0;
+  background: var(--accent);
+  transition: width 120ms linear;
+}
+.runbar__text {
+  margin: var(--sp-2) 0 0; font: 500 var(--t-micro)/1.5 var(--mono);
+  color: var(--ink-2); font-variant-numeric: tabular-nums;
+}
+
+.stats--tight { margin-bottom: var(--sp-5); }
+
+/* ---- callouts ---------------------------------------------------------- */
+/* One box per thing that is true about the run just completed. Every one of
+   them is computed from the rows on screen; none is asserted in advance. */
+.notebox {
+  padding: var(--sp-4) var(--sp-5); margin-bottom: var(--sp-3);
+  border: 1px solid var(--line); border-left-width: 3px;
+  border-radius: var(--r-md); background: var(--surface-2);
+  font-size: var(--t-small); line-height: 1.6;
+}
+.notebox p { margin: var(--sp-2) 0 0; }
+.notebox code { display: block; margin-top: var(--sp-3); word-break: break-all; }
+.notebox--hazard {
+  border-left-color: var(--hazard); background: var(--hazard-deep);
+  color: var(--hazard-ink);
+}
+.notebox--hazard strong { color: var(--hazard-ink); }
+.notebox--warn { border-left-color: var(--cov-2); }
+.notebox--warn strong { color: var(--cov-2-ink); }
+.notebox--good { border-left-color: var(--allow); }
+.notebox--good strong { color: var(--allow-ink); }
+
+/* ---- decision chips ---------------------------------------------------- */
+/* POLARITY IS INVERTED HERE and the legend says so. Every record in this corpus
+   is a prompt we would rather the model never answered, so a block is the good
+   outcome and an allow is a miss. Using the live view's colours unchanged would
+   paint 279 misses in reassuring green. */
+.dchip {
+  display: inline-block; padding: 0.1rem 0.45rem;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  font: 600 var(--t-eyebrow)/1.5 var(--mono);
+  letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap;
+}
+.dchip--block { color: var(--allow-ink); background: var(--allow-bed);
+  border-color: color-mix(in oklab, var(--allow) 40%, transparent); }
+.dchip--allow { color: var(--cov-5-ink); background: var(--cov-5-bed);
+  border-color: color-mix(in oklab, var(--cov-5) 40%, transparent); }
+.dchip--flag { color: var(--cov-2-ink); background: var(--cov-2-bed);
+  border-color: color-mix(in oklab, var(--cov-2) 40%, transparent); }
+.dchip--error { color: var(--hazard-ink); background: var(--hazard-deep);
+  border-color: color-mix(in oklab, var(--hazard) 50%, transparent); }
+.dchip--same { color: var(--ink-3); border-style: dashed; }
+.dchip--drift { color: var(--cov-3-ink); background: var(--cov-3-bed);
+  border-color: color-mix(in oklab, var(--cov-3) 40%, transparent); }
+.dchip--none { color: var(--ink-3); border-style: dotted; }
+
+/* ---- "blocked by" breakdown -------------------------------------------- */
+.byrail { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-4); }
+.byrail__item {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface-3);
+  font: 500 var(--t-micro)/1.4 var(--mono);
+}
+.byrail__n {
+  padding: 0 0.35rem; border-radius: var(--r-sm);
+  background: var(--allow-bed); color: var(--allow-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- result filters ---------------------------------------------------- */
+.chipset { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+.chipset .chip {
+  cursor: pointer; background: none; color: var(--ink-3);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 0.25rem 0.7rem; font: 500 var(--t-micro)/1.4 var(--mono);
+}
+.chipset .chip:hover { color: var(--ink); border-color: var(--ink-3); }
+.chipset .chip[aria-pressed="true"] {
+  color: var(--accent-ink); background: var(--accent); border-color: transparent;
+  font-weight: 650;
+}
+
+.rid { font-size: var(--t-eyebrow); color: var(--ink-3); }
+td .err { color: var(--hazard-ink); font-size: var(--t-eyebrow); }
