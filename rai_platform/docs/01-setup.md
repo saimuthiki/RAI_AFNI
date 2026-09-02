@@ -202,8 +202,52 @@ move on for a low score: a judge returning 0.1 is an answer, not a failure.
 flagged content to whoever serves it, so a local endpoint is the only option that
 keeps it on your own network.
 
+**Or let the gateway find it for you.** `AFNI_JUDGE_PREFER_LOCAL=true` probes the
+local endpoint once at startup and puts `local` at the front of the chain if it
+answers, falling back to the order above when it does not. The probe cannot delay
+or fail a boot, and `/healthz` reports under `judge_provider.prefer_local` what it
+decided and why. It is opt-in because chain order decides whose network the
+flagged content crosses, which is a decision to type out rather than infer.
+
 Never commit a real key. A key that reaches a commit is public and permanent, and
 rotation is the only remedy.
+
+---
+
+## Level 5 (optional) · Put the gateway IN FRONT of your model
+
+Levels 1-4 make the gateway judge text you hand it. This one makes it call your
+model for you, with a guardrail on each side:
+
+```
+AFNI_TARGET_BASE_URL=http://your-endpoint/v1
+AFNI_TARGET_MODEL=your-model-id
+AFNI_TARGET_API_KEY=
+AFNI_TARGET_TIMEOUT=60
+```
+
+Any OpenAI-compatible chat endpoint - vLLM, Ollama, llama.cpp, LM Studio,
+LiteLLM, or OpenAI itself. Then:
+
+```
+curl -s localhost:8000/v1/chat -H 'content-type: application/json' \
+     -d '{"messages":[{"role":"user","content":"what does a guardrail do?"}]}' | jq .
+```
+
+One response carries all four steps: the input verdict, whether the target was
+called, the output verdict, and the completion - which is present only when both
+guardrails allowed it. `POST /v1/chat/stream` streams the same four steps as
+Server-Sent Events.
+
+**Check it landed:** `curl -s localhost:8000/healthz | jq .target`. `reachable`
+comes from a single startup probe, and `model_id_verified` is true only if the
+endpoint's own `/models` listing contained the id you configured - otherwise the
+id is configuration rather than a fact, and the block says `UNVERIFIED`.
+
+Leave `AFNI_TARGET_BASE_URL` unset and nothing breaks: `/v1/chat` returns a 503
+naming the two variables to set, and every other endpoint behaves exactly as it
+did. Section 1b of `00-architecture.md` has the full order-of-operations and the
+failure table.
 
 ---
 

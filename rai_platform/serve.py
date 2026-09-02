@@ -28,6 +28,14 @@ Configuration, all server-side:
     AFNI_AUDIT_DB         :memory: (default) | a path for the durable evidence pack
     AFNI_JUDGE_PROVIDER   none (default) | an ordered chain, e.g. "openai,gemini"
     AFNI_JUDGE_TIMEOUT    seconds, default 20.0
+    AFNI_JUDGE_PREFER_LOCAL  off (default) | 1 - probe the local endpoint once at
+                          startup and judge there first when it answers
+    AFNI_TARGET_BASE_URL  unset (default) - the AI system /v1/chat guards. Unset
+                          means /v1/chat returns a 503 and nothing else changes
+    AFNI_TARGET_MODEL     required when the base URL is set; never guessed
+    AFNI_TARGET_API_KEY   optional; sent only as an Authorization header, never
+                          logged
+    AFNI_TARGET_TIMEOUT   seconds, default 60.0 - a generation, not a judge call
     AFNI_HOST/AFNI_PORT   defaults 127.0.0.1 / 8000 - loopback, not 0.0.0.0,
                           because this endpoint sees every prompt in the estate
 """
