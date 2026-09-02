@@ -1,6 +1,9 @@
-
-# The corpus data itself is a decision not yet taken - see SCHEMA.md.
-# Ingested/baselined JSONL stays out of git until the harmful-content question
-# is settled. The schema, the ingester and the tests are the committed part.
-*.jsonl
-!samples/*.jsonl
+# The intent corpus (harm-intents.jsonl) IS committed. That was a deliberate
+# decision: you cannot regression-test a content filter without the content, and
+# a corpus nobody can clone is not an asset. See SCHEMA.md for what it contains
+# and why the repository must stay private.
+#
+# Ad-hoc runs and scratch output are not committed.
+baseline-*.jsonl
+scratch-*.jsonl
+*.tmp.jsonl
