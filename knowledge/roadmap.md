@@ -20,8 +20,12 @@ ramp only as trust in the earlier layers is proven.
    promptfoo OWASP-mapped redteam run. **Publish it as the "before" picture.**
 6. Wire the fast CI tier on the pilot app: DeepEval + promptfoo deterministic
    assertions and PyRIT regex output scorers, **under five minutes on every PR**.
-7. **Legal ruling needed** on Deepchecks' AGPL-3.0 and promptfoo's remote-only plugin
-   data-residency question, before either is embedded in a client deliverable.
+7. ~~**Legal ruling needed** on Deepchecks' AGPL-3.0~~ — **CLEARED 2026-09-02.**
+   AFNI confirmed it holds licences covering Apache-2.0, MIT and AGPL-3.0, and that
+   no repository in this review is licence-restricted. promptfoo's remote-only
+   plugin question is **not** a licence question and still stands: those plugins
+   call promptfoo-hosted services, so it is a data-residency decision about what
+   leaves AFNI's network, and it applies equally to any paid judge.
 8. **Log the two vendor-risk items** for the record: Guardrails AI's documented PyPI
    supply-chain compromise, and `agentic_security-main`'s hard-coded third-party
    bearer token.
