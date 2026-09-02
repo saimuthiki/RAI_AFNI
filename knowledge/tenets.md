@@ -82,7 +82,8 @@ expensive diagnostic metrics stay in CI, where they are affordable.
 groundedness check in the review cheap enough to run on every response — no judge-LLM
 call**) → DeepEval (faithfulness, contextual precision/recall/relevancy, offline) →
 Azure AI Content Safety groundedness detection (regulated RAG) → Deepchecks drift
-suite in a scheduled job, *subject to AGPL-3.0 clearance*.
+suite in a scheduled job. (AGPL-3.0 clearance was granted by AFNI on
+2026-09-02; the remaining constraint is that Deepchecks is batch-only.)
 **Also:** Giskard uniquely checks **sycophancy**.
 **Recommended combination:** `llm-guard-main` + `deepeval-main`.
 

@@ -465,7 +465,7 @@ Run `python3 rai_platform/cli.py` equivalents or `GET /v1/phases` for this live.
 | DeepTeam | Adopt now | cloud-not-configured |
 | Infosys RAI Toolkit | Combine, conditional | implemented, cloud-not-configured |
 | OpenAI Evals | Bench | not wired |
-| Deepchecks | Bench, conditional on AGPL ruling | not wired |
+| Deepchecks | Bench (AGPL cleared by AFNI, 2026-09-02) | not wired |
 
 **Not adopted — 7 repos.** Guardrails AI (ships base classes only; documented
 PyPI supply-chain compromise), Agentic Security (hard-coded third-party bearer

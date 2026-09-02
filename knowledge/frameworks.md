@@ -40,9 +40,12 @@ Role: **Dev** = runs live in the request path · **Test** = offline red-team/eva
 - **Combine with … (4)** — adopt, but only alongside the named primary; not a
   standalone choice. AIF360 behind Fairlearn; Infosys and Rebuff behind NeMo;
   hai-guardrails behind LLM Guard (port its PHI regexes into Presidio recognisers).
-- **Bench for later (6)** — genuine capability, not Phase 1–3. Deepchecks is blocked
-  on an AGPL-3.0 ruling; OpenAI Evals is worth one run against any product claiming
-  agent autonomy (its deception / sandbagging / covert-persuasion suite).
+- **Bench for later (6)** — genuine capability, not Phase 1–3. Deepchecks is a batch
+  library with no per-request API, which is the reason it is benched — **not** its
+  licence: AFNI holds licences covering Apache-2.0, MIT and AGPL-3.0 and confirmed
+  on 2026-09-02 that no repository in this review is licence-restricted. OpenAI
+  Evals is worth one run against any product claiming agent autonomy (its
+  deception / sandbagging / covert-persuasion suite).
 - **Skip (3)** — Guardrails AI (superseded by NeMo for AFNI's shape, plus a documented
   PyPI supply-chain compromise), JCB and LLMFuzzer (narrow, high effort, low return).
 
