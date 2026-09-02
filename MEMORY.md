@@ -763,3 +763,99 @@ lines and they test it with the VPN connected. Consequences for the design:
    README, once in `00-architecture.md`, where a package-hallucination example
    was claimed as BLOCKED when the real answer is ALLOWED-plus-flag). Every
    sample output in the docs is now a captured run.
+
+### 2026-09-02 (cont'd) — Data residency closed, and the console field guide
+**Type:** Clarification + New Build
+
+**Ask (residency):** "if the data from the client is transported to other
+external services that is acceptable for our case … we can use external plugins
+also."
+
+**Decision recorded:** open question 2 (promptfoo remote-only plugins) is closed.
+That leaves **one accountable owner per tenet** as the only remaining Phase-1
+blocker, and that one is a decision AFNI makes rather than a ruling anyone is
+waiting on.
+
+What survives the closure is an engineering point, not a permission one: a
+remote-only plugin is a **reliability** dependency as well as a data one. If the
+only evidence for a capability is a plugin calling someone else's service, the
+capability disappears when that service does. Each remote plugin is therefore
+paired with a local check rather than standing alone.
+
+**One carve-out, recorded so it is not mistaken for re-opening residency.**
+`AFNI_CORPUS_ALLOW_CLOUD` still defaults to off. Three reasons, none about
+residency: **volume** (11,369 prompts × 2 judge rails is a bill nobody approved);
+**what the content is** (11,369 requests for bomb-making instructions will trip a
+vendor's abuse detection — the likely outcome is a suspended AFNI account, not a
+scored corpus); and **it is not needed for the measurement** (the comparison that
+makes the business case is Stage 1 vs Stage 1+2, both entirely local).
+
+**Ask (walkthrough):** "The UI is highly complex for me … I need a complete
+walkthrough of the UI including the navigations and the available options and
+both positive and negative test case scenarios, including each and every panel …
+simple English with real examples … so that I will explain the same thing to my
+manager."
+
+**What was done:** `rai_platform/docs/ui-walkthrough.html` — all seven screens,
+every control, a ten-prompt test script with measured expected results, a
+ten-minute demo running order, a Swagger reference and a troubleshooting table.
+
+**Ground truth was gathered first, not written from memory.** Before drafting:
+started a real gateway, drove all seven views in headless Chromium and recorded
+each one's actual sections, stats, controls and buttons; ran four prompts through
+the Live check screen and captured the verdicts verbatim; and enumerated the
+rails per stage per direction (input 16/5/3 = 24; output 21/7/3 = 31).
+
+**What that gathering exposed — the most important thing in the guide.** On a
+fully provisioned host, an SSN, a card number, a prompt injection, a DAN
+jailbreak and profanity **all return `allow`**. Their findings carry
+`action: redact` or `action: flag`, and `_decide()` only blocks on
+`action: block` or on `unjudged`. That is correct OpenGuardrails v0.8 semantics —
+a redaction is not a refusal — but it means:
+
+- **`allow` does not mean "nothing found".** There are **four** outcomes, not
+  two: allow-clean, allow-with-redactions, block-by-detection, and
+  block-because-unjudged. The guide leads with this.
+- An integrating application that ignores `modifications.spans` **leaks the
+  SSN**. The gateway handed back the replacement text and the app threw it away.
+- On a bare host the same five prompts all `block` — for outcome 4, not because
+  anything was detected. Confusing the two makes a missing model file look like
+  working protection.
+
+The console already prints the distinction in a sentence under the verdict
+("*the block is the missing check, not a detection*"), which is why the guide
+teaches the reader to read that sentence rather than the big word above it.
+
+**Design decision:** the guide reuses the console's **own** palette — the
+cyan/violet/pink stage colours and the green/red/amber decision colours. A guide
+whose stage-1 swatch is a different cyan from the stage-1 chip on screen makes
+the reader stop and check whether they are looking at the same thing. The
+contents rail mirrors the console's left nav in the same order, so the guide's
+structure *is* the product's structure.
+
+### Commits from this session, in order
+
+| Commit | What |
+|---|---|
+| `449d9010` | The harm corpus — 11,369 records, 0 unmapped labels, and the Stage-1 finding |
+| `3b580790` | Configurable sample size: `/v1/corpus` in Swagger, a Corpus screen in the console |
+| `57db6917` | AGPL blocker closed; MEMORY.md brought current |
+| `6bf6a7d7` | The local model in both places: judge chain and guarded target |
+| `23376fa9` | Data-residency blocker closed; the corpus carve-out recorded |
+| `60cc0c7c` | The console field guide |
+
+**Suite at the end of the session: 1012 tests, `OK (skipped=4)`, and
+`simulate_provisioned.py` 0 failures / 0 errors.** Both configurations green.
+
+**Still outstanding, and none of it is code:**
+1. **One accountable owner per tenet** — seven names. The last Phase-1 blocker.
+2. **Rotate the API keys** pasted into the working session.
+3. **Re-run the 280-record baseline at Stage 1 + 2** on the provisioned machine.
+   The Stage-1-vs-Stage-1+2 difference is the single most persuasive artefact the
+   project has, and it can only be produced on a host with the model weights.
+4. **Confirm the target model id** — `qwen3-vl-8b-instruct` is marked UNVERIFIED
+   everywhere because nothing outside the VPN has ever spoken to that endpoint.
+   It flips to `model_id_verified: true` on its own once the endpoint's `/models`
+   listing confirms it.
+5. **The allowed/banned topic list** per application. `TopicScopeRail` is built
+   and tested but unmounted, because the list is a decision, not a download.
