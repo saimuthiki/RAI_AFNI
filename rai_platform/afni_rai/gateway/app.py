@@ -40,6 +40,13 @@ record to `VerdictStore`. This module wires them together, turns HTTP into a
   one error shape      `{code, message, details, request_id}` on every failure
                        path, with `x-request-id` echoed on every response.
 
+  the guarded passthrough
+                       `/v1/chat` is the same cascade run TWICE around a real
+                       model call: guard the prompt, call the target, guard the
+                       completion. The order is the product - see
+                       `passthrough.py`. Absent target configuration is a 503 on
+                       that endpoint alone; everything else here is unaffected.
+
 Versioning: the decision endpoints are under `/v1`. `/healthz` is unversioned
 because it describes the process, not the contract.
 """
@@ -69,15 +76,19 @@ from ..contract.models import (
 from ..registry import phases
 from ..registry.capabilities import CapabilityRegistry
 from ..warmup import warm_all
+from ..target import EndpointProbe, TargetClient, probe_timeout_from_env
+from ..target import client as target_env
+from ..target import from_env as target_from_env
 from ..tenets.accountability.audit import ORIGIN_LIVE, VerdictStore
 from ..tenets.accountability.policy import FailurePolicy
 from ..tenets.accountability.thresholds import ThresholdStore
 from . import providers
 from .corpus_api import corpus_router
 from .models import (
-    CoverageResponse, Error, GuardRequest, GuardResponse, HealthResponse,
-    RailsResponse,
+    ChatRequest, ChatResponse, CoverageResponse, Error, GuardRequest,
+    GuardResponse, HealthResponse, RailsResponse,
 )
+from .passthrough import Passthrough
 
 LOGGER = logging.getLogger("afni_rai.gateway")
 
@@ -87,6 +98,10 @@ LOGGER = logging.getLogger("afni_rai.gateway")
 # --------------------------------------------------------------------------- #
 ENV_REVEAL = "AFNI_REVEAL_SUBJECT"
 ENV_AUDIT_DB = "AFNI_AUDIT_DB"
+# Aliased from the target package rather than re-spelled, so the name in an
+# error message cannot drift from the name the loader actually reads.
+ENV_TARGET_BASE_URL = target_env.ENV_BASE_URL
+ENV_TARGET_MODEL = target_env.ENV_MODEL
 
 STAGE_LABELS = {
     1: "free, deterministic, every request",
@@ -225,16 +240,20 @@ STREAM_RESPONSE_EXAMPLE = (
 
 TAGS_METADATA = [
     {"name": "decisions", "description":
-     "Judge a GuardEvent. These are the only endpoints in the request path, and "
-     "the only ones that write to the audit store."},
+     "Judge a GuardEvent, or run a guarded passthrough. These are the only "
+     "endpoints in the request path, and the only ones that write to the audit "
+     "store. `/v1/guard` judges text you hand it; `/v1/chat` puts one guardrail "
+     "on each side of your model and calls it for you."},
     {"name": "introspection", "description":
      "What this gateway is running, what it covers, and what is missing. "
      "Read-only, no audit rows, safe to poll."},
 ]
 
 
-def _truthy(value: str | None) -> bool:
-    return (value or "").strip().lower() in ("1", "true", "yes", "on")
+# One definition of "is this env flag on", in providers. A second reading of
+# "true" that could diverge from the first is how a security flag ends up on in
+# one module and off in another.
+_truthy = providers.truthy
 
 
 def _rail_available(rail: Any) -> tuple[bool | None, str | None]:
@@ -310,6 +329,8 @@ class Gateway:
                  verdict_store: VerdictStore | None = None,
                  judge_provider: Any | None = None,
                  reveal_subject: bool | None = None,
+                 target: TargetClient | None = None,
+                 probe: bool = True,
                  env: dict[str, str] | None = None) -> None:
         env = os.environ if env is None else env
 
@@ -336,6 +357,31 @@ class Gateway:
             if judge_provider is None else judge_provider)
         mountable = [r for r in rails if r.stage is not Stage.OFFLINE]
         self.rails: list[Any] = providers.bind_judges(mountable, self.judge_provider)
+
+        # THE AI SYSTEM THIS GATEWAY GUARDS. Optional, and absent by default:
+        # with no target this is the judge-only gateway it has always been, and
+        # `/v1/chat` says so in the standard error shape rather than 500ing.
+        self.target = (target_from_env(env) if target is None else target)
+        self.target_probe: EndpointProbe = EndpointProbe(configured=False)
+        if self.target is not None:
+            self.target_probe = EndpointProbe(
+                configured=True, base_url=self.target.config.base_url,
+                model=self.target.config.model, detail="not probed")
+            if probe:
+                # ONCE, at construction, with a short timeout of its own, and
+                # never on the request path. `probe()` cannot raise - see
+                # target/client.py - because a model server that is down must
+                # not stop a guardrail gateway from booting. That is the same
+                # trade as a keyless judge provider being skipped rather than
+                # fatal.
+                self.target_probe = self.target.probe(probe_timeout_from_env(env))
+                LOGGER.log(
+                    logging.INFO if self.target_probe.reachable else logging.WARNING,
+                    "target probe: %s reachable=%s (%s) - model id %r is %s",
+                    self.target.config.base_url, self.target_probe.reachable,
+                    self.target_probe.detail, self.target.config.model,
+                    "VERIFIED by the endpoint's /models listing"
+                    if self.target_probe.model_id_verified else "UNVERIFIED")
 
         self.thresholds = threshold_store if threshold_store is not None else ThresholdStore()
         # The one hook a rail gets into per-tenant configuration. Without this the
@@ -584,6 +630,45 @@ class Gateway:
             "rendered": report.render(),
         }
 
+    def target_health(self) -> dict[str, Any]:
+        """The `target` block for `/healthz`: configured, reachable, and whether
+        the model id is anything more than a string somebody typed.
+
+        Reads the STARTUP probe rather than making a call. A health endpoint that
+        reached out per hit would make this gateway's liveness depend on a third
+        party's, and would point every monitoring poll at someone's inference
+        server.
+        """
+        if self.target is None:
+            return {
+                "configured": False,
+                "reachable": None,
+                "model_id_verified": False,
+                "api_key_configured": False,
+                "note": (f"no target configured: set {ENV_TARGET_BASE_URL} and "
+                         f"{ENV_TARGET_MODEL} to enable /v1/chat. Every other "
+                         "endpoint works without them."),
+            }
+        config = self.target.config
+        probe = self.target_probe
+        verified = bool(probe.model_id_verified)
+        return {
+            "configured": True,
+            "base_url": config.base_url,
+            "model": config.model,
+            "provider": self.target.provider,
+            "timeout_s": config.timeout,
+            "api_key_configured": config.api_key_configured,
+            "reachable": probe.reachable,
+            "model_id_verified": verified,
+            "probe": probe.to_dict(),
+            "note": ("model id VERIFIED against the endpoint's own /models "
+                     "listing at startup" if verified else
+                     f"UNVERIFIED: {config.model!r} is configuration, not a "
+                     "fact - no response from this endpoint has confirmed it. "
+                     "The startup probe is not repeated per healthz hit."),
+        }
+
     def health(self) -> dict[str, Any]:
         rows = self.rail_rows()
         unavailable = [f"{r['name']}: {r['unavailable_reason']}"
@@ -596,9 +681,17 @@ class Gateway:
             describe = getattr(self.judge_provider, "describe", None)
             judge = describe() if callable(describe) else {
                 "provider": getattr(self.judge_provider, "name", "custom")}
+        target = self.target_health()
+        # A CONFIGURED target that did not answer the startup probe is a
+        # degradation: `/v1/chat` will return `target_error` until it comes back.
+        # An ABSENT target is not - a judge-only gateway is a supported
+        # deployment, and reporting it as degraded would make the honest state
+        # indistinguishable from the broken one.
+        target_down = bool(target["configured"]) and target["reachable"] is False
         return {
             "status": "degraded" if (self.problems or unavailable
-                                     or self.judge_providers_skipped) else "ok",
+                                     or self.judge_providers_skipped
+                                     or target_down) else "ok",
             "protocol_version": PROTOCOL_VERSION,
             "rails_mounted": len(self.rails),
             "tenets_not_loaded": list(self.problems),
@@ -609,6 +702,7 @@ class Gateway:
             "judge_provider": judge,
             "reveal_subject": self.reveal_subject,
             "audit_db": self.audit_db,
+            "target": target,
         }
 
 
@@ -727,6 +821,109 @@ def _router(gateway: Gateway) -> APIRouter:
                 "x-accel-buffering": "no",
                 "connection": "keep-alive",
             })
+
+    def _target_or_error(request: Request) -> JSONResponse | None:
+        """The one place `/v1/chat` and `/v1/chat/stream` refuse to run.
+
+        503 rather than 500, in the standard `Error` shape, naming the two
+        variables to set. A gateway with no target is misconfigured for THIS
+        endpoint and perfectly configured for every other one, so the failure has
+        to be legible enough that nobody goes looking for a bug in the cascade.
+        """
+        if gateway.target is not None:
+            return None
+        return JSONResponse(
+            status_code=503,
+            content=Error(
+                code="target_not_configured",
+                message=(f"no AI system is configured for this gateway to call: "
+                         f"set {ENV_TARGET_BASE_URL} and {ENV_TARGET_MODEL}. "
+                         f"/v1/guard and every introspection endpoint are "
+                         f"unaffected."),
+                details={
+                    "set": [ENV_TARGET_BASE_URL, ENV_TARGET_MODEL],
+                    "optional": [target_env.ENV_API_KEY, target_env.ENV_TIMEOUT,
+                                 target_env.ENV_MAX_TOKENS],
+                    "example": {ENV_TARGET_BASE_URL: "http://127.0.0.1:8000/v1",
+                                ENV_TARGET_MODEL: "your-model-id"},
+                    "why_503": ("this is a configuration gap on one endpoint, "
+                                "not a failed decision - no guardrail was "
+                                "bypassed and nothing was sent anywhere"),
+                },
+                request_id=getattr(request.state, "request_id", None),
+            ).model_dump(exclude_none=True))
+
+    @router.post("/v1/chat", response_model=ChatResponse, tags=["decisions"],
+                 summary="Guarded passthrough: guard the prompt, call the model, "
+                         "guard the answer",
+                 response_description=(
+                     "All four steps of one interaction. `completion` is present "
+                     "only when both guardrails allowed it; a blocked completion "
+                     "is not in the response under any key."),
+                 responses={
+                     503: {"model": Error, "description":
+                           "No target is configured. `details.set` names the two "
+                           "environment variables to set. Every other endpoint "
+                           "is unaffected."}})
+    def chat(body: ChatRequest, request: Request) -> JSONResponse:
+        """Guard the prompt, call the target, guard the completion - in that order.
+
+        THE ORDER IS THE PRODUCT. A prompt the input guardrail blocks is never
+        sent to the model, so it costs nothing: the response says
+        `target.called: false` and `tokens_saved: true`, and there is no code
+        path from that branch to the target client. A completion the output
+        guardrail blocks never reaches the caller: it is absent from the
+        response, the SSE frames, the log lines and the audit row, which stores
+        fingerprints and has no column a completion could occupy.
+
+        Every failure resolves the same way - fail closed. If either cascade
+        raises, that guardrail returns a BLOCK (with `degraded` naming it, and
+        an `x-afni-degraded` header). If the target errors or times out, the
+        decision is `target_error` with no completion. HTTP 200 in all four
+        cases: read `decision`, not the status code.
+        """
+        refusal = _target_or_error(request)
+        if refusal is not None:
+            return refusal
+        payload = Passthrough(gateway).run(body)
+        headers = ({"x-afni-degraded": "; ".join(payload["degraded"])}
+                   if payload["degraded"] else None)
+        return JSONResponse(payload, headers=headers)
+
+    @router.post("/v1/chat/stream", tags=["decisions"],
+                 summary="Guarded passthrough, streamed one guard stage at a time",
+                 response_class=StreamingResponse,
+                 responses={
+                     200: {"description":
+                           "`text/event-stream`. Input `stage` frames (each with "
+                           "`phase: input`), then `target_start`, then "
+                           "`target_done` or `target_error`, then output `stage` "
+                           "frames (`phase: output`), then `final`, then `done`. "
+                           "A client that never sees `target_start` knows the "
+                           "prompt was refused before anything was spent. "
+                           "`target_done` deliberately carries no text: the "
+                           "completion appears only in `final`, and only if the "
+                           "output guardrail allowed it.",
+                           "content": {"text/event-stream": {
+                               "schema": {"type": "string"}}}},
+                     503: {"model": Error, "description":
+                           "No target is configured."}})
+    def chat_stream(body: ChatRequest, request: Request) -> Response:
+        """The same four steps, as they happen.
+
+        The frames are not a replay: each guard's stage frames are produced by
+        `Cascade.evaluate_iter` suspending after that stage, and `target_start`
+        is emitted before the POST to the model rather than after it.
+        """
+        refusal = _target_or_error(request)
+        if refusal is not None:
+            return refusal
+        return StreamingResponse(
+            Passthrough(gateway).stream(body),
+            media_type="text/event-stream",
+            headers={"cache-control": "no-cache",
+                     "x-accel-buffering": "no",
+                     "connection": "keep-alive"})
 
     @router.get("/v1/coverage", tags=["introspection"], response_model=CoverageResponse,
                 summary="Capability coverage, with the gaps counted")

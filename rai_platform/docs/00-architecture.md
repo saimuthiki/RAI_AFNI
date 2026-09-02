@@ -75,6 +75,74 @@ BLOCKED after 1 cascade stage(s) in 0ms
 
 Before the direction gate existed, the first of those was a false positive.
 
+### 1b · Two ways to wire it: you call twice, or the gateway calls for you
+
+Everything above describes `POST /v1/guard`, which judges text you hand it. Your
+application makes the two calls and owns the model call in between. That is the
+integration to use when the AI system is yours and already deployed.
+
+`POST /v1/chat` is the same topology with the gateway holding the model call, so
+it is the gateway that sits in front of your model rather than beside it:
+
+| | `/v1/guard` (twice) | `/v1/chat` (once) |
+|---|---|---|
+| Who calls the model | your application | the gateway |
+| Calls you make | 2 | 1 |
+| Order enforced by | your code | the gateway |
+| Use it when | the AI system is yours and wired | you want the guardrail in front of a model, or you are demonstrating one |
+
+Four steps, and **the order is the product**:
+
+1. **Guard the prompt** — `kind: step/request`. If it blocks, **the target is
+   never called.** The response says `target.called: false` and
+   `tokens_saved: true`, and there is no code path from that branch to the
+   target client. A jailbreak refused here costs nothing.
+2. **Call the target** — one POST to `{AFNI_TARGET_BASE_URL}/chat/completions`,
+   no retry. A retry would bill twice for one interaction and could return an
+   answer the verdicts and the audit row are not about.
+3. **Guard the completion** — `kind: step/response`.
+4. **Withhold, or hand it over.** If the output guardrail blocks, the completion
+   is not in the response under any key, not in an SSE frame, not in a log line,
+   and not in the audit row — that store keeps fingerprints and has no column a
+   completion could occupy.
+
+Every failure resolves the same way — no unjudged text reaches the caller:
+
+| What failed | `decision` | Completion |
+|---|---|---|
+| input guardrail found something | `blocked_on_input` | never generated |
+| input cascade **raised** | `blocked_on_input` (`degraded` set) | never generated |
+| the target errored or timed out | `target_error` | none exists |
+| output guardrail found something | `blocked_on_output` | withheld |
+| output cascade **raised** | `blocked_on_output` (`degraded` set) | withheld |
+
+`POST /v1/chat/stream` emits the same four steps as Server-Sent Events: input
+`stage` frames (`phase: input`), then `target_start`, then `target_done`, then
+output `stage` frames (`phase: output`), then `final`, then `done`.
+`target_done` deliberately carries latency and token counts but **no text** — the
+completion exists there before the output guardrail has judged it, and streaming
+it at that point would deliver it a beat before the guard that can stop it.
+
+**Configuration** (`.env.example` carries the full contract):
+
+```
+AFNI_TARGET_BASE_URL=http://10.10.10.151:8506/v1
+AFNI_TARGET_MODEL=qwen3-vl-8b-instruct
+AFNI_TARGET_API_KEY=
+AFNI_TARGET_TIMEOUT=60
+```
+
+With `AFNI_TARGET_BASE_URL` unset, `/v1/chat` returns a 503 in the standard error
+shape naming the two variables to set, and `/v1/guard` plus every introspection
+endpoint work exactly as before. A judge-only gateway is a supported deployment,
+not a broken one.
+
+**UNVERIFIED.** Both ids above are configuration, not facts. The build
+environment cannot reach that address — it is private, and egress is proxied — so
+no call has ever confirmed the endpoint or the model id from here. `/healthz`
+reports `target.model_id_verified: false` and says `UNVERIFIED` in those words
+until the endpoint's own `/models` listing confirms it at startup.
+
 ---
 
 ## 2 · Stage ≠ Phase — the distinction that trips everyone

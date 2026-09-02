@@ -46,6 +46,15 @@ CONFIGURATION - AN ORDERED FALLBACK CHAIN
              GOOGLE_MODEL     [GOOGLE_API_KEY is accepted as a single-key alias]
     local    LOCAL_BASE_URL (required), LOCAL_MODEL, LOCAL_API_KEY (optional)
 
+    AFNI_JUDGE_PREFER_LOCAL  off (default) | true. When on, the local endpoint is
+                          probed ONCE at startup and, if it answers, `local` is
+                          moved - or inserted - at the front of the chain. It is
+                          opt-in because chain order decides which network the
+                          flagged content in a judge call travels to. The probe
+                          cannot block or fail a boot: an endpoint that is down
+                          leaves the configured order untouched. See
+                          `_prefer_local`.
+
 The chain is walked in order - every key of the first provider, then every key of
 the second - and the first link that ANSWERS wins. The full contract is in
 `.env.example`; these are the semantics that make it correct:
@@ -99,6 +108,10 @@ LOGGER = logging.getLogger("afni_rai.gateway.providers")
 # cannot drift.
 ENV_PROVIDER = "AFNI_JUDGE_PROVIDER"
 ENV_TIMEOUT = "AFNI_JUDGE_TIMEOUT"
+ENV_PREFER_LOCAL = "AFNI_JUDGE_PREFER_LOCAL"
+ENV_PREFER_LOCAL_TIMEOUT = "AFNI_JUDGE_PREFER_LOCAL_TIMEOUT"
+
+DEFAULT_PREFER_LOCAL_TIMEOUT = 2.0  # startup only; never on the request path
 
 DEFAULT_TIMEOUT = 20.0  # .env.example ships 20
 
@@ -122,6 +135,16 @@ SCORE_INSTRUCTION = (
 )
 
 _FLOAT_RE = re.compile(r"[-+]?\d*\.?\d+")
+
+
+def truthy(value: str | None) -> bool:
+    """Is this environment flag on?
+
+    The one definition in the gateway - `app.py` imports it rather than keeping a
+    second copy, because two readings of "true" that could diverge is exactly how
+    a security flag ends up on in one module and off in another.
+    """
+    return (value or "").strip().lower() in ("1", "true", "yes", "on")
 
 
 class JudgeUnavailable(RuntimeError):
@@ -227,8 +250,16 @@ def _parse_score(raw: str) -> float:
     return value
 
 
-def _timeout_from_env(default: float = DEFAULT_TIMEOUT) -> float:
-    raw = os.environ.get(ENV_TIMEOUT)
+def _timeout_from_env(default: float = DEFAULT_TIMEOUT,
+                      env: dict[str, str] | None = None) -> float:
+    """The per-judge-call timeout.
+
+    Takes the env explicitly so `from_env` reads the SAME mapping it was handed
+    for everything else - a test that injects a dict was previously overridden
+    here by the real process environment for this one value.
+    """
+    env = os.environ if env is None else env
+    raw = env.get(ENV_TIMEOUT)
     if not raw:
         return default
     try:
@@ -444,10 +475,16 @@ class JudgeChain:
 
     name = "chain"
 
-    def __init__(self, links: Sequence[tuple[JudgeProvider, str, int]]) -> None:
+    def __init__(self, links: Sequence[tuple[JudgeProvider, str, int]],
+                 prefer_local: "LocalPreference | None" = None) -> None:
         if not links:
             raise ValueError("a JudgeChain needs at least one link")
         self._links = list(links)
+        # How this order was arrived at, when AFNI_JUDGE_PREFER_LOCAL had a say.
+        # Reported by /healthz: chain order decides which network the flagged
+        # content in a judge call travels to, so "why is local first" has to be
+        # answerable without reading the boot log.
+        self.prefer_local = prefer_local
         # Per-call trail, per thread: the gateway serves requests on a threadpool
         # and one shared list would interleave two requests' attempts into one
         # unusable audit record.
@@ -485,7 +522,7 @@ class JudgeChain:
     def describe(self) -> dict[str, Any]:
         """What `/healthz` may safely say. No credential, no key length, no URL
         that could carry one."""
-        return {
+        described = {
             "provider": "chain",
             "chain": self.links,
             "models": [{"link": JudgeAttempt(name, index, False).link,
@@ -494,6 +531,9 @@ class JudgeChain:
             "model_id_verified": False,
             "attempts": self.counters,
         }
+        if self.prefer_local is not None:
+            described["prefer_local"] = self.prefer_local.to_dict()
+        return described
 
     # ----------------------------------------------------------------- score --
     def score(self, prompt: str, text: str) -> float:
@@ -604,6 +644,155 @@ def _links_for(name: str, env: dict[str, str], timeout: float
             for i, key in enumerate(keys)]
 
 
+@dataclass(frozen=True)
+class LocalPreference:
+    """What `AFNI_JUDGE_PREFER_LOCAL` did to the chain order, and why.
+
+    Recorded rather than merely logged, because the chain order decides WHERE
+    flagged content is sent for judging. A judge call ships the flagged text to
+    whoever serves it, so "did local actually win" is a data-residency question,
+    not a performance note, and `/healthz` has to be able to answer it.
+    """
+
+    enabled: bool
+    probed: bool = False
+    reachable: bool | None = None
+    base_url: str | None = None
+    model: str | None = None
+    inherited_from_target: bool = False
+    action: str = "disabled"
+    detail: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"enabled": self.enabled, "probed": self.probed,
+                "reachable": self.reachable, "base_url": self.base_url,
+                "model": self.model,
+                "inherited_from_target": self.inherited_from_target,
+                "action": self.action, "detail": self.detail}
+
+
+def _prefer_local(env: dict[str, str], names: list[str]
+                  ) -> tuple[dict[str, str], list[str], LocalPreference | None]:
+    """Opt-in: probe the local endpoint once and, if it answers, put it first.
+
+    Why an OPT-IN flag and not the default: chain order is a data-residency
+    decision. Silently reordering it would move the flagged content a judge call
+    carries onto a different network than the operator configured, which is
+    exactly the kind of change that must be typed out rather than inferred.
+
+    Why a PROBE and not a try-it-and-see: the chain already falls through a dead
+    link on the first request, but it does so per request, paying a connect
+    timeout each time before the paid provider answers. One probe at startup
+    turns that into one decision.
+
+    Why the probe CANNOT block the boot: `probe_endpoint` never raises and takes
+    a short timeout of its own (default 2 s, `AFNI_JUDGE_PREFER_LOCAL_TIMEOUT`).
+    A local endpoint that is down leaves the configured chain exactly as it was,
+    logs a warning, and the gateway serves - the same precedent as a keyless
+    provider being skipped rather than fatal.
+
+    When the endpoint answers, `local` is moved to the front, and INSERTED if it
+    was not in the chain at all. Inserting is the point of the flag: the operator
+    who sets it is saying "use the local model for judging whenever it is up",
+    and their `AFNI_JUDGE_PROVIDER` is the fallback list for when it is not.
+
+    `LOCAL_BASE_URL` is optional here alone: when it is unset and a target IS
+    configured, the local judge inherits the target's endpoint and model, since
+    that is the machine the operator just pointed the gateway at. The inheritance
+    is confined to this opt-in path - `_links_for` still requires
+    `LOCAL_BASE_URL` - and it is reported in `inherited_from_target` rather than
+    left to be discovered.
+    """
+    if not truthy(env.get(ENV_PREFER_LOCAL)):
+        return env, names, None
+
+    from ..target.client import (  # noqa: PLC0415 - startup path, lazy on purpose
+        ENV_API_KEY as TARGET_API_KEY,
+        ENV_BASE_URL as TARGET_BASE_URL,
+        ENV_MODEL as TARGET_MODEL,
+        probe_endpoint,
+    )
+
+    base_url = (env.get("LOCAL_BASE_URL") or "").strip()
+    model = (env.get("LOCAL_MODEL") or "").strip()
+    inherited = False
+    api_key = (_keys(env, "LOCAL_API_KEYS", "LOCAL_API_KEY") or [None])[0]
+    if not base_url:
+        base_url = (env.get(TARGET_BASE_URL) or "").strip()
+        model = model or (env.get(TARGET_MODEL) or "").strip()
+        api_key = api_key or (env.get(TARGET_API_KEY) or "").strip() or None
+        inherited = bool(base_url)
+
+    if not base_url:
+        LOGGER.warning(
+            "%s is on but neither LOCAL_BASE_URL nor %s is set, so there is no "
+            "local endpoint to prefer; the chain order is unchanged",
+            ENV_PREFER_LOCAL, TARGET_BASE_URL)
+        return env, names, LocalPreference(
+            enabled=True, action="no local endpoint configured",
+            detail=f"set LOCAL_BASE_URL or {TARGET_BASE_URL}")
+
+    timeout = DEFAULT_PREFER_LOCAL_TIMEOUT
+    raw = (env.get(ENV_PREFER_LOCAL_TIMEOUT) or "").strip()
+    if raw:
+        try:
+            timeout = float(raw) if float(raw) > 0 else timeout
+        except ValueError:
+            LOGGER.warning("%s=%r is not a number; using %.1fs",
+                           ENV_PREFER_LOCAL_TIMEOUT, raw, timeout)
+
+    probe = probe_endpoint(base_url, model=model, api_key=api_key,
+                           timeout=timeout)
+    if not probe.reachable:
+        LOGGER.warning(
+            "%s is on but the local endpoint %s did not answer (%s); leaving the "
+            "chain as configured: %s. The gateway serves either way - a local "
+            "endpoint that is down must not stop it booting.",
+            ENV_PREFER_LOCAL, base_url, probe.detail, ",".join(names) or "empty")
+        return env, names, LocalPreference(
+            enabled=True, probed=True, reachable=False, base_url=base_url,
+            model=model or None, inherited_from_target=inherited,
+            action="left the chain unchanged", detail=probe.detail)
+
+    if not model:
+        # The link will be built with DEFAULT_LOCAL_MODEL, which is a guess and
+        # documented as one. Said out loud here because the symptom otherwise is
+        # every Stage-3 judge call 404ing against the endpoint that was just
+        # confirmed to be up, which reads as a platform fault rather than a
+        # missing variable.
+        LOGGER.warning(
+            "%s put %s at the front of the judge chain but no LOCAL_MODEL (or "
+            "%s) is set, so judge calls will use the UNVERIFIED default %r - set "
+            "the model id this endpoint actually serves",
+            ENV_PREFER_LOCAL, base_url, TARGET_MODEL, DEFAULT_LOCAL_MODEL)
+
+    action = ("moved to the front" if "local" in names
+              else "inserted at the front")
+    reordered = ["local"] + [name for name in names if name != "local"]
+    if inherited:
+        # A COPY. Mutating the caller's env - which is `os.environ` in the
+        # default case - would make a chain-ordering decision leak into every
+        # other reader of the process environment.
+        env = {**env, "LOCAL_BASE_URL": base_url}
+        if model:
+            env["LOCAL_MODEL"] = model
+        if api_key:
+            env["LOCAL_API_KEY"] = api_key
+    LOGGER.info(
+        "%s: the local endpoint %s answered (%s), so `local` was %s of the judge "
+        "chain: %s -> %s. Reason: judge calls send the FLAGGED CONTENT to "
+        "whichever provider serves them, and local is the only one that keeps it "
+        "on this network.%s",
+        ENV_PREFER_LOCAL, base_url, probe.detail, action,
+        ",".join(names) or "empty", ",".join(reordered),
+        f" LOCAL_BASE_URL was unset, so it inherited {TARGET_BASE_URL}."
+        if inherited else "")
+    return env, reordered, LocalPreference(
+        enabled=True, probed=True, reachable=True, base_url=base_url,
+        model=model or None, inherited_from_target=inherited, action=action,
+        detail=probe.detail)
+
+
 def from_env(env: dict[str, str] | None = None,
              skipped: list[str] | None = None) -> JudgeProvider | None:
     """Build the configured chain, or None.
@@ -627,6 +816,15 @@ def from_env(env: dict[str, str] | None = None,
     raw = (env.get(ENV_PROVIDER) or "").strip().lower()
     names = [part.strip() for part in raw.split(",") if part.strip()]
     names = [n for n in names if n not in DISABLED_NAMES]
+
+    # BEFORE the empty check and before any link is built, because this decides
+    # the ORDER links are built in - and an operator who set the flag with an
+    # empty AFNI_JUDGE_PROVIDER has still said "judge locally when local is up",
+    # so a reachable local endpoint stands up a local-only chain rather than
+    # nothing. A local endpoint that does not answer leaves every path below
+    # exactly as it was.
+    env, names, preference = _prefer_local(env, names)
+
     if not names:
         LOGGER.info("no judge provider configured (%s unset or none): every "
                     "Stage-3 judge rail will report unjudged, which fails closed",
@@ -643,7 +841,7 @@ def from_env(env: dict[str, str] | None = None,
         # config mistake rather than extra resilience.
         raise ValueError(f"{ENV_PROVIDER}={raw!r} repeats a provider")
 
-    timeout = _timeout_from_env()
+    timeout = _timeout_from_env(env=env)
     links: list[tuple[JudgeProvider, str, int]] = []
     skipped = [] if skipped is None else skipped
     for name in names:
@@ -662,7 +860,7 @@ def from_env(env: dict[str, str] | None = None,
                      ENV_PROVIDER, raw, "; ".join(skipped))
         return None
 
-    chain = JudgeChain(links)
+    chain = JudgeChain(links, prefer_local=preference)
     LOGGER.info("judge chain configured: %s (model ids NOT verified against a "
                 "live endpoint)", " -> ".join(chain.links))
     return chain

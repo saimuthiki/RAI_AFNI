@@ -291,6 +291,142 @@ class DoneEvent(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
+# The guarded passthrough - /v1/chat                                           #
+# --------------------------------------------------------------------------- #
+class ChatMessage(BaseModel):
+    """One chat message, in the `openai.chat` shape.
+
+    `content` accepts the multimodal list form as well as a plain string,
+    because the target may be a vision-language model and rejecting the list
+    would reject a valid request. Every string inside it is walked and judged by
+    the input guardrail either way - the payload walker does not care how deeply
+    nested a string is.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # No `tool` role: a tool message needs `tool_call_id`, which `extra=forbid`
+    # would reject - so accepting the role would advertise a shape that cannot
+    # actually be sent.
+    role: Literal["system", "user", "assistant"]
+    content: str | list[dict[str, Any]]
+    name: str | None = None
+
+
+class ChatRequest(BaseModel):
+    """A prompt for the guarded passthrough, plus the guard context.
+
+    The MODEL IS NOT A REQUEST FIELD. It comes from `AFNI_TARGET_MODEL` on the
+    server, for the same reason `AFNI_REVEAL_SUBJECT` is not a request field: a
+    caller who can choose the model can route around whichever model the
+    deployment was reviewed and priced against.
+
+    `client_facing` defaults to true, so a caller who omits it gets fail-closed
+    behaviour on both guardrails rather than opting out of it by accident.
+    """
+
+    model_config = ConfigDict(extra="forbid", json_schema_extra={
+        "example": {
+            "messages": [{"role": "user", "content": "Explain what a guardrail "
+                                                     "gateway does, in two lines."}],
+            "tenant": "acme",
+            "client_facing": True,
+        }})
+
+    messages: list[ChatMessage] = Field(min_length=1, description=(
+        "The conversation to send to the target, judged as a `step/request` "
+        "before it is sent."))
+    step_id: str | None = Field(default=None, description=(
+        "Binds both halves of this interaction in the audit trail. Minted here "
+        "when absent, and the SAME id is used for the input and output "
+        "verdicts."))
+    agent_id: str | None = None
+    agent_type: str | None = None
+    agent_workspace: str | None = None
+    agent_user: str | None = None
+    integration: str | None = Field(default=None, max_length=128)
+    client_facing: bool = True
+    tenant: str | None = None
+    project: str | None = None
+
+    def messages_as_dicts(self) -> list[dict[str, Any]]:
+        """The messages as plain dicts, ready for both the guard payload and the
+        target request body. `exclude_none` so an unset `name` is not sent to a
+        server that would reject a null."""
+        return [message.model_dump(exclude_none=True) for message in self.messages]
+
+
+class TargetCallModel(BaseModel):
+    """What the target did, or why it was not asked."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    called: bool = Field(description=(
+        "False when the input guardrail blocked the prompt. That is the cost "
+        "saving, stated rather than implied."))
+    model: str | None = None
+    provider: str | None = None
+    base_url: str | None = None
+    latency_ms: int | None = None
+    usage: dict[str, Any] | None = Field(default=None, description=(
+        "The target's own token counters, copied out as INTEGERS ONLY. Not "
+        "tidiness: `usage` is a dict the target server controls, and a blocked "
+        "completion must not be able to travel out inside it."))
+    model_id_verified: bool = Field(default=False, description=(
+        "True only when the endpoint echoed back the model id that was asked "
+        "for. False means UNVERIFIED."))
+    error: dict[str, Any] | None = Field(default=None, description=(
+        "kind, message, status and exception TYPE. Never a URL and never a "
+        "credential."))
+    not_called_because: str | None = None
+
+
+class ChatResponse(BaseModel):
+    """All four steps of one guarded interaction, in one object.
+
+    The shape is the same whichever way the interaction went, so a console can
+    render the whole journey without branching on the decision first.
+
+    `completion` is the only key that ever carries model text, and it is null on
+    every decision except `allowed`. When the output guardrail blocks, the text
+    is not in this object, not in the SSE frames, not in the log and not in the
+    audit row - the audit store keeps fingerprints and has no column it could go
+    into.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    decision: Literal["allowed", "blocked_on_input", "blocked_on_output",
+                      "target_error"]
+    step_id: str
+    note: str = Field(description="One sentence naming what happened, and why.")
+    refusal: str | None = Field(default=None, description=(
+        "The neutral refusal to show the caller. Names no rail, no category and "
+        "no matched value: a refusal that explains itself is an oracle for "
+        "probing the guardrail. The detail is in the verdicts next to it."))
+    input_verdict: VerdictModel | None = None
+    input_explanation: ExplanationModel | None = None
+    output_verdict: VerdictModel | None = Field(default=None, description=(
+        "Null when the output guardrail never ran - the prompt was blocked, or "
+        "the target did not answer."))
+    output_explanation: ExplanationModel | None = None
+    target: TargetCallModel
+    completion: str | None = Field(default=None, description=(
+        "The model's text, present ONLY when both guardrails allowed it."))
+    tokens_saved: bool = Field(description=(
+        "True when the target was never called, so this interaction cost no "
+        "target tokens. A prompt refused on the way in is the cheapest one "
+        "there is."))
+    timing_ms: dict[str, int | None] = Field(description=(
+        "input_guard, target, output_guard, total - so the cost of guarding is "
+        "visible next to the cost of generating."))
+    degraded: list[str] = Field(default_factory=list, description=(
+        "Non-empty when a guardrail failed closed on an exception rather than a "
+        "finding. The decision is still a block; this says the block was a "
+        "failure and not a judgement."))
+
+
+# --------------------------------------------------------------------------- #
 # Read-only introspection endpoints                                            #
 # --------------------------------------------------------------------------- #
 class RailInfo(BaseModel):
@@ -355,6 +491,44 @@ class DependencyStatus(BaseModel):
     powers: str
 
 
+class TargetHealth(BaseModel):
+    """What `/healthz` says about the AI system the gateway guards.
+
+    `reachable` is deliberately three-valued. None means "not probed" - no
+    target is configured, so nobody asked - which is a different fact from
+    "probed and did not answer". Rendering that as `false` would report an
+    outage on a gateway that is working exactly as configured.
+
+    The probe happens ONCE, at startup. `/healthz` reports what it found rather
+    than repeating it, because a liveness endpoint that reaches out to a third
+    party turns every monitoring poll into traffic against someone's inference
+    server, and makes this gateway's health depend on theirs.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    configured: bool = Field(description=(
+        "False when AFNI_TARGET_BASE_URL (or AFNI_TARGET_MODEL) is unset. "
+        "`/v1/chat` then returns a 503 in the standard error shape and every "
+        "other endpoint is unaffected."))
+    base_url: str | None = None
+    model: str | None = None
+    provider: str | None = None
+    timeout_s: float | None = None
+    api_key_configured: bool = Field(default=False, description=(
+        "Whether a credential is set. Never the credential, and never its "
+        "length - a length is a hint."))
+    reachable: bool | None = Field(default=None, description=(
+        "From the startup probe. None means not probed."))
+    model_id_verified: bool = Field(default=False, description=(
+        "True only if the endpoint's own /models listing contained this id. "
+        "False means UNVERIFIED - the id is configuration, not a fact."))
+    probe: dict[str, Any] | None = Field(default=None, description=(
+        "The startup probe result: status, latency, and how many model ids the "
+        "endpoint listed. Never a credential."))
+    note: str = ""
+
+
 class HealthResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -385,3 +559,6 @@ class HealthResponse(BaseModel):
         "only be set by the AFNI_REVEAL_SUBJECT environment variable, never by "
         "a request."))
     audit_db: str
+    target: TargetHealth | None = Field(default=None, description=(
+        "The AI system this gateway guards, if one is configured. Absent on a "
+        "judge-only deployment."))

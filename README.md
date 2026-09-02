@@ -759,10 +759,12 @@ python3 -c "import json;print(json.dumps(json.load(open('rai_platform/samples/te
 |---|---|---|
 | `/v1/guard` | POST | verdict + explanation for one `GuardEvent` |
 | `/v1/guard/stream` | POST | the same, as Server-Sent Events, one frame per cascade stage |
+| `/v1/chat` | POST | **guarded passthrough** — guard the prompt, call your model, guard the answer |
+| `/v1/chat/stream` | POST | the same four steps, as Server-Sent Events |
 | `/v1/coverage` | GET | the 65-capability report in five states |
 | `/v1/phases` | GET | the roadmap cross-referenced against what is built |
 | `/v1/rails` | GET | every rail with stage, mechanism, source repo, evidence |
-| `/healthz` | GET | liveness, rail count, configured judge providers |
+| `/healthz` | GET | liveness, rail count, configured judge providers, target reachability |
 
 ### Step 6 · Watch it stream
 
@@ -829,10 +831,49 @@ well as a true positive. All values are synthetic.
 | **Roadmap** | Phase 1/2/3 against what is actually wired, including the unlinkable list |
 | **Frameworks** | the 23 reviewed repos, their verdicts, and where each one landed |
 
+### Step 8b · Let the gateway call your model — `/v1/chat`
+
+Two ways to wire this in. `/v1/guard` judges text you hand it and your
+application owns the model call; `/v1/chat` holds the model call itself, so the
+gateway sits *in front of* your model rather than beside it. Set the target:
+
+```
+AFNI_TARGET_BASE_URL=http://your-endpoint/v1
+AFNI_TARGET_MODEL=your-model-id
+AFNI_TARGET_API_KEY=            # optional; a local server usually has none
+AFNI_TARGET_TIMEOUT=60
+```
+
+```bash
+curl -s localhost:8000/v1/chat -H 'content-type: application/json' \
+     -d '{"messages":[{"role":"user","content":"what does a guardrail do?"}]}' \
+  | python3 -m json.tool
+```
+
+One response, all four steps — and **the order is the product**:
+
+1. guard the prompt. If it blocks, **the target is never called**: the response
+   says `target.called: false` and `tokens_saved: true`. A refused prompt costs
+   nothing, which is the cheapest jailbreak defence there is.
+2. call the target — one POST, no retry.
+3. guard the completion.
+4. if that blocks, the completion is **withheld**: absent from the response
+   under any key, from the SSE frames, from the log, and from the audit row.
+
+`decision` is one of `allowed`, `blocked_on_input`, `blocked_on_output`,
+`target_error`, and every failure — including either cascade raising — resolves
+to "no unjudged text reaches the caller". With no target configured, `/v1/chat`
+returns a 503 naming the two variables to set and nothing else changes.
+
+Model ids are **UNVERIFIED** until the endpoint's own `/models` listing confirms
+one at startup; `curl -s localhost:8000/healthz | python3 -m json.tool` reports
+that under `target`.
+
 ### Step 9 · Wire it into an application
 
 Call `/v1/guard` twice: once on the prompt before it reaches the model, once on
-the response before it reaches a person. Set `client_facing: true` for anything a
+the response before it reaches a person. (Or call `/v1/chat` once and let the
+gateway own the order — Step 8b.) Set `client_facing: true` for anything a
 customer will see — that is the flag that turns on fail-closed. Set
 `tenant` if you have per-tenant thresholds configured.
 
@@ -905,6 +946,7 @@ that reaches a commit is public and permanent, and rotation is the only remedy.
 
 ```
 AFNI_JUDGE_PROVIDER=openai,gemini
+AFNI_JUDGE_PREFER_LOCAL=false  # true: probe local once at boot, judge there first
 OPENAI_API_KEYS=key1,key2      # comma-separated, tried in order
 GOOGLE_API_KEYS=key1
 LOCAL_BASE_URL=                # put `local` first to prefer it
@@ -921,7 +963,29 @@ client-facing traffic. There is no guessed-score fallback anywhere in this
 platform. Logs record the key *index*, never the key.
 
 A local endpoint is the only option that keeps flagged content on your own
-network — a judge call sends the flagged text to whoever serves it.
+network — a judge call sends the flagged text to whoever serves it. That is why
+`AFNI_JUDGE_PREFER_LOCAL` is opt-in rather than automatic: it changes whose
+network that content crosses. When it is on, the local endpoint is probed once at
+startup and moved to the front of the chain if it answers; a probe that fails
+leaves the configured order alone and never delays or fails the boot, and
+`/healthz` reports what it decided under `judge_provider.prefer_local`.
+
+### The target — the AI system the gateway guards
+
+```
+AFNI_TARGET_BASE_URL=          # blank: /v1/chat returns 503, nothing else changes
+AFNI_TARGET_MODEL=             # required with the base URL; never guessed
+AFNI_TARGET_API_KEY=           # optional; only ever an Authorization header
+AFNI_TARGET_TIMEOUT=60         # a generation is slower than a judge call
+AFNI_TARGET_MAX_TOKENS=        # optional cap, omitted when blank
+AFNI_TARGET_PROBE_TIMEOUT=2    # the startup reachability probe only
+```
+
+The key is never logged, never in an error body, and never in `/healthz`, which
+reports the boolean `api_key_configured` and not the key's length. Token counters
+are copied out of the target's response as integers only — `usage` is a dict the
+target server controls, and a blocked completion must not have a channel out
+inside it.
 
 ### Thresholds
 
