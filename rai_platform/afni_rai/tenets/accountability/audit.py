@@ -3,7 +3,7 @@
 The verdict store: every decision, live or offline, in one schema.
 
 The deck's request-flow slide ends every branch - including delivery - at a
-single box (`knowledge/request-flow.md:44-46`):
+single box (`knowledge/request-flow.md` §"The flow", the AUDIT STORE box):
 
     AUDIT STORE - every verdict, one schema
     findings . severity . score . redaction spans . OpenTelemetry trace
@@ -77,7 +77,7 @@ FORBIDDEN_FINDING_FIELDS = ("subject",)
 
 # Origin is a documented string vocabulary rather than an Enum, because the same
 # record shape has to accept a value written by a CI job that does not import this
-# package. "Same record shape everywhere" (request-flow.md:60-61) only holds if an
+# package. "Same record shape everywhere" (request-flow.md §'Also true') only holds if an
 # offline tool can produce a valid row without a dependency on the gateway.
 ORIGIN_LIVE = "live"          # the request path
 ORIGIN_OFFLINE = "offline"    # garak / promptfoo / PyRIT in CI

@@ -1180,3 +1180,90 @@ rendering the section in a browser and looking at it, not by any check.
   unstyled card head with white text on white.
 - Deck and HTML both carry the word "phase" exactly where intended: slide 75's
   "there is no 30 / 60 / 90-day rollout" and the HTML's "One build, no phases" heading.
+
+## 2026-09-03 — Rail directions audited; request-flow.md is now generated
+
+AFNI's question: *"For the input rail You had mentioned few of the cheques. And it is
+different from the List of Cheques that is there in the Output rails … most of the
+Whatever the cheque that you have on the input trails That should be applicable for the
+output trails also, but For the output rails, it might be something other than that."*
+
+### The answer: their model is right, and it is already what the code does
+
+Audited all 32 mounted rails against their declared `direction`:
+
+| | Count |
+|---|---|
+| **BOTH** the prompt and the response | **23** |
+| prompt only | **1** |
+| response only | **8** |
+| **rails that run on the prompt** | **24** |
+| **rails that run on the response** | **31** |
+
+So the **output guardrail is the stricter of the two** — it runs everything the input
+guardrail runs, plus eight response-specific rails. Per stage: Stage 1 mounts 22 (16
+input / 21 output), Stage 2 mounts 7 (5 / 7), Stage 3 mounts 3 (3 / 3).
+
+Every one of the nine one-sided rails already carried a written reason in the source, and
+each is correct on inspection. `test_direction.py` pins the input-only and output-only
+sets as **exact sets**, so neither silent narrowing nor silent widening can pass.
+
+### So this was a DOCUMENTATION defect, not a code defect
+
+`knowledge/request-flow.md` listed **five example checks on the input side and five
+different ones on the output side**. It had been transcribed from a deck slide — a
+conceptual diagram — and never reconciled with the built platform. It was not merely
+sparse, it was **wrong in a way that inverted the meaning**:
+
+* it showed `toxicity classification` as output-only; in code all 6 content-safety rails
+  are BOTH
+* it showed `PII re-check` on the output side, implying PII is primarily an input
+  concern re-run later; in code all 8 privacy rails are BOTH
+* its input list omitted profanity, explicit content and fairness entirely, all of which
+  do run on prompts
+
+Reading it, "the two guardrails do unrelated jobs" is the *correct* inference from the
+text. AFNI read it exactly as written.
+
+### The fix: generate it, and test that it matches
+
+`rai_platform/scripts/build_request_flow.py` now writes the file from the live rail
+registry. Every count and every table row comes from `RAILS`, so the doc cannot drift
+from the code again. `__file__`-relative, verified to produce a byte-identical file from
+three different working directories, and idempotent.
+
+Four new tests in `test_direction.py` assert the doc against the code:
+
+1. the three headline counts are the real ones
+2. the per-side totals (24 / 31) are the real ones
+3. **every** one-sided rail is both named *and* given a reason — a table of names with no
+   reasons is what made the old version unreadable
+4. the four stale input-list strings (`· InvisibleText / unicode smuggling`,
+   `· Secrets (regex + entropy floor)`, `· PII re-check`, `· toxicity classification`)
+   are **absent** — i.e. the specific defect cannot come back
+
+### Two secondary fixes found on the way
+
+**`/v1/rails` understated itself.** `models.RailInfo` is `extra="forbid"` but never
+declared `direction`, while `Gateway.rail_rows()` emitted it. Harmless at runtime — those
+routes return `JSONResponse` directly, bypassing the model — but the **OpenAPI document
+told a client the field did not exist**, on the one endpoint whose whole job is to say
+which rails apply where. `RailInfo` now declares it, with the 23/32 fact in the field
+description. Verified: the schema's properties and an actual response row now carry the
+same eight keys.
+
+**A dozen code comments cited LINE NUMBERS into the file I had just rewritten** —
+`request-flow.md:37-41`, `:44-46`, `:55-57`, `:58-59`, `:60-61` in `remediation.py`,
+`audit.py`, `accountability/__init__.py` and `test_accountability.py`. Those became wrong
+the moment the file changed, and would break again on every regeneration. All converted
+to **section citations** (`§'Four things that are easy to get wrong'`, `§'Also true'`,
+`§four-outcomes`), and every cited section was checked to exist. A comment citing a wrong
+line is worse than a comment citing nothing.
+
+### What the new doc leads with
+
+The four-outcome table is repeated there, because it is the thing that misleads a reader
+of the console: `allow` **with redaction spans** is a delivery, and an application that
+ignores `modifications.spans` **leaks the value the gateway just caught**.
+
+**1014 tests, OK bare and provisioned.**

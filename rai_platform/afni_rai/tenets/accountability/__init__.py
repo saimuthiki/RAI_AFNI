@@ -179,7 +179,7 @@ REMEDIATION_ATTRIBUTION = _attr(
     stage=int(Stage.STAGE_1),
     evidence="guardrails-main/guardrails/types/on_fail.py:24-31 (eight values, "
              "no mask/allow/block) and :33-45; branches from "
-             "knowledge/request-flow.md:37-41,55-57",
+             "knowledge/request-flow.md §'Four things that are easy to get wrong'",
     capability="On-fail remediation actions")
 
 FRAMEWORK_ATTRIBUTION = _attr(

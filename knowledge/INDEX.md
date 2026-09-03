@@ -30,7 +30,7 @@ files; nothing indexes a PowerPoint.
 | [tenets.md](tenets.md) | per-tenet runtime stack, open-source vs cloud pick, and the principle |
 | [methodology.md](methodology.md) | per tenet, HOW each tool implements its check - mechanism, cost, latency class, cascade stage |
 | [infosys-vs-nemo.md](infosys-vs-nemo.md) | why NeMo is the backbone and what to carry over from Infosys |
-| [request-flow.md](request-flow.md) | the live request path and the four mitigation branches |
+| [request-flow.md](request-flow.md) | **generated** — which of the 32 rails run on the prompt, the response, or both, and the four outcomes |
 | [dev-vs-test-loop.md](dev-vs-test-loop.md) | the offline red-team/CI loop and its four hand-offs |
 | [build-plan.md](build-plan.md) | every work item, unphased, with honest build status |
 | [open-questions.md](open-questions.md) | vendor-risk and unresolved items still blocking the build |
