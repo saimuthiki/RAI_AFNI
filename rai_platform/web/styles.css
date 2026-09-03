@@ -2013,3 +2013,64 @@ td .err { color: var(--hazard-ink); font-size: var(--t-eyebrow); }
   box-shadow: 0 -8px 18px -10px rgb(0 0 0 / 55%);
 }
 .saveresult:not(:empty) { margin-bottom: var(--sp-5); }
+
+/* ==========================================================================
+   BEFORE AND AFTER  —  the guardrails-off vs guardrails-on ladder
+
+   The bar is the point of this section: three rungs whose fills shrink is a
+   claim a viewer reads in one glance, where three percentages is a claim they
+   have to assemble. The `off` rung's fill is deliberately a different treatment
+   from the others - it is a definition rather than a measurement, and giving it
+   the same solid fill as a measured rung would flatten that distinction.
+   ========================================================================== */
+.beforeafter { display: flex; flex-direction: column; gap: var(--sp-3); }
+.bacontrols {
+  display: flex; gap: var(--sp-4); align-items: flex-end; flex-wrap: wrap;
+  padding: var(--sp-4); background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--r-md);
+}
+.bacontrols .mediapick__opt { flex: 1 1 20rem; align-items: flex-start; }
+.baout:not(:empty) { margin-top: var(--sp-3); }
+.bares { display: flex; flex-direction: column; gap: var(--sp-4); }
+
+.ladder {
+  display: grid; gap: var(--sp-3); align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+}
+.rung {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4); background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+}
+.rung__head { display: flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap; }
+.rung__head strong { font: 600 var(--t-body)/1.3 var(--mono); }
+.rung__pct {
+  margin-left: auto; font: 700 var(--t-h3)/1 var(--mono);
+  font-variant-numeric: tabular-nums; color: var(--block-ink);
+}
+.rung__track {
+  height: 0.6rem; border-radius: 999px; overflow: hidden;
+  background: var(--surface-3);
+}
+.rung__fill { height: 100%; background: var(--block); }
+/* Hatched rather than solid: the off rung is a definition, not a measurement. */
+.rung__fill--off {
+  background: repeating-linear-gradient(
+    45deg, var(--block) 0 4px, var(--block-bed) 4px 8px);
+}
+.rung__label { margin: 0; font-size: var(--t-small); color: var(--ink-2); line-height: 1.5; }
+.rung__nums { margin: 0; display: grid; gap: 2px var(--sp-3); grid-template-columns: 1fr auto; }
+.rung__nums > div { display: contents; }
+.rung__nums dt { font: 500 var(--t-micro)/1.5 var(--mono); color: var(--ink-3); }
+.rung__nums dd {
+  margin: 0; font: 600 var(--t-micro)/1.5 var(--mono); text-align: right;
+  font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.rung__by { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.rung__by li { display: flex; gap: var(--sp-2); align-items: baseline; }
+.rung__by code { font: 500 var(--t-micro)/1.5 var(--mono); color: var(--ink-2); word-break: break-all; }
+.rung__by .findlist__score { margin-left: auto; }
+
+.pipeline { display: flex; flex-direction: column; gap: var(--sp-3); }
+.pipeline .notebox ul, .beforeafter .notebox ul { margin: var(--sp-2) 0 0 1.1rem; padding: 0; }
+.pipeline .notebox li, .beforeafter .notebox li { margin-bottom: var(--sp-2); line-height: 1.55; }

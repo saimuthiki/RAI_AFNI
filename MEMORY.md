@@ -2071,3 +2071,115 @@ anything; a console page refresh must not look like traffic in the audit trail.
 | `.gitignore` | `afni_thresholds.json` — deployment state, not source |
 
 **1137 tests pass.**
+
+---
+
+## 2026-09-03 — Guardrails off vs on: the demo number, and a real gap it exposed
+
+AFNI asked for a before-and-after they can show: *"how is the attack success rate ...
+guardrails turned off, or guardrails turned on ... I need the stats so that I can show
+that as a demo."*
+
+### It is a LADDER, not a pair
+
+"Off versus on" hides the question the build actually turns on — which tier is doing the
+work — so the same records run at every rung:
+
+| rung | rails | stopped | reached the model | median | p95 |
+|---|---|---|---|---|---|
+| off | 0 | 0 | **100 of 100** | — | — |
+| stage_1 | 23 | 1 | 99 (99.0%) | 0.48 ms | 0.99 ms |
+| stage_1_2 | 30 | 8 | 92 (92.0%) | 0.48 ms | 7.16 ms |
+
+*(100-record unstratified draw, seed 0, on a host missing 4 of 7 Stage-2 model rails —
+so the Stage-2 rung is a floor, and the tool says so by name.)*
+
+**The same records at every rung**, never a re-draw. On a corpus that is 42%
+content-safety a re-draw can move a rate by several points, which would make the delta
+between two rungs partly a sampling artefact.
+
+The delta is the number that justifies the cascade's ordering, and it reads well:
+Stage 2 costs **+0.00 ms at the median** because Stage 1 short-circuits almost
+everything, while adding 7 more stops. That is the free-first argument, measured.
+
+### The off arm is a definition, and the reason is NOT what I first wrote
+
+I wrote that an empty cascade would report 100% *blocked* — every path unjudged,
+fail-closed fires — and that this was why the off arm had to be asserted instead.
+**That was wrong, and the test caught it.**
+
+`unjudged` is populated only when a rail **runs** and cannot judge: the
+`if not result.judged` in `engine.py` sits inside the per-rail loop. With zero rails
+nothing is marked unjudged, fail-closed never fires, and the verdict is `allow`.
+
+So an empty cascade does model "no guardrail" correctly. The off arm is still asserted —
+running forty records to be told what "no guardrail" means is a number dressed up as an
+experiment — but the justification is now the true one, and the docstrings in `ab.py` and
+`corpus_api.py` were corrected.
+
+### The gap that assumption exposed
+
+**Fail-closed protects against a rail that tried and failed. It does not protect against a
+rail that was never mounted.** A gateway constructed with zero rails allows every message,
+silently.
+
+`Gateway.__init__` now logs **CRITICAL** when nothing is mounted at Stage 1. A log line
+rather than a refusal to boot, deliberately: the tests, the corpus tooling and any future
+adapter legitimately construct narrow gateways, and a hard raise would make "mount one
+rail and check it" impossible. **Whether it should be fatal is a policy decision for
+AFNI** — it is on the review list.
+
+### Latency: two wrong measurements before the right one
+
+1. **No warm-up at all** put spaCy's `en_core_web_lg` load inside the timed window and
+   reported the Stage-2 rung at **~44 ms a record**.
+2. **Warming on `records[0]`** did not fix it, because Stage 1 short-circuits most records
+   and never reaches the model rails — the load then landed on whichever later record
+   first escalated. Measured directly: **median 0.61 ms, max 4644 ms**, one record
+   carrying the entire lazy load.
+3. **Warming until an arm's top stage reaches its ceiling** (capped at 10 records) is what
+   ships, and the reported number is now the per-request cost in production where the
+   model is resident.
+
+And the report gives **median and p95**, not just the mean. The mean is the number a single
+four-second load distorts; the median alone would hide the tail an SLO has to survive.
+
+### End to end, with no model at all
+
+The corpus carries both halves of an attack: the prompt, and — for 519 records — the
+**affirmative target completion**, the answer a jailbroken model would have produced. So
+both guardrails can be measured against their own real input and composed:
+
+> an attack succeeds only if the **prompt** gets past the input guardrail **and** the
+> harmful **answer** gets past the output guardrail
+
+Measured at 20 records each side: prompt through **86.7%**, harmful answer through
+**93.3%**, end to end **80.9%** against 100% with no guardrail.
+
+Two assumptions, **returned in the payload** rather than left implicit: the model always
+complies (the worst case, and the right assumption for a claim about the *guardrail*
+rather than the model's alignment), and the two guardrails are independent (not obviously
+true). Pipeline mode draws two **direction-filtered** samples rather than splitting one,
+because only 519 of 11,369 records are output-direction — an unfiltered draw of 200 yields
+about eleven of them, and a rate on eleven records is exactly what somebody would quote.
+
+### What it measures, said everywhere it appears
+
+**Delivery, not compliance.** A prompt that reaches a well-aligned model and gets refused
+is counted here as *delivered*. That is the conservative direction, and the field is named
+`delivered_to_model` so the caveat travels with the number instead of living in a
+footnote.
+
+### Files
+
+| File | Change |
+|---|---|
+| `afni_rai/ab.py` | new — arms, ladder, deltas, warm-up, median/p95, pipeline estimate |
+| `afni_rai/gateway/corpus_api.py` | `POST /v1/corpus/compare` + `CompareRequest` |
+| `afni_rai/gateway/app.py` | CRITICAL when no Stage-1 rail is mounted |
+| `afni_rai/cli.py` | `compare` subcommand; exit code is records still delivered |
+| `web/views/beforeafter.js` | new — the ladder as bars, on the Corpus screen |
+| `web/views/corpus.js`, `api.js`, `styles.css` | section mounted, client, CSS |
+| `tests/test_ab.py` | new — 32 tests, including the empty-cascade assumption |
+
+**1169 tests pass.**

@@ -459,6 +459,33 @@ export async function guardStream(event, onEvent, { signal } = {}) {
 
 export const corpusSummary = () => getJSON('/v1/corpus', { timeout: 15000 });
 
+/** Guardrails off vs on, on the same records.
+ *
+ *  Not streamed, unlike a corpus run, and the reason is that this is a LADDER:
+ *  a partially-drawn ladder invites reading a Stage-2 rung that has not finished
+ *  against a Stage-1 rung that has, which is a comparison of two different
+ *  sample sizes. It arrives complete or not at all.
+ *
+ *  No timeout for the same reason `moderateMedia` has none: the ladder judges
+ *  every record two or three times, so a 200-record Stage-2 comparison is
+ *  minutes of held-open socket by design.
+ */
+export async function corpusCompare(body) {
+  const res = await fetch(url('/v1/corpus/compare'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
+  let parsed = null;
+  try { parsed = await res.json(); } catch { /* not JSON */ }
+  if (!res.ok) {
+    throw new Error(parsed && parsed.message
+      ? parsed.message
+      : `POST /v1/corpus/compare → HTTP ${res.status} ${res.statusText}`);
+  }
+  return parsed;
+}
+
 // ---------------------------------------------------------- topic policy --
 // The topic catalogue plus this deployment's selection. The catalogue is
 // compiled in; the selection lives in a JSON file on the server.

@@ -33,7 +33,7 @@ from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from .. import regression
+from .. import ab, regression
 from ..cascade.engine import Cascade
 
 # --------------------------------------------------------------------------- #
@@ -102,6 +102,45 @@ class RunRequest(BaseModel):
         "judge and is clamped to 2 unless the server sets "
         "`AFNI_CORPUS_ALLOW_CLOUD=1` - the response says so in `note` when it "
         "was clamped."))
+
+
+class CompareRequest(BaseModel):
+    """Guardrails off versus on, on the SAME records.
+
+    `extra="forbid"` for the same reason as `RunRequest`: this body decides how
+    much compute the server spends, and it spends it two or three times over.
+    """
+
+    model_config = ConfigDict(extra="forbid", json_schema_extra={
+        "examples": [
+            {"limit": 200, "seed": 0, "max_stage": 2},
+            {"per_tenet": 30, "seed": 0, "max_stage": 2},
+            {"limit": 150, "seed": 0, "max_stage": 2, "pipeline": True},
+            {"limit": 500, "seed": 0, "max_stage": 1},
+        ]})
+
+    limit: int = Field(default=200, ge=1, le=100_000, description=(
+        "How many records per arm. THE SAME records run through every arm, so "
+        "this is the sample size of the comparison, not a per-arm budget. Note "
+        "the cost multiplies: a Stage-2 ladder judges each record twice."))
+    per_tenet: int | None = Field(default=None, ge=1, le=5_000, description=(
+        "Stratified sample: N per tenet, INSTEAD of `limit`. Prefer this for a "
+        "headline the corpus's 42% content-safety skew has not shaped."))
+    tenet: str | None = None
+    owasp: str | None = None
+    seed: int = Field(default=0, description=(
+        "Deterministic, so the ladder is reproducible in a demo. A comparison "
+        "with a random sample is a comparison you cannot show twice."))
+    max_stage: int = Field(default=2, ge=1, le=3, description=(
+        "The TOP rung. `1` gives off vs Stage 1. `2` adds the Stage 1+2 rung. "
+        "`3` is clamped to 2 unless `AFNI_CORPUS_ALLOW_CLOUD=1` - "
+        "corpus/WARNING.md forbids sending these prompts to a paid judge."))
+    pipeline: bool = Field(default=False, description=(
+        "Also estimate END-TO-END attack success without a model, by running "
+        "the prompt half through the input guardrail and the corpus's 519 "
+        "affirmative target completions through the output guardrail, then "
+        "composing them. Costs a second ladder. Read the `assumes` field in "
+        "the result before quoting the number."))
 
 
 class TenetCount(BaseModel):
@@ -349,6 +388,104 @@ def corpus_router(gateway: Any) -> APIRouter:
             reveal=gateway.reveal_subject, note=note)
         return JSONResponse({"stats": result.stats, "rows": result.rows,
                              "note": result.note})
+
+    @router.post("/v1/corpus/compare", tags=["corpus"],
+                 summary="Guardrails off vs on, on the same records",
+                 responses={
+                     422: {"description":
+                           "The selection is larger than `max_sample`, or "
+                           "matches nothing."},
+                     503: {"description": "The corpus file is not present."}})
+    def corpus_compare(body: CompareRequest) -> JSONResponse:
+        """The before-and-after number, as a LADDER rather than a pair.
+
+        "Off versus on" hides the question that decides the build: which tier is
+        doing the work. So this runs the same records at every rung - no
+        guardrail, Stage 1, Stage 1+2 - and reports what each one buys over the
+        one below it, in records stopped and in milliseconds per record.
+
+        THE OFF ARM IS A DEFINITION, NOT A RUN. With no guardrail there is no
+        decision and every message reaches the model, so it is 100% by
+        construction and costs nothing - running records through an empty
+        cascade to be told what "no guardrail" means would be a number dressed
+        up as an experiment.
+
+        WHAT IT MEASURES: delivery. The fraction of known-harmful traffic that
+        reaches the model. It does NOT measure whether the model would then have
+        complied - a prompt that reaches a well-aligned model and is refused is
+        counted here as delivered. That is the conservative direction, which is
+        why the field is `delivered_to_model` and the caveat travels in
+        `measures`.
+
+        Every arm reports `rails_unavailable` and `measured`. An arm with a rail
+        that cannot judge on this host has a stop rate that is a FLOOR, and
+        `notes` says so by name - a Stage-2 delta measured with four of seven
+        model rails absent looks like a measurement and is not one.
+        """
+        try:
+            records = regression.load()
+        except FileNotFoundError as exc:
+            return _error("corpus_missing", str(exc), 503)
+
+        ceiling, note = regression.effective_max_stage(body.max_stage)
+
+        def pick(direction: str | None):
+            selection = regression.Selection(
+                limit=body.limit, per_tenet=body.per_tenet, tenet=body.tenet,
+                owasp=body.owasp, direction=direction, seed=body.seed,
+                max_stage=ceiling)
+            return selection, regression.select(records, selection)
+
+        try:
+            selection, chosen = pick(None)
+        except regression.SampleTooLarge as exc:
+            return _error("sample_too_large", str(exc), 422,
+                          {"cap": regression.max_sample()})
+        if not chosen:
+            return _error(
+                "empty_selection",
+                "no corpus records match that selection. Check `GET /v1/corpus` "
+                "for the tenet and OWASP values that exist.", 422,
+                {"tenet": body.tenet, "owasp": body.owasp})
+
+        resolve = gateway.thresholds.resolve_value
+        tier = regression.tier_label(regression.rails_for(ceiling, gateway.rails))
+        result = ab.compare(gateway.rails, chosen, selection.describe(), tier,
+                            max_stage=ceiling, resolve_threshold=resolve)
+        if note:
+            result.notes.append(note)
+
+        if body.pipeline:
+            # Two DIRECTION-FILTERED selections rather than splitting the sample
+            # above. Only 519 of 11,369 records are output-direction, so an
+            # unfiltered draw of 200 yields about eleven of them - too few to
+            # put a rate on, and a rate on eleven records is what somebody would
+            # quote.
+            try:
+                in_sel, ins = pick("input")
+                out_sel, outs = pick("output")
+            except regression.SampleTooLarge as exc:
+                return _error("sample_too_large", str(exc), 422,
+                              {"cap": regression.max_sample()})
+            if ins and outs:
+                in_ladder = ab.compare(gateway.rails, ins, in_sel.describe(),
+                                       tier, max_stage=ceiling,
+                                       resolve_threshold=resolve)
+                out_ladder = ab.compare(gateway.rails, outs, out_sel.describe(),
+                                        tier, max_stage=ceiling,
+                                        resolve_threshold=resolve)
+                result.pipeline = ab.pipeline_estimate(
+                    chosen, in_ladder.arms[-1], out_ladder.arms[-1])
+                result.pipeline["input_ladder"] = in_ladder.to_dict()["arms"]
+                result.pipeline["output_ladder"] = out_ladder.to_dict()["arms"]
+            else:
+                result.pipeline = {
+                    "available": False,
+                    "why": ("one of the two direction pools was empty under "
+                            "this filter, so there is nothing to compose."),
+                }
+
+        return JSONResponse(result.to_dict())
 
     @router.post("/v1/corpus/run/stream", tags=["corpus"],
                  response_class=StreamingResponse,

@@ -411,6 +411,29 @@ class Gateway:
         # threshold store would be write-only - configured, exposed, and never
         # consulted, which is Safe Zone's bug (admin.go:66 writes it,
         # guardrails.go:287 reads an env global instead).
+        # THE ONE THING FAIL-CLOSED DOES NOT COVER.
+        #
+        # `unjudged` is populated only when a rail RUNS and cannot judge, so
+        # with zero rails mounted nothing is unjudged, fail-closed never fires,
+        # and every message is ALLOWED. Verified, not assumed - the opposite was
+        # assumed first and was wrong (see test_ab.py). Fail-closed protects
+        # against a rail that tried and failed; it does not protect against a
+        # rail that was never mounted.
+        #
+        # A log line rather than a refusal to boot, and that is a deliberate
+        # trade rather than laziness: the tests, the corpus tooling and any
+        # future adapter legitimately construct narrow gateways, and a hard
+        # raise here would make "mount one rail and check it" impossible. So the
+        # gap is made loud at CRITICAL, which is the level a deployment's log
+        # shipper is already paging on, and whether it should be fatal is left
+        # to AFNI as a policy decision.
+        stage_1_mounted = sum(1 for r in self.rails if int(r.stage) == 1)
+        if not stage_1_mounted:
+            LOGGER.critical(
+                "no Stage-1 rail is mounted: this gateway will ALLOW every "
+                "message. `unjudged` will not catch this - it only fires for a "
+                "rail that ran and could not judge, so an empty mount is a "
+                "silent allow-all, not a fail-closed block.")
         self.cascade = Cascade(self.rails, resolve_threshold=self.thresholds.resolve_value)
         self.policy = FailurePolicy(self.thresholds)
 

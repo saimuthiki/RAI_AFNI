@@ -19,6 +19,7 @@ import {
   pill, plural,
 } from '../ui.js';
 import { corpusSummary, corpusRunStream, state } from '../api.js';
+import * as beforeafter from './beforeafter.js';
 
 // Measured on this project, not guessed — see the header. Superseded per stage
 // by the real ms/record as soon as a run on this host reports one.
@@ -115,6 +116,11 @@ export async function render(root) {
         ? 'AFNI_CORPUS_ALLOW_CLOUD is set — Stage 3 will send prompts to a third party'
         : 'these are real harmful prompts; Stage 3 would ship them to a vendor' },
   ]));
+
+  // The before-and-after ladder lives in its own module but on this screen: it
+  // runs the same corpus under the same server-side cap, and a second tab that
+  // had to re-explain what the corpus is would be a worse demo.
+  root.append(beforeafter.section(sum));
 
   // ------------------------------------------------------------- controls ----
   root.append(rule('Choose a sample', `cap ${cap.toLocaleString()} records per run`));

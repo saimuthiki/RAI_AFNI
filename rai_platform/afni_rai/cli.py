@@ -6,6 +6,7 @@ Command line entry point. The fastest way to see the gateway decide something.
     python3 rai_platform/cli.py check --json "..." | jq .
     python3 rai_platform/cli.py image photo.jpg
     python3 rai_platform/cli.py image clip.mp4 --video --blur out.png
+    python3 rai_platform/cli.py compare --limit 200
     python3 rai_platform/cli.py coverage
     python3 rai_platform/cli.py rails
     python3 rai_platform/cli.py preflight
@@ -242,6 +243,80 @@ def cmd_image(args) -> int:
     return 1 if result.blocked else 0
 
 
+def cmd_compare(args) -> int:
+    """Guardrails off versus on, on the same records.
+
+    The number AFNI asked for, and the shape it is honest in: a ladder, because
+    "off versus on" hides which tier is doing the work.
+
+    Exit code is the count of harmful records that still reached the model at
+    the top rung, capped at 100, so a CI gate can be written against it.
+    """
+    from . import ab, regression                                 # noqa: PLC0415
+
+    rails, _attributions, problems = load_tenets()
+    if problems:
+        print("! tenets not loaded: " + "; ".join(problems), file=sys.stderr)
+    try:
+        records = regression.load()
+    except FileNotFoundError as exc:
+        print(f"corpus not found: {exc}", file=sys.stderr)
+        return 100
+
+    ceiling, note = regression.effective_max_stage(args.max_stage)
+    selection = regression.Selection(
+        limit=args.limit, per_tenet=args.per_tenet, tenet=args.tenet,
+        seed=args.seed, max_stage=ceiling)
+    try:
+        chosen = regression.select(records, selection)
+    except (regression.SampleTooLarge, regression.RangeOutOfBounds) as exc:
+        print(str(exc), file=sys.stderr)
+        return 100
+    if not chosen:
+        print("no records match that selection", file=sys.stderr)
+        return 100
+
+    tier = regression.tier_label(regression.rails_for(ceiling, rails))
+    result = ab.compare(rails, chosen, selection.describe(), tier,
+                        max_stage=ceiling)
+    if note:
+        result.notes.append(note)
+    body = result.to_dict()
+
+    if args.json:
+        print(json.dumps(body, indent=2))
+    else:
+        print(f"{selection.describe()}   tier: {tier}\n")
+        print(f"  {'ARM':13s} {'RAILS':>5s} {'STOPPED':>8s} {'REACHED MODEL':>14s} "
+              f"{'MEDIAN':>8s} {'P95':>8s}")
+        for arm in body["arms"]:
+            flag = "" if arm["measured"] else "  (floor - rails missing)"
+            print(f"  {arm['arm']:13s} {arm['rails']:5d} {arm['stopped']:8d} "
+                  f"{arm['delivered_to_model']:6d} "
+                  f"{(arm['delivery_rate'] or 0) * 100:6.1f}% "
+                  f"{arm['median_ms_per_record'] or 0:8.2f} "
+                  f"{arm['p95_ms_per_record'] or 0:8.2f}{flag}")
+        print()
+        for delta in body["deltas"]:
+            print(f"  {delta['from']} -> {delta['to']}: "
+                  f"+{delta['extra_stopped']} stopped "
+                  f"({(delta['extra_stop_rate'] or 0) * 100:.1f}% of sample), "
+                  f"+{delta['extra_median_ms']:.2f} ms at the median")
+        print()
+        print("  Latency is MEDIAN and P95, in milliseconds per record, measured")
+        print("  after the models are resident. The mean is in --json; it is the")
+        print("  number one four-second lazy model load distorts.")
+        print()
+        print("  " + body["headline"]["sentence"])
+        print()
+        print("  MEASURES: " + body["measures"])
+        for line in body["notes"]:
+            print(f"\n  ! {line}")
+
+    top = body["arms"][-1]
+    return min(top["delivered_to_model"], 100)
+
+
 def cmd_preflight(args) -> int:
     """Every asset the platform needs but does not ship.
 
@@ -284,6 +359,25 @@ def main(argv=None) -> int:
                         "only). Nothing is written when nothing was detected.")
     i.add_argument("--json", action="store_true")
     i.set_defaults(func=cmd_image)
+
+    cmp_ = sub.add_parser("compare", help="guardrails off vs on, same records")
+    cmp_.add_argument("--limit", type=int, default=200,
+                      help="records per arm - the same records run through "
+                           "every arm. Default 200.")
+    cmp_.add_argument("--per-tenet", dest="per_tenet", type=int, default=None,
+                      help="stratified sample: N per tenet, instead of --limit. "
+                           "The corpus is 42%% content-safety, so prefer this "
+                           "for a headline number.")
+    cmp_.add_argument("--tenet", default=None, help="restrict to one tenet")
+    cmp_.add_argument("--seed", type=int, default=0,
+                      help="deterministic sample (default 0), so the ladder is "
+                           "reproducible in a demo")
+    cmp_.add_argument("--max-stage", dest="max_stage", type=int, default=2,
+                      choices=(1, 2, 3),
+                      help="the top rung. 3 is clamped to 2 unless the server "
+                           "sets AFNI_CORPUS_ALLOW_CLOUD=1.")
+    cmp_.add_argument("--json", action="store_true")
+    cmp_.set_defaults(func=cmd_compare)
 
     sub.add_parser("coverage", help="capability coverage report").set_defaults(
         func=cmd_coverage)
