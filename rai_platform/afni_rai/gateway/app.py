@@ -88,6 +88,7 @@ from . import providers
 from .corpus_api import corpus_router
 from .topics_api import topics_router
 from .media_api import media_router
+from .thresholds_api import thresholds_router
 from .models import (
     ChatRequest, ChatResponse, CoverageResponse, Error, GuardRequest,
     GuardResponse, HealthResponse, RailsResponse,
@@ -395,6 +396,17 @@ class Gateway:
                     if self.target_probe.model_id_verified else "UNVERIFIED")
 
         self.thresholds = threshold_store if threshold_store is not None else ThresholdStore()
+        # THE SAVED OVERRIDES ARE LOADED HERE. Without this the console could
+        # write a threshold policy that nothing ever read - write-only config,
+        # which is Safe Zone's bug and the reason `thresholds.py` keeps a read
+        # log at all. Only when the caller did not supply a store: a test that
+        # hands in its own store means to control the configuration.
+        self.threshold_problems: list[str] = []
+        if threshold_store is None:
+            from .. import sensitivity as _sensitivity     # noqa: PLC0415
+            self.threshold_problems = _sensitivity.apply_to(self.thresholds)
+            for problem in self.threshold_problems:
+                LOGGER.warning("threshold policy: %s", problem)
         # The one hook a rail gets into threshold configuration. Without this the
         # threshold store would be write-only - configured, exposed, and never
         # consulted, which is Safe Zone's bug (admin.go:66 writes it,
@@ -1048,6 +1060,9 @@ def create_app(**kwargs: Any) -> FastAPI:
     # blocks. A route that vanished when a dependency was missing would look
     # like the feature was never built.
     app.include_router(media_router(gateway))
+    # Sensitivity. The second write endpoint, and the only one that takes effect
+    # without a restart - `ThresholdStore` deliberately does not cache.
+    app.include_router(thresholds_router(gateway))
 
     @app.middleware("http")
     async def request_id(request: Request, call_next: Callable) -> Response:

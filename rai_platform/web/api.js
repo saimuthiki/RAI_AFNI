@@ -489,6 +489,35 @@ export async function saveTopicPolicy({ enabled, blocking }) {
 }
 
 
+// -------------------------------------------------------- sensitivity --
+// Threshold overrides. Unlike the topic policy these apply on the NEXT REQUEST:
+// ThresholdStore does not cache, on purpose. The screen says so, and does not
+// show a restart warning it would be wrong to show.
+
+export const thresholds = () => getJSON('/v1/thresholds', { timeout: 10000 });
+
+/** Save overrides, or apply a preset.
+ *
+ *  `thresholds` REPLACES the saved map rather than merging into it — a merge
+ *  would make "remove this override" impossible to express.
+ */
+export async function saveThresholds(body) {
+  const res = await fetch(url('/v1/thresholds'), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
+  let parsed = null;
+  try { parsed = await res.json(); } catch { /* not JSON */ }
+  if (!res.ok) {
+    throw new Error(parsed && parsed.message
+      ? parsed.message
+      : `PUT /v1/thresholds → HTTP ${res.status} ${res.statusText}`);
+  }
+  return parsed;
+}
+
+
 // -------------------------------------------------------------- media --
 // Image and video moderation. Separate routes from /v1/guard because a
 // GuardEvent payload is strings and an image is not one — so an application

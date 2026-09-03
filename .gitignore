@@ -126,3 +126,10 @@ references/**/*.sqlite
 # hold everywhere are in afni_rai/topics.py, in code, on purpose.
 afni_topic_policy.json
 **/afni_topic_policy.json
+
+# The threshold policy is per-DEPLOYMENT state for the same reason. The shipped
+# defaults live in afni_rai/tenets/accountability/thresholds.py, each cited to
+# the repository it was ported from; this file is only what one deployment has
+# tuned on top of them, learned from its own traffic.
+afni_thresholds.json
+**/afni_thresholds.json

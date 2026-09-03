@@ -1962,3 +1962,112 @@ from `load_tenets()` rather than written down.
 | `tests/test_media.py` | new — 50 tests |
 
 **1102 tests pass.**
+
+---
+
+## 2026-09-03 — Sensitivity: thresholds in the console, and the recommendation asked for
+
+AFNI asked whether threshold values should live in the UI or in the code, and asked for
+the right approach rather than just an implementation. The answer shipped is **three
+layers, and only the middle one is in the UI**:
+
+1. **The code ships every default**, each cited in `thresholds.py` to the repository it
+   was ported from. Changing one is a code change and a code review. This is the floor: a
+   deployment that never opens the console still runs on real, defensible numbers.
+2. **The console overrides them per deployment**, saved to `afni_thresholds.json` and
+   applied on the **next request**. Tuning is an operational act — "toxicity is too noisy
+   on our support queue" is learned in production, not at review time — so it must not
+   need a deploy.
+3. **A request can never set one.** Not a field, not a header, not a query parameter. Same
+   reasoning as the topic policy and `AFNI_REVEAL_SUBJECT`: a caller who can raise a
+   threshold can route around the guardrail, and the guardrail exists because the caller
+   is not trusted.
+
+### No restart here, and that is a real difference not a hedge
+
+`ThresholdStore` deliberately does not cache — its own docstring says "a threshold change
+must take effect on the next request". So a saved value is live immediately. The **topic**
+rail compiles its word and phrase sets once at construction and therefore *does* need a
+restart. Two mechanisms, two answers, and each endpoint says its own rather than both
+giving one hedged "restart to apply" — which would have an operator restarting for nothing
+here, or not trusting the one that genuinely needs it.
+
+Proved rather than asserted: with a fake detector fixed at score 0.55, the same image goes
+`block` at the shipped 0.50, `allow` after an override to 0.90, and `block` again under
+`maximum` — same process, same client, no restart. That test exists because this whole
+subsystem is a reaction to Safe Zone, whose admin UI persisted per-pattern thresholds that
+`guardrails.go:287` never read.
+
+### Maximum sensitivity was asked for, and is labelled what it is
+
+AFNI asked whether they could just set maximum sensitivity. They can — the `maximum`
+preset sets every detection threshold to 0.10 — and the UI is blunt about the trade
+instead of shipping a button that sounds free:
+
+> Lowering a threshold does not find more harm. It lowers the bar for calling something
+> harm — the detector's ranking is unchanged. What changes is that more legitimate work
+> gets refused, and a guardrail that refuses legitimate work gets switched off by the
+> business.
+
+Nine of the twenty-four knobs are marked `noisy` in the catalogue, which is the honest way
+to say "this is the one you will regret tightening".
+
+### Three knobs are excluded from every preset, and why
+
+A preset drags numbers **down**, which only means "stricter" where lower is stricter. It
+is not for:
+
+- `x.afni.refusal` — measures the **model's** behaviour, not a user's. Lowering it makes
+  nothing stricter; it makes more answers get classed as refusals.
+- `x.afni.confidence.allow` / `x.afni.confidence.block` — a **matched pair** of envelope
+  bounds from Safe Zone. Moving one without the other changes what the envelope means.
+
+They are shown in their own group, labelled, and `preset_excludes` names them in the API
+response so the exclusion is visible rather than a silent omission.
+
+### Design details worth keeping
+
+**Presets are not a second mechanism.** A preset is a bulk write of the same override map
+an operator could type by hand, expressed as a **multiplier** rather than absolute numbers
+so it stays correct when a shipped default changes. `balanced` is the *empty* map — "use
+what the code ships", not "0.7 everywhere".
+
+**A preset fills the FORM in, and reaches the server only on Save.** Applying straight
+through would leave an operator no chance to see what it did to twenty-one rows before
+committing. The arithmetic is duplicated client-side, deliberately: the alternative is a
+round trip to a *write* endpoint per preset click, which would make the only way to
+preview a preset be to apply it. Factor and floor come from the server payload, so a
+change to either reaches the screen without a JS change.
+
+**`thresholds` REPLACES the saved map, never merges.** A merge makes "remove this
+override" inexpressible.
+
+**Only rows that differ from shipped are sent.** Pinning all 24 would mean a later change
+to a shipped default silently never reaches this deployment.
+
+**An empty body is a 422, not a clear.** `{}` and `{"thresholds": {}}` would otherwise be
+indistinguishable, and one of them wipes every override — too destructive to be the
+default reading of a malformed request.
+
+**The key set is closed.** An override for a key no rail resolves is write-only config, so
+an unknown key is a 422 naming it. `sensitivity.KNOBS` is asserted at import to cover
+`GLOBAL_DEFAULTS | RAIL_DEFAULTS` exactly — a knob missing from the catalogue would be
+live in the engine and invisible in the console, which is how somebody comes to believe
+they tuned something they did not.
+
+**`summary()` clears its own read log.** Only the detection path's reads are evidence of
+anything; a console page refresh must not look like traffic in the audit trail.
+
+### Files
+
+| File | Change |
+|---|---|
+| `afni_rai/sensitivity.py` | new — 24-knob catalogue, presets, policy file, `apply_to` |
+| `afni_rai/gateway/thresholds_api.py` | new — `GET`/`PUT /v1/thresholds` |
+| `afni_rai/gateway/app.py` | loads the saved policy at construction; router mounted |
+| `web/views/sensitivity.js` | new — presets, 7 groups, per-row override and reset |
+| `web/api.js`, `app.js`, `index.html`, `styles.css` | client, route, nav, CSS |
+| `tests/test_sensitivity.py` | new — 35 tests |
+| `.gitignore` | `afni_thresholds.json` — deployment state, not source |
+
+**1137 tests pass.**

@@ -12,14 +12,16 @@ import * as rails from './views/rails.js';
 import * as corpus from './views/corpus.js';
 import * as topics from './views/topics.js';
 import * as media from './views/media.js';
+import * as sensitivity from './views/sensitivity.js';
 import * as frameworks from './views/frameworks.js';
 
-const VIEWS = { live, architecture, tenets, rails, topics, media, corpus, frameworks };
+const VIEWS = { live, architecture, tenets, rails, topics, sensitivity, media, corpus, frameworks };
 // The route name is a URL slug; the tab title is prose. "Architecture" is the
 // slug, "How it works" is what the nav calls it, and the two should agree.
 const TITLES = {
   live: 'Live check', architecture: 'How it works', tenets: 'Tenets',
-  rails: 'Rails', topics: 'Topics', media: 'Media', corpus: 'Corpus',
+  rails: 'Rails', topics: 'Topics', sensitivity: 'Sensitivity',
+  media: 'Media', corpus: 'Corpus',
   frameworks: 'Frameworks',
 };
 const DEFAULT = 'live';

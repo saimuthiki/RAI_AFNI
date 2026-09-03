@@ -1931,3 +1931,85 @@ td .err { color: var(--hazard-ink); font-size: var(--t-eyebrow); }
   font: 500 var(--t-micro)/1.6 var(--mono); color: var(--ink-3);
   word-break: break-word;
 }
+
+/* ==========================================================================
+   SENSITIVITY  —  the threshold knobs
+
+   `align-items: start` on both grids for the same reason the topic and media
+   cards need it: the groups hold 2 to 5 rows and the rows hold 1 to 3 lines of
+   prose, so a stretched card is guaranteed dead space rather than a coincidence.
+   ========================================================================== */
+.presets {
+  display: grid; gap: var(--sp-3); align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+}
+.preset {
+  display: flex; flex-direction: column; gap: var(--sp-2); text-align: left;
+  padding: var(--sp-3) var(--sp-4); cursor: pointer;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--r-md);
+}
+.preset:hover { border-color: var(--accent); }
+.preset:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.preset__t { font: 650 var(--t-body)/1.25 var(--sans); }
+.preset__n { font: 600 var(--t-micro)/1.4 var(--mono); color: var(--accent); }
+.preset__why { font-size: var(--t-small); color: var(--ink-2); line-height: 1.5; }
+.preset--maximum { border-style: dashed; }
+.preset--maximum .preset__n { color: var(--hazard-ink); }
+.presets__foot { grid-column: 1 / -1; max-width: 78ch; }
+
+.knobgroups { display: flex; flex-direction: column; gap: var(--sp-5); }
+.knobgroup__head {
+  display: flex; gap: var(--sp-3); align-items: baseline;
+  padding-bottom: var(--sp-2); border-bottom: 1px solid var(--line-soft);
+}
+.knobgroup__t { margin: 0; font: 650 var(--t-h3)/1.2 var(--sans); letter-spacing: -0.02em; }
+.knobgroup__why {
+  margin: var(--sp-3) 0 0; max-width: 78ch;
+  font-size: var(--t-small); color: var(--ink-2); line-height: 1.55;
+}
+.knoblist {
+  margin-top: var(--sp-3); display: grid; gap: var(--sp-3); align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(21rem, 1fr));
+}
+.knob {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4); background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+}
+.knob__head { display: flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap; }
+.knob__label { font: 600 var(--t-body)/1.3 var(--sans); }
+.knob__key { font: 500 var(--t-micro)/1.5 var(--mono); color: var(--ink-3); word-break: break-all; }
+.knob__judges { margin: 0; font-size: var(--t-small); color: var(--ink-2); line-height: 1.55; }
+.knob__warn {
+  margin: 0; padding: var(--sp-2) var(--sp-3);
+  background: var(--cov-4-bed); border-left: 2px solid var(--cov-4);
+  font-size: var(--t-small); color: var(--ink-2); line-height: 1.5;
+}
+.knob__scope {
+  margin-left: auto; font: 500 var(--t-micro)/1.4 var(--mono); color: var(--ink-3);
+}
+.knob__scope--over { color: var(--cov-2-ink); font-weight: 650; }
+.knob__ctl { display: flex; gap: var(--sp-3); align-items: center; flex-wrap: wrap; }
+.knob__in {
+  width: 5.5rem; padding: 0.3rem 0.5rem;
+  background: var(--bg-deep); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  font: 600 var(--t-body)/1.3 var(--mono); font-variant-numeric: tabular-nums;
+}
+.knob__in:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.knob__shipped { font: 500 var(--t-micro)/1.4 var(--mono); color: var(--ink-3); }
+.knob__reset { margin-left: auto; padding: 0.2rem 0.6rem; font-size: var(--t-micro); }
+
+/* Sticky so Save is reachable from anywhere in a 24-row form. It therefore
+   covers a strip of the group above it while scrolling, which is the accepted
+   cost of a save bar - the shadow is what makes it read as a floating bar
+   rather than as a card that has lost its border. */
+.saverow {
+  display: flex; gap: var(--sp-3); align-items: center; flex-wrap: wrap;
+  padding: var(--sp-4) 0;
+  position: sticky; bottom: 0; z-index: 5; background: var(--bg);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -8px 18px -10px rgb(0 0 0 / 55%);
+}
+.saveresult:not(:empty) { margin-bottom: var(--sp-5); }
