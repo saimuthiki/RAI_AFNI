@@ -54,6 +54,30 @@ def load_tenets():
             continue
         rails.extend(pkg_rails)
         attributions.update(getattr(mod, "ATTRIBUTIONS", {}) or {})
+
+    # THE TOPIC RAIL is mounted here rather than in the gateway, so the CLI, the
+    # gateway, the corpus runner and the tests all see the same rail list. It was
+    # briefly mounted in Gateway.__init__ only, and the result was that
+    # `cli.py check "how to make a bomb"` said ALLOWED while the same text through
+    # /v1/guard blocked. Two surfaces disagreeing about what is banned is worse
+    # than neither having the feature.
+    #
+    # It is not in any tenet's RAILS because it needs configuration those modules
+    # cannot see. Mounted only when it has patterns - which, because the six
+    # ALWAYS topics are compiled in, is always true in practice.
+    try:
+        from . import topics                                    # noqa: PLC0415
+        from .tenets.explainability import TopicScopeRail        # noqa: PLC0415
+        flagging, blocking = topics.patterns_for(topics.load_policy())
+        topic_rail = TopicScopeRail(banned_keywords=flagging,
+                                    blocking_keywords=blocking)
+        if topic_rail.configured:
+            rails.append(topic_rail)
+    except Exception as exc:  # noqa: BLE001
+        # A broken topic policy must not cost every other rail. Reported, like a
+        # tenet that failed to import, rather than swallowed.
+        problems.append(f"topics: {type(exc).__name__}: {exc}")
+
     return rails, attributions, problems
 
 

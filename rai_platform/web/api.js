@@ -459,6 +459,36 @@ export async function guardStream(event, onEvent, { signal } = {}) {
 
 export const corpusSummary = () => getJSON('/v1/corpus', { timeout: 15000 });
 
+// ---------------------------------------------------------- topic policy --
+// The topic catalogue plus this deployment's selection. The catalogue is
+// compiled in; the selection lives in a JSON file on the server.
+
+export const topicPolicy = () => getJSON('/v1/topics', { timeout: 10000 });
+
+/** Save the optional topic selection.
+ *
+ *  The one WRITE this console makes. It reads the JSON error body on failure,
+ *  because the useful part of a 422 here is the message - "cannot promote X to
+ *  blocking without also enabling it" - and "HTTP 422" tells an operator
+ *  nothing about which box to untick.
+ */
+export async function saveTopicPolicy({ enabled, blocking }) {
+  const res = await fetch(url('/v1/topics'), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({ enabled, blocking }),
+  });
+  let body = null;
+  try { body = await res.json(); } catch { /* not JSON */ }
+  if (!res.ok) {
+    throw new Error(body && body.message
+      ? body.message
+      : `PUT /v1/topics → HTTP ${res.status} ${res.statusText}`);
+  }
+  return body;
+}
+
+
 /** Run a sample, one callback per record as it is judged.
  *
  *  Streamed rather than awaited because a 200-record Stage-2 run is ten minutes.

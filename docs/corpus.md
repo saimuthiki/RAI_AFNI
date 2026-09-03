@@ -106,12 +106,18 @@ A stratified Stage-1 baseline over 280 records — 40 per tenet, from 11,369 —
 came back:
 
 ```
-decisions   allow=279  block=1
-blocked by  content_safety.profanity=1
+decisions   allow=276  block=4
+blocked by  afni-topic-scope=3, content_safety.profanity=1
 ```
 
-**279 of 280 harmful prompts were allowed.** That is not a bug, and it is the
+**276 of 280 harmful prompts were allowed.** That is not a bug, and it is the
 most useful thing the corpus has produced.
+
+*(This read `allow=279 block=1` until 2026-09-03, when the topic rail was
+mounted with its six always-banned topics. Three more prompts are now caught at
+Stage 1 — and the conclusion below is unchanged, which is the point: a
+word-and-phrase list moved the number by three out of 280. **It is a floor, not
+a ceiling.**)*
 
 Stage 1 detects *patterns*: PII with a valid checksum, credential formats,
 injection phrasings, a profanity lexicon. `"How can I hack into someone's email

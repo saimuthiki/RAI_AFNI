@@ -15,14 +15,32 @@ TEN = {'privacy':'Privacy','security':'Security','content_safety':'Content Safet
        'fairness':'Fairness','hallucination':'Hallucination',
        'explainability':'Explainability','accountability':'Accountability'}
 
+# `load_tenets()`, not each module's RAILS, because some rails are mounted by the
+# loader rather than declared by a tenet - the topic rail needs configuration the
+# tenet modules cannot see. Reading RAILS directly under-reported the doc by one
+# rail and would silently keep doing so for the next such rail.
+from afni_rai.cli import load_tenets                          # noqa: E402
+from afni_rai.contract.models import Tenet                    # noqa: E402
+
+_DISPLAY = {t.value: t.value for t in Tenet}
+_SHORT = {
+    'Profanity / Content Safety': 'Content Safety',
+    'Hallucination / Reliability': 'Hallucination',
+    'Explainability & Transparency': 'Explainability',
+    'Fairness & Bias': 'Fairness',
+}
+
+_rails, _attr, _problems = load_tenets()
+if _problems:
+    raise SystemExit(f"refusing to write the doc: tenets failed to load: {_problems}")
+
 rows = []
-for pkg, disp in TEN.items():
-    m = importlib.import_module(f'afni_rai.tenets.{pkg}')
-    for r in getattr(m, 'RAILS', []) or []:
-        d = getattr(r, 'direction', None)
-        rows.append(dict(t=disp, n=r.name,
-                         s=(0 if r.stage is Stage.OFFLINE else int(r.stage)),
-                         d=(d.value if d else 'both')))
+for r in _rails:
+    d = getattr(r, 'direction', None)
+    name = r.tenet.value
+    rows.append(dict(t=_SHORT.get(name, name), n=r.name,
+                     s=(0 if r.stage is Stage.OFFLINE else int(r.stage)),
+                     d=(d.value if d else 'both')))
 
 both = [r for r in rows if r['d'] == 'both']
 inp  = [r for r in rows if r['d'] == 'input']

@@ -73,7 +73,9 @@ from ..contract.explanation import Explanation, RailAttribution, explain
 from ..contract.models import (
     PROTOCOL_VERSION, Decision, EventKind, GuardEvent, LLMProtocol, Verdict,
 )
+from .. import topics
 from ..registry import repositories
+from ..tenets.explainability import TopicScopeRail
 from ..registry.capabilities import CapabilityRegistry
 from ..warmup import warm_all
 from ..target import EndpointProbe, TargetClient, probe_timeout_from_env
@@ -84,6 +86,7 @@ from ..tenets.accountability.policy import FailurePolicy
 from ..tenets.accountability.thresholds import ThresholdStore
 from . import providers
 from .corpus_api import corpus_router
+from .topics_api import topics_router
 from .models import (
     ChatRequest, ChatResponse, CoverageResponse, Error, GuardRequest,
     GuardResponse, HealthResponse, RailsResponse,
@@ -355,6 +358,13 @@ class Gateway:
         self.judge_provider = (
             providers.from_env(env, self.judge_providers_skipped)
             if judge_provider is None else judge_provider)
+        # The topic rail arrives already mounted from `load_tenets()`, so the CLI
+        # and this gateway cannot disagree about what is banned. Kept as an
+        # attribute for /v1/topics to report against.
+        self.topic_policy = topics.load_policy()
+        self.topic_rail = next(
+            (r for r in rails if r.name == TopicScopeRail.name), None)
+
         mountable = [r for r in rails if r.stage is not Stage.OFFLINE]
         self.rails: list[Any] = providers.bind_judges(mountable, self.judge_provider)
 
@@ -1027,6 +1037,9 @@ def create_app(**kwargs: Any) -> FastAPI:
     # and keeping their schemas and their two hard caps next to each other
     # makes both reviewable in one screen.
     app.include_router(corpus_router(gateway))
+    # The topic policy: the only WRITE endpoint here, kept in its own module
+    # so the authorization note sits next to the handler that needs it.
+    app.include_router(topics_router(gateway))
 
     @app.middleware("http")
     async def request_id(request: Request, call_next: Callable) -> Response:

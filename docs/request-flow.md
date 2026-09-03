@@ -8,22 +8,22 @@ did unrelated jobs. They do not, and that reading was the reason this file was r
 
 ## The short answer
 
-**Almost every check runs on both sides.** Of 32 mounted rails:
+**Almost every check runs on both sides.** Of 33 mounted rails:
 
-- **23 run on BOTH** the prompt and the response
+- **24 run on BOTH** the prompt and the response
 - **1 runs on the prompt only**
 - **8 run on the response only**
 
-So the response is checked by **31** rails and the prompt by **24**. The output
+So the response is checked by **32** rails and the prompt by **25**. The output
 guardrail is the *stricter* of the two, not a lighter afterthought: it does everything
 the input guardrail does, plus response-specific work that has no meaning on a prompt.
 
 | Stage | Mounted | Run on the prompt | Run on the response |
 |---|:---:|:---:|:---:|
-| 1 — free, deterministic | 22 | 16 | 21 |
+| 1 — free, deterministic | 23 | 17 | 22 |
 | 2 — local model | 7 | 5 | 7 |
 | 3 — paid judge | 3 | 3 | 3 |
-| **All stages** | **32** | **24** | **31** |
+| **All stages** | **33** | **25** | **32** |
 
 ## The flow
 
@@ -32,7 +32,7 @@ the input guardrail does, plus response-specific work that has no meaning on a p
               │
               ▼
    ┌──────────────────────────────────────────────────────┐
-   │  INPUT GUARDRAIL — 24 rails apply                       │
+   │  INPUT GUARDRAIL — 25 rails apply                       │
    │                                                      │
    │  Stage 1  free, deterministic, 100% of prompts       │
    │     └─ nothing conclusive? ──▶ Stage 2  local model  │
@@ -53,9 +53,9 @@ the input guardrail does, plus response-specific work that has no meaning on a p
                        │
                        ▼
    ┌──────────────────────────────────────────────────────┐
-   │  OUTPUT GUARDRAIL — 31 rails apply                      │
+   │  OUTPUT GUARDRAIL — 32 rails apply                      │
    │                                                      │
-   │  The SAME 23 rails as the input side, plus 8 more    │
+   │  The SAME 24 rails as the input side, plus 8 more    │
    │  that only make sense on an answer: groundedness,    │
    │  response validation, refusal detection, invented    │
    │  packages, insecure output, schema explanation.      │
@@ -80,7 +80,7 @@ the input guardrail does, plus response-specific work that has no meaning on a p
 
 ## Which rails run where
 
-#### Both sides — 23 rails
+#### Both sides — 24 rails
 
 Every privacy, security, content-safety and fairness check is here. An SSN leaving the
 model is worse than one arriving; a prompt injection can arrive in retrieved content as
@@ -91,6 +91,7 @@ easily as in a user's typing.
 | `content_safety.banned_substrings` | Content Safety | 1 |
 | `content_safety.explicit` | Content Safety | 1 |
 | `content_safety.profanity` | Content Safety | 1 |
+| `afni-topic-scope` | Explainability | 1 |
 | `afni.fairness.protected_attribute` | Fairness | 1 |
 | `privacy.credit_card` | Privacy | 1 |
 | `privacy.healthcare_phi` | Privacy | 1 |
@@ -154,7 +155,7 @@ Not an oversight, and each one is asserted in `tests/test_direction.py`:
 
 **1 · A missing declaration means BOTH, never "neither".** A rail that does not declare
 `direction` runs on both sides. That default is deliberate: forgetting to declare must
-never silently *remove* a check. 23 of the 32 rails rely on it.
+never silently *remove* a check. 24 of the 33 rails rely on it.
 
 **2 · "Does not apply" is `skipped`, not `unjudged`.** A rail that does not apply to the
 side being judged is recorded as **skipped**: it had nothing to look at. It is *not*

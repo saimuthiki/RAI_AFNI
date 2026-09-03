@@ -119,3 +119,10 @@ references/**/*.sqlite
 # references/**/*.key
 # references/**/secret.yaml
 # references/**/*credentials*.json
+
+# The topic policy is per-DEPLOYMENT state, not source. Which topics a given
+# AFNI application refuses differs by application, so committing one would push
+# one deployment's choices onto every other. The six ALWAYS topics that must
+# hold everywhere are in afni_rai/topics.py, in code, on purpose.
+afni_topic_policy.json
+**/afni_topic_policy.json

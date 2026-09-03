@@ -664,8 +664,34 @@ def _normalise(text: str) -> list[str]:
 
 
 class TopicScopeRail:
-    """Stage 1 keyword/allowlist scope check. Flags and escalates, never blocks
-    alone - a lexicon hit is evidence for the Stage-3 judge, not a verdict."""
+    """Stage 1 keyword/phrase scope check, with the action chosen per topic.
+
+    TWO KINDS OF PATTERN, because one is not enough to be useful.
+
+    A single-word keyword is matched against the word SET - exact, fast, and
+    unable to match across a word boundary. That is the right shape for a slur
+    or a product name, and the wrong shape for a topic: `bomb` as a bare word
+    fires on "I bombed the interview", and "drug synthesis" cannot match at all
+    because it is two words.
+
+    So a pattern containing a space is matched as a PHRASE against the
+    normalised text instead. That is what makes a topic list expressible without
+    it being a false-positive generator.
+
+    TWO ACTIONS, chosen per topic rather than fixed.
+
+    The original version always emitted FLAG, on the reasoning that a lexicon hit
+    is evidence for a judge rather than a verdict. That reasoning holds for a
+    fuzzy topic - "is this financial advice?" genuinely needs a model - and does
+    NOT hold for an unambiguous one: a request for explosive synthesis
+    instructions does not need a second opinion.
+
+    So the deployment decides. Default FLAG, which keeps the cautious behaviour
+    for anything an operator merely ticks; BLOCK where the operator has said the
+    phrase is unambiguous. The trade is stated in the console next to the
+    control, because a blocking keyword list is the single easiest way to build a
+    guardrail that refuses ordinary work.
+    """
 
     name = "afni-topic-scope"
     tenet = TENET
@@ -673,17 +699,42 @@ class TopicScopeRail:
 
     def __init__(self, banned_keywords: Sequence[str] = (),
                  allowed_topic_lexicons: dict[str, Sequence[str]] | None = None,
-                 min_words_for_scope: int = 8) -> None:
-        self._banned = {kw.casefold() for kw in banned_keywords}
+                 min_words_for_scope: int = 8,
+                 blocking_keywords: Sequence[str] = ()) -> None:
+        self._banned = self._split(banned_keywords)
+        self._blocking = self._split(blocking_keywords)
         self._allowed = {
             topic: {w.casefold() for w in words}
             for topic, words in (allowed_topic_lexicons or {}).items()
         }
         self._min_words = min_words_for_scope
 
+    @staticmethod
+    def _split(patterns: Sequence[str]) -> tuple[set[str], tuple[str, ...]]:
+        """(single words, phrases). Split once at construction, not per request."""
+        words, phrases = set(), []
+        for raw in patterns:
+            pat = unicodedata.normalize("NFKC", raw).casefold().strip()
+            if not pat:
+                continue
+            if " " in pat:
+                phrases.append(pat)
+            else:
+                words.add(pat)
+        # Longest phrase first, so the most specific match is the one reported.
+        return words, tuple(sorted(phrases, key=len, reverse=True))
+
     @property
     def configured(self) -> bool:
-        return bool(self._banned or self._allowed)
+        return bool(self._banned[0] or self._banned[1]
+                    or self._blocking[0] or self._blocking[1] or self._allowed)
+
+    @staticmethod
+    def _hits(lexicon: tuple[set[str], tuple[str, ...]],
+              word_set: set[str], joined: str) -> list[str]:
+        found = sorted(lexicon[0] & word_set)
+        found += [p for p in lexicon[1] if p in joined]
+        return found
 
     def check(self, path: str, text: str) -> RailResult:
         if not self.configured:
@@ -691,8 +742,26 @@ class TopicScopeRail:
 
         words = _normalise(text)
         word_set = set(words)
+        # Re-joined with single spaces so a phrase matches regardless of the
+        # original whitespace or punctuation between its words.
+        joined = " ".join(words)
 
-        hit = sorted(self._banned & word_set)
+        # Blocking patterns are checked FIRST: when a text trips both lists the
+        # stronger action is the honest one to report.
+        blocked = self._hits(self._blocking, word_set, joined)
+        if blocked:
+            subject = (f"{path}: {len(blocked)} blocked-topic pattern(s), "
+                       f"first {blocked[0]!r}")
+            return RailResult(
+                findings=[Finding(
+                    category="safety.topic_violation",
+                    severity=Severity.HIGH, action=Action.BLOCK, path=path,
+                    detector=self.name, subject=subject, fp=_fp(subject),
+                )],
+                reason=subject,
+            )
+
+        hit = self._hits(self._banned, word_set, joined)
         if hit:
             subject = f"{path}: {len(hit)} banned-topic keyword(s), first {hit[0]!r}"
             return RailResult(

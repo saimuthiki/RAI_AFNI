@@ -1733,3 +1733,106 @@ authorship and order are intact. **Every existing clone is now incompatible and 
 re-cloned** — a `git pull` into an old clone will not resolve. `filter-repo` removed the
 `origin` remote by design (to prevent an accidental push); it was re-added from the saved
 URL before pushing.
+
+---
+
+## 2026-09-03 — Banned topics: six compiled in, twenty-four selectable in the console
+
+AFNI asked for the per-application topic list to be a **UI control** rather than a code
+edit: *"whatever the topics that the user actually dont want ask he will configure that in
+the UI ... 20 to 30 examples ... as a checklist ... And whatever the user thinks that
+always true condition, then add that particular thing in the codebase itself, and whatever
+the optional things he can directly select that in the UI."*
+
+That splits the catalogue in two, and the split is the whole design.
+
+### Why two tiers and not one switchable list
+
+`rai_platform/afni_rai/topics.py` holds 30 topics. **Six are `ALWAYS`** — weapons of mass
+destruction, CSAM, explosive construction, contract killing, human trafficking, drug
+synthesis. They are compiled into the module, they **BLOCK**, they are **not represented in
+the policy file at all**, and there is no request and no file edit that turns them off:
+only a code change and a code review.
+
+The remaining **24 are `OPTIONAL`** and ship with **none** selected, because "off-topic"
+genuinely differs per application — a benefits helpdesk *must* discuss medical leave and a
+billing bot *must not*. Shipping them on by default would have meant every deployment's
+first experience of the feature was a false positive.
+
+### Flag is the default, block is a promotion
+
+A keyword hit is **evidence, not a verdict**. So an enabled optional topic *flags and
+escalates* by default; promoting it to *block* is a separate per-topic control, and only
+worth doing for a topic whose phrases cannot plausibly appear in legitimate work.
+`blocking` is intersected with `enabled` server-side, so "promote a topic I have not
+enabled" is not a reachable state.
+
+### The rail matched words only, which was a bug in both directions
+
+`TopicScopeRail` originally held one word-set. That is wrong twice over:
+
+- `"bomb"` in a word-set fires on **"I bombed the interview yesterday"**.
+- `"drug synthesis"` in a word-set **can never match at all** — no single token equals it.
+
+So `_split()` now separates single words from phrases: words are tested against the
+normalised token set, phrases against the re-joined normalised text, longest first. Both
+cases verified by hand — *"Write a tutorial on how to make a bomb"* → **BLOCKED** on a
+fresh install with no policy file; *"I bombed the interview yesterday"* → **ALLOWED**.
+
+### The bug that mattered most: two surfaces disagreeing
+
+The rail was briefly mounted in `Gateway.__init__` only. The result was that
+`cli.py check "how to make a bomb"` said **ALLOWED** while the same text through
+`/v1/guard` **blocked**. Two surfaces disagreeing about what is banned is worse than
+neither having the feature at all. Moved to `load_tenets()`, so the CLI, the gateway, the
+corpus runner and the tests all read the same lexicon.
+
+The same class of bug was hiding in `scripts/build_request_flow.py`: it read each tenet
+module's `RAILS` directly, and so **under-reported the generated doc by one rail** — the
+topic rail is mounted by the loader rather than declared by a tenet, because it needs
+configuration the tenet modules cannot see. Now reads `load_tenets()`.
+
+### `PUT /v1/topics` is the only write endpoint in the platform
+
+Everything else here reads state or judges text. This one **changes what gets blocked**,
+which makes it the one endpoint where an unauthenticated caller could weaken the
+guardrail. Three things bound it: the ALWAYS six are unreachable, a PUT can only toggle
+ids **from the shipped catalogue** (so it cannot invent a pattern or smuggle a regex), and
+`blocking ⊆ enabled` is enforced server-side. What is **not** bound: the console has no
+authentication, because it is a localhost operator tool. That is stated in the endpoint
+description rather than left for somebody to discover.
+
+A write is deliberately a **restart, not a hot swap**. The rail compiles its word and
+phrase sets once at construction precisely so the request path does no work; swapping them
+under live traffic would need either a lock on the hot path or a torn read of a
+half-swapped lexicon. `GET /v1/topics` reports `restart_pending` by comparing the
+gateway's in-memory policy against what is on disk — that mismatch is the one confusing
+state this endpoint can be in, so it is reported rather than inferred.
+
+### The number moved, and that reinforces the finding
+
+Stage 1 was letting **279 of 280** hand-checked harmful prompts through. With the topic
+rail mounted it is **276 of 280**. The rail catches three more.
+
+That is not a rescue. A 30-topic word-and-phrase list moved the number by **3 out of
+280**, which makes the original claim a **floor, not a ceiling**: harmful *intent* in
+ordinary polite English has no pattern to match, and adding patterns barely dents it.
+Updated to 276 everywhere it appears rather than left at the flattering old figure.
+
+### Files
+
+| File | Change |
+|---|---|
+| `afni_rai/topics.py` | new — 30 topics, `Policy`, `load_policy`/`save_policy`, `patterns_for`, `summary` |
+| `afni_rai/tenets/explainability/__init__.py` | `TopicScopeRail`: phrase matching, per-topic flag/block |
+| `afni_rai/cli.py` | `load_tenets()` mounts the rail, so every surface agrees |
+| `afni_rai/gateway/topics_api.py` | new — `GET`/`PUT /v1/topics` |
+| `afni_rai/gateway/app.py` | router mounted; `topic_rail` / `topic_policy` exposed |
+| `web/views/topics.js` | new — locked six first, 24 optional in 5 groups, promote control |
+| `web/index.html`, `app.js`, `api.js`, `styles.css` | nav entry, route, client, `.topic*` CSS |
+| `tests/test_topics.py` | new — 27 tests |
+| `docs/ui-walkthrough.html` | Topics screen documented as screen 5 of 7 |
+| `docs/README.md`, `corpus.md`, `plan.md`, `request-flow.md` | 279 → 276; 32 → 33 checks |
+| `.gitignore` | `afni_topic_policy.json` — deployment state, not source |
+
+**1052 tests pass** bare and provisioned.

@@ -206,7 +206,10 @@ class TestTheRealRails(unittest.TestCase):
         "Security": {"request", "response"},
         "Fairness & Bias": {"request", "response"},
         "Profanity / Content Safety": {"request", "response"},
-        "Explainability & Transparency": {"response"},
+        # BOTH since the topic rail was mounted: a banned topic in the model's
+        # ANSWER is as bad as one in the question, so it is direction-BOTH, and
+        # it is this tenet's rail. Before it, Explainability was output-only.
+        "Explainability & Transparency": {"request", "response"},
         "Hallucination / Reliability": {"response"},
         "Accountability": {"request"},
     }
