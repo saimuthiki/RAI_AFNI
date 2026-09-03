@@ -986,7 +986,7 @@ class BannedSubstrings:
 # Both of these are adapters over llm-guard. The import is inside `check()`, not
 # at module scope, so importing this package never pulls torch and never
 # downloads weights. When the library or the weights are absent the rail returns
-# `unjudged`, the engine records the payload path, and a client-facing request
+# `unjudged`, the engine records the payload path, and the request
 # fails closed. That is the intended behaviour, not a degradation to "clean".
 
 _TOXICITY_MODEL = "unitary/unbiased-toxic-roberta"
@@ -997,10 +997,10 @@ _ZEROSHOT_MODEL = "MoritzLaurer/roberta-base-zeroshot-v2.0-c"
 _ZEROSHOT_REVISION = "d825e740e0c59881cf0b0b1481ccf726b6d65341"
 
 
-# How far past the tenant's threshold a hit must sit before it blocks outright
+# How far past the threshold a hit must sit before it blocks outright
 # rather than escalating. This is a fraction of the range ABOVE the threshold
 # (llm-guard's risk score is threshold-relative), so it stays meaningful when a
-# tenant moves the threshold - which a bare absolute literal would not.
+# an operator moves the threshold - which a bare absolute literal would not.
 _RISK_SEVERE = 0.8
 
 
@@ -1058,7 +1058,7 @@ class ToxicityClassifier:
         self.threshold = threshold
         self.model = _TOXICITY_MODEL
         self.revision = _TOXICITY_REVISION
-        # Keyed by threshold: see _load. A per-tenant threshold has to reach the
+        # Keyed by threshold: see _load. A configured threshold has to reach the
         # scanner's constructor, so one instance may hold several.
         self._scanners: dict[float, object] = {}
         self._unavailable: str | None = None
@@ -1087,9 +1087,9 @@ class ToxicityClassifier:
         value in [-1, 1] measured RELATIVE to the scanner's own threshold - so
         the raw probability never leaves the scanner, and comparing the returned
         risk against a different threshold would be meaningless. The scanner has
-        to be built with the tenant's value.
+        to be built with the configured value.
 
-        Scanners are cached per threshold. Distinct tenant values mean distinct
+        Scanners are cached per threshold. Distinct configured values mean distinct
         cache entries, which is a bounded cost (the model weights are shared by
         `transformers`' own cache; only the thin wrapper is rebuilt) and is the
         price of the threshold being real rather than decorative.
@@ -1120,7 +1120,7 @@ class ToxicityClassifier:
     def preload(self) -> bool:
         """Warm at this rail's default threshold.
 
-        A tenant override builds a second scanner (llm-guard takes the threshold
+        An override builds a second scanner (llm-guard takes the threshold
         at construction), but by then the weights are in the OS page cache, so
         that build is cheap. Warming the default is what removes the seconds.
         """
@@ -1128,7 +1128,7 @@ class ToxicityClassifier:
 
     def check(self, path: str, text: str,
               ctx: CheckContext | None = None) -> RailResult:
-        # Per-tenant threshold, falling back to the ported default when no
+        # Configured threshold, falling back to the ported default when no
         # store is wired. THRESHOLD_KEY is resolved once per call, not per
         # finding, so the read log carries one entry per check.
         threshold = (ctx.threshold(self.THRESHOLD_KEY, self.threshold)
@@ -1136,7 +1136,7 @@ class ToxicityClassifier:
         if not text or not text.strip():
             return RailResult.clean()
         # The resolved threshold is passed INTO the scanner, not compared against
-        # its output - see _load. Passing it here is what makes a tenant override
+        # its output - see _load. Passing it here is what makes an override
         # change the verdict rather than merely appear in the read log.
         scanner = self._load(threshold)
         if scanner is None:
@@ -1153,7 +1153,7 @@ class ToxicityClassifier:
         # `risk` is threshold-relative in [-1, 1]: 0.0 means "exactly at the
         # threshold", 1.0 means "at the top of the range above it". Clamping to
         # [0, 1] keeps it inside the contract's score bounds, and the value is
-        # therefore a distance past the tenant's threshold, not a probability.
+        # therefore a distance past the configured threshold, not a probability.
         score = max(0.0, min(1.0, float(risk)))
         severe = score >= _RISK_SEVERE
         return RailResult(findings=[Finding(
@@ -1189,7 +1189,7 @@ class ZeroShotTopics:
         self.model = _ZEROSHOT_MODEL
         self.revision = _ZEROSHOT_REVISION
         # Keyed by threshold: BanTopics takes it at construction, so a
-        # per-tenant value has to reach the constructor. See ToxicityClassifier.
+        # configured value has to reach the constructor. See ToxicityClassifier.
         self._scanners: dict[float, object] = {}
         self._unavailable: str | None = None
         # Filled in by _load: which weights actually backed the decision, a
@@ -1210,7 +1210,7 @@ class ZeroShotTopics:
         """Return a BanTopics whose internal threshold IS `threshold`.
 
         Same reason as ToxicityClassifier: `scan` returns a threshold-relative
-        risk, not the raw entailment score, so the tenant's value must go in at
+        risk, not the raw entailment score, so the configured value must go in at
         construction rather than being compared against the output.
         """
         if threshold is None:
@@ -1241,7 +1241,7 @@ class ZeroShotTopics:
 
     def check(self, path: str, text: str,
               ctx: CheckContext | None = None) -> RailResult:
-        # Per-tenant threshold, falling back to the ported default when no
+        # Configured threshold, falling back to the ported default when no
         # store is wired. THRESHOLD_KEY is resolved once per call, not per
         # finding, so the read log carries one entry per check.
         threshold = (ctx.threshold(self.THRESHOLD_KEY, self.threshold)
@@ -1295,7 +1295,7 @@ class ToxicityJudge:
 
     No judge is wired in by default, and that is the honest state: a judge means
     a paid API key AFNI has not configured here. Unconfigured, the rail is
-    `unjudged`, so fail-closed will block client-facing traffic rather than let
+    `unjudged`, so fail-closed will block the request rather than let
     it through unexamined.
     """
 
@@ -1310,7 +1310,7 @@ class ToxicityJudge:
 
     def check(self, path: str, text: str,
               ctx: CheckContext | None = None) -> RailResult:
-        # Per-tenant threshold, falling back to the ported default when no
+        # Configured threshold, falling back to the ported default when no
         # store is wired. THRESHOLD_KEY is resolved once per call, not per
         # finding, so the read log carries one entry per check.
         threshold = (ctx.threshold(self.THRESHOLD_KEY, self.threshold)
@@ -1518,7 +1518,7 @@ def register(registry) -> None:
         available=TOXICITY_MODEL_RAIL.available(),
         note=f"{_TOXICITY_MODEL} pinned at revision {_TOXICITY_REVISION}. "
              "Lazy import; returns unjudged when llm-guard/transformers/torch "
-             "or the weights are absent, so fail-closed blocks client-facing "
+             "or the weights are absent, so fail-closed blocks "
              "traffic rather than passing it unexamined.")
 
     registry.register_rail(

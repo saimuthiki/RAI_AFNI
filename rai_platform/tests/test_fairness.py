@@ -45,7 +45,7 @@ from afni_rai.tenets.fairness import (  # noqa: E402
 _CATEGORY_RE = re.compile(r"^(safety|security|privacy|x)(\.[a-z0-9_]+)+$")
 
 
-def event(payload=None, client_facing=True):
+def event(payload=None):
     return GuardEvent(
         kind=EventKind.REQUEST,
         step_id="step-1",
@@ -55,7 +55,6 @@ def event(payload=None, client_facing=True):
         agent_user="tester",
         llm_protocol=LLMProtocol.OPENAI_CHAT,
         payload=payload if payload is not None else {"text": "hello"},
-        client_facing=client_facing,
     )
 
 
@@ -270,15 +269,14 @@ class TestLocalBiasClassifierRail(unittest.TestCase):
         self.assertEqual(result.findings, [])
         self.assertIn("llm_guard.bias", result.reason)
 
-    def test_unjudged_fails_closed_on_client_facing_traffic(self):
+    def test_unjudged_fails_closed(self):
         rail = LocalBiasClassifierRail()
         if rail.dependency_available():
             self.skipTest("transformers/torch installed")
         # Stage 1 asks for escalation so Stage 2 is actually reached.
         stage1 = ProtectedAttributeReferenceRail(escalate_on_hit=True)
         out = Cascade([stage1, rail]).evaluate(
-            event({"text": "Deny the loan because she is pregnant."},
-                  client_facing=True))
+            event({"text": "Deny the loan because she is pregnant."}))
         self.assertIs(out.verdict.decision, Decision.BLOCK)
         self.assertTrue(out.verdict.could_not_judge)
 
@@ -360,7 +358,7 @@ class TestGenerativeBiasJudgeRail(unittest.TestCase):
 
     def test_it_is_not_mounted_by_default(self):
         # Mounting an always-unjudged Stage 3 rail would block every escalated
-        # client-facing request on a box with no judge wired up.
+        # request on a box with no judge wired up.
         self.assertNotIn(GenerativeBiasJudgeRail,
                          [type(rail) for rail in RAILS])
         self.assertIn(GenerativeBiasJudgeRail, [type(r) for r in CLOUD_RAILS])

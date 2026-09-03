@@ -384,7 +384,7 @@ class Gateway:
                     if self.target_probe.model_id_verified else "UNVERIFIED")
 
         self.thresholds = threshold_store if threshold_store is not None else ThresholdStore()
-        # The one hook a rail gets into per-tenant configuration. Without this the
+        # The one hook a rail gets into threshold configuration. Without this the
         # threshold store would be write-only - configured, exposed, and never
         # consulted, which is Safe Zone's bug (admin.go:66 writes it,
         # guardrails.go:287 reads an env global instead).
@@ -423,9 +423,6 @@ class Gateway:
             llm_protocol=LLMProtocol(body.llm_protocol),
             payload=body.payload,
             integration=body.integration,
-            client_facing=body.client_facing,
-            project=body.project,
-            tenant=body.tenant,
         )
 
     @staticmethod
@@ -461,7 +458,7 @@ class Gateway:
 
     def finish(self, event: GuardEvent, outcome: CascadeOutcome,
                *, degraded: str | None = None) -> tuple[dict[str, Any], Explanation]:
-        """Apply the tenant's fail_mode, persist, and render.
+        """Apply the configured fail_mode, persist, and render.
 
         Order matters. The policy may override the engine on an unjudged path -
         that is its entire job - so the explanation is built AFTER the override,
@@ -472,11 +469,11 @@ class Gateway:
         decided = self.policy.apply(event, outcome)
         verdict.decision = decided.decision
         if degraded:
-            # A tenant's fail_mode=open is a statement about ONE rail that could
-            # not look. It is not consent to serve a request the engine could not
-            # evaluate at all, so an engine-level failure stays a block even for
-            # internal traffic. The audit row still carries the configured
-            # fail_mode, so the override is visible rather than silent.
+            # A fail_mode=open is a statement about ONE rail that could not
+            # look. It is not consent to serve a request the engine could not
+            # evaluate at all, so an engine-level failure stays a block
+            # regardless. The audit row still carries the configured fail_mode,
+            # so the override is visible rather than silent.
             verdict.decision = Decision.BLOCK
 
         explanation = explain(verdict, self.attributions,
@@ -1002,8 +999,8 @@ def create_app(**kwargs: Any) -> FastAPI:
             "an ambiguous guardrail failure gets read as a pass by the next "
             "`try/except` up the stack.\n\n"
             "**`unjudged` is not 'clean'.** A non-empty value means 'could not "
-            "look', which is not 'found nothing'. On `client_facing` traffic (the "
-            "default) it blocks. On a fresh install with no model weights the "
+            "look', which is not 'found nothing'. It ALWAYS blocks - there is no "
+            "per-request switch. On a fresh install with no model weights the "
             "Stage-2 rails report `unjudged`, so expect blocks until the weights "
             "are installed or the rails are explicitly disabled - deliberate, and "
             "it will surprise you once.\n\n"

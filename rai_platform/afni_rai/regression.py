@@ -260,7 +260,7 @@ def event_for(record: dict[str, Any]) -> Any:
     text = record["prompt"]
     common = dict(step_id=record["id"], agent_id="corpus", agent_type="batch",
                   agent_workspace="afni", agent_user="corpus",
-                  llm_protocol=LLMProtocol.OPENAI_CHAT, client_facing=True)
+                  llm_protocol=LLMProtocol.OPENAI_CHAT)
     if record.get("direction") == "output":
         return GuardEvent(kind=EventKind.RESPONSE,
                           payload={"choices": [{"message": {

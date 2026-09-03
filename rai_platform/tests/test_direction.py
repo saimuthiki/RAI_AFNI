@@ -131,12 +131,13 @@ class TestTheGate(unittest.TestCase):
         self.assertNotIn("probe.output", outcome.trace[0].rails_run)
 
     def test_a_skipped_rail_cannot_cause_a_fail_closed_block(self):
-        # Client-facing traffic with only an inapplicable rail mounted must be
-        # ALLOWED. If a direction mismatch fed `unjudged`, every request would
-        # block on the output rails - a total outage dressed up as caution.
+        # A request with only an inapplicable rail mounted must be ALLOWED. If a
+        # direction mismatch fed `unjudged`, every request would block on the
+        # output rails - a total outage dressed up as caution. This matters more
+        # now than it did: fail-closed is unconditional, so there is no switch
+        # left to work around a mistake here.
         rail = self._rail(Direction.OUTPUT)
         event = request("perfectly ordinary support question")
-        event.client_facing = True
         self.assertIs(Cascade([rail]).evaluate(event).verdict.decision,
                       Decision.ALLOW)
 

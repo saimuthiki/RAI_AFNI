@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-The fail-closed / unjudged policy, made configurable per tenant.
+The fail-closed / unjudged policy, made configurable per risk category.
 
 THE ENGINE ALREADY IMPLEMENTS THE RULE. THIS FILE DOES NOT REIMPLEMENT IT.
 
@@ -12,8 +12,8 @@ correct:
     refusal of the Infosys dispatcher's broad try/except-log-return-None.
   * `Cascade.evaluate` adds the payload path of every unjudged rail to
     `Verdict.unjudged` - fail loud.
-  * `Cascade._decide` returns `Decision.BLOCK` when `unjudged` is non-empty and
-    `event.client_facing` is true - fail closed.
+  * `Cascade._decide` returns `Decision.BLOCK` whenever `unjudged` is non-empty
+    - fail closed, unconditionally.
 
 That is the whole rule, in the engine, once, for every rail. Duplicating it here
 would create a second copy that could disagree with the first, which is worse
@@ -21,9 +21,9 @@ than having none.
 
 WHAT THIS FILE ADDS
 
-The engine's rule is hardcoded to one axis: `client_facing`. OpenGuardrails'
-`specification/degraded-mode.md` is explicit that a conformant enforcement point
-must go further - `:46-49`:
+The engine's rule is one flat invariant: any unjudged path blocks.
+OpenGuardrails' `specification/degraded-mode.md` is explicit that a conformant
+enforcement point must ALSO be configurable per risk category - `:46-49`:
 
     "An integration MUST apply its configured `fail_mode` without any runtime
      round-trip. An integration MUST make its fail mode configurable so a
@@ -33,15 +33,15 @@ must go further - `:46-49`:
 and `:22-35` gives the shape: `fail_mode` configured per risk category or
 category prefix, with a `default`, where `open` permits and records and `closed`
 denies. Upstream's default is `open` (`:8-16`, "the minimal integration is an
-observability instrument first"). AFNI inverts that default for client-facing
-traffic and keeps `open` for internal traffic - which is exactly the requirement:
-client-facing fails closed, internal fails open but *always reports*.
+observability instrument first"). AFNI inverts that default outright: the
+fallback here is CLOSED, and there is no per-request switch that relaxes it.
 
 So `FailurePolicy` consumes the engine's `CascadeOutcome` and adjusts only the
-one branch the engine could not know about - what a given tenant wants done about
-an unjudged path. It never touches a decision that a real blocking finding
-produced, and `open` never suppresses the report. Losing the report would be the
-Infosys failure mode arriving through the front door.
+one branch the engine could not know about - what this deployment wants done
+about an unjudged path in a specific risk category. It never touches a decision
+that a real blocking finding produced, and `open` never suppresses the report.
+Losing the report would be the Infosys failure mode arriving through the front
+door.
 
 Contrast worth keeping: NeMo Guardrails' own jailbreak rail is documented
 fail-OPEN by default at
@@ -74,12 +74,11 @@ class FailMode(str, Enum):
 
 # degraded-mode.md:37 - "A category with no entry uses `default`; an absent
 # `default` is `open`." AFNI keeps upstream's key name but not its default value:
-# for client-facing traffic the default is CLOSED, which is the deck's Phase-1
-# flip. Internal traffic keeps upstream's OPEN so an internal experiment is not
-# halted by a missing model file - but it is still reported.
+# the fallback is CLOSED. An operator can still set `open` for a named category,
+# which is the spec's configurability requirement; what they cannot do is get
+# `open` by default, or by flipping a per-request flag.
 DEFAULT_KEY = "default"
-CLIENT_FACING_DEFAULT = FailMode.CLOSED
-INTERNAL_DEFAULT = FailMode.OPEN
+AFNI_DEFAULT = FailMode.CLOSED
 
 
 @dataclass(frozen=True)
@@ -109,8 +108,6 @@ class PolicyOutcome:
     unjudged: list[str] = field(default_factory=list)
     blocking_findings: int = 0
     reason: str = ""
-    tenant: str | None = None
-    client_facing: bool = True
 
     @property
     def overridden(self) -> bool:
@@ -155,43 +152,38 @@ class PolicyOutcome:
             "could_not_judge": list(self.unjudged),
             "needs_review": self.needs_review,
             "blocking_findings": self.blocking_findings,
-            "tenant": self.tenant,
-            "client_facing": self.client_facing,
             "reason": self.reason,
         }
 
 
 class FailurePolicy:
-    """Per-tenant fail_mode resolution, applied on top of the engine's verdict.
+    """Per-category fail_mode resolution, applied on top of the engine's verdict.
 
-    Construct with a `ThresholdStore` and every tenant's `fail_modes` mapping
-    (`TenantConfig.fail_modes`) becomes the per-category configuration
-    degraded-mode.md:24-30 describes. Without a store, the two defaults apply.
+    Construct with a `ThresholdStore` and its `ThresholdOverrides.fail_modes`
+    mapping becomes the per-category configuration degraded-mode.md:24-30
+    describes. Without a store, the AFNI default (CLOSED) applies.
     """
 
     def __init__(self, thresholds: ThresholdStore | None = None,
-                 client_facing_default: FailMode = CLIENT_FACING_DEFAULT,
-                 internal_default: FailMode = INTERNAL_DEFAULT,
+                 default: FailMode = AFNI_DEFAULT,
                  global_modes: Mapping[str, str] | None = None) -> None:
         self._thresholds = thresholds
-        self._client_facing_default = FailMode(client_facing_default)
-        self._internal_default = FailMode(internal_default)
+        self._default = FailMode(default)
         self._global: dict[str, str] = dict(global_modes or {})
 
     # ------------------------------------------------------------ resolution --
-    def fail_mode_for(self, tenant: str | None, category: str | None = None,
-                      client_facing: bool = True) -> ModeDecision:
-        """Resolve one (tenant, category) pair.
+    def fail_mode_for(self, category: str | None = None) -> ModeDecision:
+        """Resolve one category.
 
-        Order: tenant exact -> tenant prefix -> tenant `default` -> global exact
-        -> global prefix -> global `default` -> the client_facing / internal
-        default. Exactly degraded-mode.md:37's "a category with no entry uses
-        `default`", with an AFNI-chosen final fallback instead of hard `open`.
+        Order: override exact -> override prefix -> override `default` -> global
+        exact -> global prefix -> global `default` -> the AFNI default. Exactly
+        degraded-mode.md:37's "a category with no entry uses `default`", with an
+        AFNI-chosen final fallback of CLOSED instead of upstream's hard `open`.
         """
-        cfg = self._thresholds.tenant(tenant) if self._thresholds else None
+        cfg = self._thresholds.overrides() if self._thresholds else None
         scopes: list[tuple[Mapping[str, str], str]] = []
         if cfg is not None and cfg.fail_modes:
-            scopes.append((cfg.fail_modes, f"tenant:{cfg.tenant}"))
+            scopes.append((cfg.fail_modes, "override"))
         if self._global:
             scopes.append((self._global, "global"))
 
@@ -208,21 +200,17 @@ class FailurePolicy:
                 return ModeDecision(FailMode(modes[DEFAULT_KEY]),
                                     f"{label}:{DEFAULT_KEY}", category)
 
-        if client_facing:
-            return ModeDecision(self._client_facing_default,
-                                "afni-default:client_facing", category)
-        return ModeDecision(self._internal_default, "afni-default:internal", category)
+        return ModeDecision(self._default, "afni-default", category)
 
-    def strictest(self, tenant: str | None, categories: Iterable[str],
-                  client_facing: bool = True) -> ModeDecision:
+    def strictest(self, categories: Iterable[str]) -> ModeDecision:
         """degraded-mode.md:38-42 treats a timeout, an outage and an `unjudged`
         path as "the same situation at three sizes". When several categories are
         in play, the strictest wins: one gated category configured `closed` is
         enough to deny, because permitting it would make the `closed` setting
         meaningless."""
-        resolved = [self.fail_mode_for(tenant, c, client_facing) for c in categories]
+        resolved = [self.fail_mode_for(c) for c in categories]
         if not resolved:
-            return self.fail_mode_for(tenant, None, client_facing)
+            return self.fail_mode_for(None)
         for decision in resolved:
             if decision.mode is FailMode.CLOSED:
                 return decision
@@ -239,19 +227,17 @@ class FailurePolicy:
         OpenGuardrails v0.8 defines it as
         (`schema/verdict.schema.json:140`), while `fail_mode` is configured per
         risk *category*. The gateway holds the rail->category mapping, so it
-        passes it in; with nothing passed, the tenant/traffic default applies.
+        passes it in; with nothing passed, the deployment default applies.
         That gap is a real limitation of the v0.8 wire shape and is stated here
         rather than papered over.
         """
         verdict = outcome.verdict
         blocking = [f for f in verdict.findings if f.action is Action.BLOCK]
-        tenant = event.tenant
 
         if blocking:
             # A real finding blocked this. No fail_mode setting may relax it -
             # `open` is about "could not look", never about "looked and found".
-            mode = self.fail_mode_for(tenant, blocking[0].category,
-                                      event.client_facing)
+            mode = self.fail_mode_for(blocking[0].category)
             return PolicyOutcome(
                 decision=Decision.BLOCK,
                 engine_decision=verdict.decision,
@@ -260,23 +246,19 @@ class FailurePolicy:
                 unjudged=list(verdict.unjudged),
                 blocking_findings=len(blocking),
                 reason=f"blocking finding {blocking[0].category}",
-                tenant=tenant,
-                client_facing=event.client_facing,
             )
 
         if not verdict.unjudged:
-            mode = self.fail_mode_for(tenant, None, event.client_facing)
+            mode = self.fail_mode_for(None)
             return PolicyOutcome(
                 decision=Decision.ALLOW,
                 engine_decision=verdict.decision,
                 fail_mode=mode.mode,
                 mode_source=mode.source,
                 reason="every mounted rail judged every payload path",
-                tenant=tenant,
-                client_facing=event.client_facing,
             )
 
-        mode = self.strictest(tenant, unjudged_categories, event.client_facing)
+        mode = self.strictest(unjudged_categories)
         if mode.mode is FailMode.CLOSED:
             decision = Decision.BLOCK
             reason = (f"{len(verdict.unjudged)} unjudged path(s) and fail_mode="
@@ -293,12 +275,10 @@ class FailurePolicy:
             unjudged=list(verdict.unjudged),
             blocking_findings=0,
             reason=reason,
-            tenant=tenant,
-            client_facing=event.client_facing,
         )
 
 
-def engine_enforces_fail_closed(verdict: Verdict, client_facing: bool) -> bool:
+def engine_enforces_fail_closed(verdict: Verdict) -> bool:
     """A read-only assertion helper, not a second implementation.
 
     Returns what `Cascade._decide` must already have concluded for this verdict.
@@ -308,7 +288,7 @@ def engine_enforces_fail_closed(verdict: Verdict, client_facing: bool) -> bool:
     """
     if any(f.action is Action.BLOCK for f in verdict.findings):
         return verdict.decision is Decision.BLOCK
-    if verdict.unjudged and client_facing:
+    if verdict.unjudged:
         return verdict.decision is Decision.BLOCK
     return verdict.decision is Decision.ALLOW
 

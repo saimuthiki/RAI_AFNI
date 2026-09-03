@@ -62,20 +62,20 @@ class Error(BaseModel):
 # Request                                                                      #
 # --------------------------------------------------------------------------- #
 class GuardRequest(BaseModel):
-    """A GuardEvent, plus the three AFNI fields the upstream schema does not have.
+    """A GuardEvent, exactly as `guard-event.schema.json` defines it.
 
-    The required set is exactly `guard-event.schema.json`'s: an application that
-    already speaks OpenGuardrails v0.8 needs no adapter to call this endpoint,
-    which was the whole reason for adopting the schema.
+    The required set is exactly upstream's: an application that already speaks
+    OpenGuardrails v0.8 needs no adapter to call this endpoint, which was the
+    whole reason for adopting the schema.
 
-    `client_facing` is the load-bearing extra. It selects fail-closed, so it
-    defaults to `true`: a caller who forgets it gets the strict behaviour, and
-    opting into fail-open is a deliberate act rather than an omission.
+    There is no per-request switch over the enforcement posture. Fail-closed is
+    unconditional: any unjudged path blocks. A posture that a caller can relax
+    is a posture that gets relaxed by whoever is in a hurry.
 
     `extra="forbid"` mirrors the upstream `additionalProperties: false`. A typo
-    in a field name is a 422 rather than a silently ignored setting - a request
-    that thought it was internal traffic and was judged as client-facing is the
-    kind of surprise this rejects.
+    in a field name is a 422 rather than a silently ignored setting - and a
+    caller still sending the removed `tenant` or `client_facing` fields gets
+    that same loud 422 rather than having them quietly dropped.
     """
 
     model_config = ConfigDict(extra="forbid", json_schema_extra={
@@ -89,9 +89,6 @@ class GuardRequest(BaseModel):
             "llm_protocol": "openai.chat",
             "payload": {"messages": [
                 {"role": "user", "content": "my ssn is 123-45-6789"}]},
-            "tenant": "acme",
-            "project": "support",
-            "client_facing": True,
         }})
 
     kind: Literal["step/request", "step/response"]
@@ -113,16 +110,6 @@ class GuardRequest(BaseModel):
     # is the published contract.
     integration: str | None = Field(default=None, max_length=128, description=(
         "Who reported it, 'name/version'. Self-declared: never a basis for trust."))
-
-    # --- AFNI additions, outside the upstream schema -------------------------
-    client_facing: bool = Field(default=True, description=(
-        "True (the default) fails CLOSED: a request that could not be fully "
-        "judged is blocked. False fails open but still reports every unjudged "
-        "path."))
-    tenant: str | None = Field(default=None, description=(
-        "Selects the tenant's threshold and fail_mode configuration."))
-    project: str | None = Field(default=None, description=(
-        "The portfolio the tenant inherits thresholds from."))
 
 
 # --------------------------------------------------------------------------- #
@@ -321,16 +308,14 @@ class ChatRequest(BaseModel):
     caller who can choose the model can route around whichever model the
     deployment was reviewed and priced against.
 
-    `client_facing` defaults to true, so a caller who omits it gets fail-closed
-    behaviour on both guardrails rather than opting out of it by accident.
+    Both guardrails fail closed unconditionally; there is no request field that
+    relaxes that on either side.
     """
 
     model_config = ConfigDict(extra="forbid", json_schema_extra={
         "example": {
             "messages": [{"role": "user", "content": "Explain what a guardrail "
                                                      "gateway does, in two lines."}],
-            "tenant": "acme",
-            "client_facing": True,
         }})
 
     messages: list[ChatMessage] = Field(min_length=1, description=(
@@ -345,9 +330,6 @@ class ChatRequest(BaseModel):
     agent_workspace: str | None = None
     agent_user: str | None = None
     integration: str | None = Field(default=None, max_length=128)
-    client_facing: bool = True
-    tenant: str | None = None
-    project: str | None = None
 
     def messages_as_dicts(self) -> list[dict[str, Any]]:
         """The messages as plain dicts, ready for both the guard payload and the

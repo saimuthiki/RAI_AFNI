@@ -28,7 +28,7 @@ Two rails exist for depth and are honest about not being protection yet:
     PiiLeakageJudgeRail      Stage 3, needs a paid judge model - reports unjudged
 
 `RailResult.unjudged` on those is deliberate, and it has a consequence worth
-stating plainly: the cascade fails closed on client-facing traffic, so a payload
+stating plainly: the cascade fails closed, so a payload
 that a Stage-1 rail escalated and Stage 2 could not judge is BLOCKED, not
 allowed. That is the correct trade - "could not look" is not "found nothing" -
 but it means installing presidio-analyzer changes the block rate, and nobody
@@ -701,7 +701,7 @@ class Vault:
     and it stays pure stdlib, exactly as upstream is.
 
     Deliberately NOT thread-shared: one vault per conversation. A process-wide
-    vault would let one tenant's placeholder resolve to another tenant's value,
+    vault would let one request's placeholder resolve to another request's value,
     which is a data-leak primitive rather than a privacy control.
     """
 
@@ -953,7 +953,7 @@ class SystemPromptLeakageRail:
 
     def check(self, path: str, text: str,
               ctx: CheckContext | None = None) -> RailResult:
-        # Per-tenant threshold, falling back to the ported default when no
+        # Configured threshold, falling back to the ported default when no
         # store is wired. THRESHOLD_KEY is resolved once per call, not per
         # finding, so the read log carries one entry per check.
         threshold = (ctx.threshold(self.THRESHOLD_KEY, self.threshold)
@@ -1051,7 +1051,7 @@ class PresidioPiiRail:
 
     `presidio-analyzer` is NOT installed in this environment, so this rail
     reports `unjudged` on every call. That is the honest answer and not a pass:
-    the cascade will fail closed on client-facing traffic that reached Stage 2.
+    the cascade will fail closed on traffic that reached Stage 2.
     The import is behind `find_spec` and the engine is built on first use, so
     importing this module downloads nothing and touches no network.
     """
@@ -1101,7 +1101,7 @@ class PresidioPiiRail:
 
     def check(self, path: str, text: str,
               ctx: CheckContext | None = None) -> RailResult:
-        # Per-tenant threshold, falling back to the ported default when no
+        # Configured threshold, falling back to the ported default when no
         # store is wired. THRESHOLD_KEY is resolved once per call, not per
         # finding, so the read log carries one entry per check.
         threshold = (ctx.threshold(self.THRESHOLD_KEY, self.score_threshold)
@@ -1119,7 +1119,7 @@ class PresidioPiiRail:
         except TypeError:
             # An older analyzer without the per-call argument. Fall back to the
             # engine default and rely on the filter below, rather than silently
-            # ignoring the tenant's threshold.
+            # ignoring the configured threshold.
             try:
                 results = engine.analyze(text=text, language=self.language,
                                          entities=list(self.entities))
@@ -1132,7 +1132,7 @@ class PresidioPiiRail:
         spans: list[Span] = []
         for res in results:
             # Belt and braces. Passing score_threshold above should already have
-            # dropped these, but a tenant tightening the threshold must drop
+            # dropped these, but tightening the threshold must drop
             # entities even if the engine ignored the argument - otherwise the
             # threshold is decorative, which is the whole failure mode being
             # fixed here.
@@ -1199,7 +1199,7 @@ class PiiLeakageJudgeRail:
 
     def check(self, path: str, text: str,
               ctx: CheckContext | None = None) -> RailResult:
-        # Per-tenant threshold, falling back to the ported default when no
+        # Configured threshold, falling back to the ported default when no
         # store is wired. THRESHOLD_KEY is resolved once per call, not per
         # finding, so the read log carries one entry per check.
         threshold = (ctx.threshold(self.THRESHOLD_KEY, self.threshold)

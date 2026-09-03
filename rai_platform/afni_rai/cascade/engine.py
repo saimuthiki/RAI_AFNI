@@ -160,9 +160,9 @@ class Cascade:
     """Runs rails stage by stage over every judgeable string in an event."""
 
     def __init__(self, rails: Sequence[Rail],
-                 resolve_threshold: Callable[[str | None, str], float] | None = None) -> None:
-        """`resolve_threshold(tenant, key) -> float` is the only hook a rail gets
-        into per-tenant configuration. Pass
+                 resolve_threshold: Callable[[str], float | None] | None = None) -> None:
+        """`resolve_threshold(key) -> float` is the only hook a rail gets
+        into threshold configuration. Pass
         `ThresholdStore(...).resolve_value` to wire the real store; leave it None
         and every rail falls back to the threshold it was ported with, so an
         unconfigured gateway behaves exactly as before.
@@ -242,10 +242,7 @@ class Cascade:
         verdict" cannot be confused by a consumer.
         """
         texts = event.texts()
-        ctx = CheckContext(
-            tenant=event.tenant, portfolio=event.project,
-            client_facing=event.client_facing, resolve=self._resolve,
-        )
+        ctx = CheckContext(resolve=self._resolve)
         findings: list[Finding] = []
         modifications: list[Span] = []
         unjudged: set[str] = set()
@@ -368,7 +365,10 @@ class Cascade:
     def _decide(event: GuardEvent, findings: list[Finding], unjudged: set[str]) -> Decision:
         if _blocking(findings):
             return Decision.BLOCK
-        if unjudged and event.client_facing:
-            # Fail closed. "Could not look" is not "found nothing".
+        if unjudged:
+            # Fail closed, unconditionally. "Could not look" is not "found
+            # nothing", and there is deliberately no switch that turns this off:
+            # a posture that can be relaxed per request is a posture that gets
+            # relaxed by whoever is in a hurry.
             return Decision.BLOCK
         return Decision.ALLOW

@@ -53,7 +53,7 @@ PROSE = ("Thanks for calling. I have pulled up your account and I can confirm "
          "the premium was received on the fourteenth.")
 
 
-def event(payload=None, client_facing=True):
+def event(payload=None):
     return GuardEvent(
         kind=EventKind.RESPONSE,
         step_id="step-1",
@@ -63,7 +63,6 @@ def event(payload=None, client_facing=True):
         agent_user="tester",
         llm_protocol=LLMProtocol.OPENAI_CHAT,
         payload=payload if payload is not None else {"text": PROSE},
-        client_facing=client_facing,
     )
 
 
@@ -339,7 +338,7 @@ class TestTopicScopeRail(unittest.TestCase):
 
     def test_unconfigured_is_clean_and_never_unjudged(self):
         # An empty lexicon is an absent policy, not a failed check. Returning
-        # unjudged would fail-closed every client-facing request in the gateway.
+        # unjudged would fail-closed every request in the gateway.
         out = X.TopicScopeRail().check("payload.text", PROSE)
         self.assertTrue(out.judged)
         self.assertEqual(out.findings, [])
@@ -403,9 +402,9 @@ class TestRubricJudgeRail(unittest.TestCase):
 
     def test_unjudged_fails_closed_through_the_engine(self):
         # The consequence that makes the honesty load-bearing: an unrunnable
-        # judge blocks client-facing traffic instead of waving it through.
+        # judge blocks the request instead of waving it through.
         rail = X.RubricJudgeRail(rubric="must cite a source", judge_model="gpt-4o")
-        out = Cascade([rail]).evaluate(event(client_facing=True))
+        out = Cascade([rail]).evaluate(event())
         self.assertIs(out.verdict.decision, Decision.BLOCK)
         self.assertTrue(out.verdict.could_not_judge)
 

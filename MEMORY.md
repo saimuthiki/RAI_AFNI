@@ -859,3 +859,120 @@ structure *is* the product's structure.
    listing confirms it.
 5. **The allowed/banned topic list** per application. `TopicScopeRail` is built
    and tested but unmounted, because the list is a decision, not a download.
+
+## 2026-09-03 — Tenant and the Enforcement switch removed; fail-closed is now unconditional
+
+AFNI's instruction: *"I dont want this tenant and also The client facing option I will
+include if needed In the further processes. So I do not want this to be In the ui and
+also in the back end wherever it is there."*
+
+### What went, and what that changed
+
+`GuardEvent` lost three fields — `tenant`, `project`, `client_facing`. None of them was
+ever in `to_dict()`, so **the OpenGuardrails wire format is unchanged**; they were AFNI
+additions carried alongside it, and removing them brings `/v1/guard`'s accepted body
+back to exactly `guard-event.schema.json`.
+
+The load-bearing consequence is `Cascade._decide`:
+
+```python
+if unjudged:
+    # Fail closed, unconditionally.
+    return Decision.BLOCK
+```
+
+Previously `if unjudged and event.client_facing`. **There is no longer any request field
+that can produce an allow on an unjudged path.** That is strictly the safer default —
+`client_facing` defaulted to `True`, so nothing that used the default changed behaviour —
+but a caller who *was* sending `client_facing=false` will now see blocks where they saw
+allows. Because `extra="forbid"` is set on `GuardRequest` and `ChatRequest`, such a
+caller gets a **422 naming the field**, not a silent drop. A silently ignored posture
+field is worse than a loud rejection.
+
+Relaxing fail-closed is still possible, but it moved: it is now a per-category
+`fail_mode` in `ThresholdOverrides.fail_modes`, applied *above* the engine by
+`policy.FailurePolicy`. So it is one deployment decision in one place, rather than a flag
+any caller could set per request.
+
+### The threshold store collapsed by one dimension
+
+`thresholds.py` was "per-tenant threshold configuration" with two-level
+account→portfolio scoping, modelled on Infosys `FMConfigRequest`. With no way to *set* a
+tenant on a request, that scoping became config nobody could select — **which is exactly
+the Safe Zone bug the module was written to prevent**, merely relocated: a stored
+threshold that the detection path can never reach. So it collapsed to global defaults
+plus one flat operator override layer:
+
+| Gone | Replaced by |
+|---|---|
+| `TenantConfig` | `ThresholdOverrides` (no `tenant`/`portfolio` field) |
+| `put_tenant` / `put_portfolio` | `put_overrides` / `overrides()` |
+| `resolve(tenant, key)` | `resolve(key)` |
+| `ThresholdScope.TENANT/TENANT_PREFIX/PORTFOLIO*` | `OVERRIDE` / `OVERRIDE_PREFIX` |
+| `CheckContext(tenant=, portfolio=, client_facing=, resolve=)` | `CheckContext(resolve=)` |
+| `AttackCorpusRail.for_tenant()` | removed; the rail reads per request |
+| `CLIENT_FACING_DEFAULT` + `INTERNAL_DEFAULT` | one `AFNI_DEFAULT = FailMode.CLOSED` |
+| CLI `--internal` | removed |
+
+The read-log honesty property — "was this threshold actually consulted?" as a *testable
+fact* — is preserved in full. `test_threshold_wiring.py` still proves an outcome
+difference; it now drives one rail at two configured thresholds instead of two tenants,
+which is what the assertion was always really about.
+
+### Two things caught only because verification was done properly
+
+**1. Renaming the capability silently broke the whole Accountability tenet.**
+`registry.register()` *raises* `KeyError` on a capability name absent from
+`analysis/data/capability_matrix_data.json` — deliberately, so a typo cannot quietly
+inflate coverage. Renaming `"Per-tenant threshold config"` → `"Threshold configuration"`
+in the tenet without renaming it in the matrix data raised mid-function and **aborted
+the remaining registrations**, taking Accountability from `27 implemented / 4 gap` to
+`22 / 13`. Fixed by renaming in `build_capability_matrix_data.py` (the generator) and
+`capability_matrix_data.json` (its output) too. The registry's strictness worked; it was
+only visible because the fixture was regenerated and *read*.
+
+**2. A latent `TypeError` on the first `/v1/chat` call.** `passthrough.py` still passed
+`project=` into a `GuardEvent` that no longer accepts it. `create_app()` imported
+cleanly, so no import test would have found it — only reading the diff did.
+
+### Two near-misses worth recording as hazards
+
+Bulk prose substitution over "tenant" and "client-facing" would have destroyed two pieces
+of *data* that merely contain those words:
+
+- `tenets/fairness/__init__.py:449` — `tenant tenants renter` inside the
+  **housing-discrimination lexicon**. Protected with an assertion during the edit.
+- `tests/test_fairness.py:94` — `"Do not promote veterans into client-facing roles."` is
+  **bias-detection test input**, not prose about enforcement.
+
+Also deliberately *not* touched: `eu:ai-act:annex3:law-enforcement` (an actual EU AI Act
+Annex III category) and every use of "enforcement point", which is standard security
+terminology rather than the removed UI control.
+
+### New: `scripts/build_fixtures.py`
+
+`web/demo-fixtures.js` was a hand-pasted registry blob, which meant every registry change
+silently made the offline console a liar. It is now generated. The three hand-authored
+`streams` replay scripts are read out and written back unchanged, so regeneration never
+destroys them.
+
+### Tests
+
+Two tests asserted the removed behaviour and were **inverted rather than deleted**, so
+the removal itself is now guarded:
+`test_foundation.test_the_engine_has_no_fail_open_path_at_all` and
+`test_accountability.test_no_request_field_can_make_the_engine_fail_open` (which asserts
+`GuardEvent` has not grown the fields back).
+Two others became exact duplicates of the test above them once the switch was gone and
+were removed with a note in place saying why.
+
+**1009 tests, `OK (skipped=4)` bare and `0 failures / 0 errors` under
+`simulate_provisioned.py`.** Verified in a headless browser that the Tenant select, the
+`(unassigned)` option, the Enforcement label and the Client-facing switch are all absent,
+with no page errors and a correct BLOCK verdict rendered.
+
+### Still outstanding from this change
+
+`docs/00-architecture.md` and `docs/01-setup.md` contain **captured CLI runs using
+`--internal`**. Those same commands now BLOCK instead of allowing with findings, so the
+outputs must be re-captured by running them, not edited by hand. Tracked separately.

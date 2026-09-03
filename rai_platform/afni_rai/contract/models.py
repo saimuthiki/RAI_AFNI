@@ -18,7 +18,7 @@ upstream bump must be a deliberate, reviewed change, never a silent one.
 
 The one semantic that matters more than any other is `unjudged`. Upstream states
 it plainly: a non-empty value means "could not look", which is *not* "found
-nothing". A fail-closed enforcement point must treat it as a block. That is the
+nothing". This platform always treats it as a block. That is the
 Infosys failure mode this whole framework exists to prevent - their dispatcher
 wraps each check in a broad try/except that logs and returns None, so one
 timeout silently drops a check.
@@ -241,12 +241,6 @@ class GuardEvent:
     payload: dict[str, Any]
     integration: dict[str, Any] | None = None
 
-    # AFNI additions, carried outside the upstream schema so the wire format
-    # stays compatible. `client_facing` is load-bearing: it selects fail-closed.
-    client_facing: bool = True
-    project: str | None = None
-    tenant: str | None = None
-
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
             "kind": self.kind.value,
@@ -272,7 +266,7 @@ class GuardEvent:
         Protocol metadata is excluded (see `PROTOCOL_METADATA_KEYS`). Judging it
         is not merely wasteful - it is actively harmful. A Stage-2 rail whose
         model weights are absent returns `unjudged` for every path it was handed,
-        and `unjudged` on client-facing traffic fails closed. Left unfiltered,
+        and `unjudged` always fails closed. Left unfiltered,
         that means a missing dependency blocks a request because nothing could
         judge the string "gpt-4o" in `payload.model`. Observed exactly that way
         while running the CLI.

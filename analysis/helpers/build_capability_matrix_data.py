@@ -370,7 +370,7 @@ SHORT_LABEL = {
         "Named on-fail remediation": "On-fail remediation actions", "Per-call execution history": "Audit trail / call history",
         "OpenTelemetry tracing": "OpenTelemetry tracing", "Governance dashboards": "Governance dashboards",
         "Fail-open versus fail-closed": "Fail-closed / unjudged policy", "Detector accuracy self-evaluation": "Detector accuracy self-eval",
-        "Per-tenant threshold": "Per-tenant threshold config", "Self-hardening attack-signature": "Self-hardening attack corpus",
+        "Per-tenant threshold": "Threshold configuration", "Self-hardening attack-signature": "Self-hardening attack corpus",
     },
 }
 

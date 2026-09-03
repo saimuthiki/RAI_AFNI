@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Per-tenant threshold configuration - one of the three things the analysis says
-AFNI has to build itself, because no reviewed repo provides it.
+Threshold configuration - one of the three things the analysis says AFNI has to
+build itself, because no reviewed repo provides it.
 
 THE PATTERN COMES FROM INFOSYS, THE BUG DOES NOT.
 
@@ -9,10 +9,10 @@ Infosys's admin service is the right shape and the only one in the 23 repos:
 `responsible-ai-admin/.../mappers/FmConfigMapper.py:66-113` defines
 `ModerationCheckThreshold` (PromptinjectionThreshold 0.7, JailbreakThreshold 0.7,
 RefusalThreshold 0.7, the seven ToxicityThreshold fields at 0.6, ...) and
-`:116-123` wraps it in `FMConfigRequest(AccountName, PortfolioName,
-ModerationChecks, ModerationCheckThresholds)` - a threshold set scoped to an
-account *and* a portfolio. That two-level scope is exactly what AFNI needs: a
-default per business unit, overridden per client.
+`:116-123` wraps it in `FMConfigRequest(...)`. AFNI takes the shipped numbers and
+the "prove it was read" discipline, and deliberately NOT the account/portfolio
+scoping: a scope no request can select is write-only config, which is the very
+bug the next paragraph describes.
 
 The bug to avoid was found in Safe Zone. Its per-pattern thresholds are stored
 and API-exposed - `internal/handlers/admin.go:66-67` writes
@@ -111,8 +111,8 @@ class ThresholdMisconfigured(ValueError):
     deliberate. Config arrives from an admin service that may not have validated
     it (Infosys's FMConfigRequest is pydantic-typed as `float` and accepts 1.7
     happily). A rail catches this and returns `RailResult.unjudged(...)`, which
-    fail-closed then turns into a block on client-facing traffic - a
-    misconfigured threshold becomes loudly visible instead of quietly permissive.
+    fail-closed then turns into a block - a misconfigured threshold becomes
+    loudly visible instead of quietly permissive.
     """
 
 
@@ -121,10 +121,8 @@ class ThresholdScope(str, Enum):
     can see *which* level of config won, which is the question the Safe Zone
     admin UI could not answer."""
 
-    TENANT = "tenant"
-    TENANT_PREFIX = "tenant-prefix"
-    PORTFOLIO = "portfolio"
-    PORTFOLIO_PREFIX = "portfolio-prefix"
+    OVERRIDE = "override"
+    OVERRIDE_PREFIX = "override-prefix"
     GLOBAL = "global"
     LAST_RESORT = "last-resort"
 
@@ -136,7 +134,6 @@ class ThresholdRead:
     This exists so a test can prove consultation. See the module docstring.
     """
 
-    tenant: str | None
     key: str
     value: float
     scope: ThresholdScope
@@ -145,24 +142,25 @@ class ThresholdRead:
 
 
 @dataclass
-class TenantConfig:
-    """One account's overrides. Modelled on Infosys FMConfigRequest
-    (FmConfigMapper.py:116-123): an account name, the portfolio it inherits from,
-    the set of checks it has enabled, and the threshold overrides.
+class ThresholdOverrides:
+    """The operator's overrides on top of the shipped defaults.
+
+    There is ONE of these per gateway. An earlier revision keyed overrides by
+    account and portfolio, mirroring Infosys's AccountName/PortfolioName pair;
+    that dimension was removed because nothing could set it on a request, and a
+    scope nobody can select is the write-only-config bug this module exists to
+    prevent, merely relocated.
 
     `thresholds` keys are AFNI `Finding.category` paths, or a category prefix
     ending in `.*` - the same glob shape OpenGuardrails uses for per-category
     configuration in `specification/degraded-mode.md:27-30`.
     """
 
-    tenant: str
-    portfolio: str | None = None
     thresholds: Mapping[str, float] = field(default_factory=dict)
-    # Infosys FMConfigRequest.ModerationChecks - which checks this account runs
-    # at all. An empty set means "no opinion, run everything mounted".
+    # Which checks run at all. An empty set means "no opinion, run everything
+    # mounted"; declaring a set is opt-in narrowing.
     checks_enabled: frozenset[str] = frozenset()
-    # Per-category fail_mode overrides, consumed by policy.FailurePolicy. Kept on
-    # the same object so a client's risk posture is one record, not two.
+    # Per-category fail_mode overrides, consumed by policy.FailurePolicy.
     fail_modes: Mapping[str, str] = field(default_factory=dict)
     label: str = ""
 
@@ -172,18 +170,18 @@ class TenantConfig:
         problems: list[str] = []
         for key, value in self.thresholds.items():
             if not isinstance(value, (int, float)) or isinstance(value, bool):
-                problems.append(f"{self.tenant}/{key}: {value!r} is not a number")
+                problems.append(f"{key}: {value!r} is not a number")
             elif not 0.0 <= float(value) <= 1.0:
                 problems.append(
-                    f"{self.tenant}/{key}: {value} is outside [0, 1] and cannot be "
+                    f"{key}: {value} is outside [0, 1] and cannot be "
                     "compared against a detector score")
         return problems
 
 
 def _prefix_match(keys: Iterable[str], key: str) -> str | None:
     """Longest-prefix wildcard match. `security.*` matches
-    `security.prompt_injection`; the longest matching pattern wins, so a tenant
-    can set a broad default and a narrow exception."""
+    `security.prompt_injection`; the longest matching pattern wins, so an
+    operator can set a broad default and a narrow exception."""
     best: str | None = None
     for pattern in keys:
         if not pattern.endswith(".*"):
@@ -196,12 +194,11 @@ def _prefix_match(keys: Iterable[str], key: str) -> str | None:
 
 
 class ThresholdStore:
-    """Resolves a threshold for (tenant, category), and records that it did.
+    """Resolves a threshold for a category, and records that it did.
 
     Resolution order, narrowest first:
 
-        tenant exact -> tenant prefix -> portfolio exact -> portfolio prefix
-        -> global default -> last resort
+        override exact -> override prefix -> global default -> last resort
 
     Nothing here caches: a threshold change must take effect on the next request,
     which is the one thing Safe Zone's `cache.ClearCache` call at admin.go:75 got
@@ -211,34 +208,25 @@ class ThresholdStore:
     def __init__(self, defaults: Mapping[str, float] | None = None,
                  last_resort: float = LAST_RESORT_THRESHOLD) -> None:
         # RAIL_DEFAULTS first so an explicit GLOBAL_DEFAULTS entry wins on a
-        # key collision; both are overridable by portfolio and tenant above.
+        # key collision; both are overridable by the override layer above.
         self._defaults: dict[str, float] = dict(RAIL_DEFAULTS)
         self._defaults.update(GLOBAL_DEFAULTS if defaults is None else defaults)
         self._last_resort = float(last_resort)
-        self._tenants: dict[str, TenantConfig] = {}
-        self._portfolios: dict[str, TenantConfig] = {}
+        self._overrides: ThresholdOverrides | None = None
         self._reads: list[ThresholdRead] = []
 
     # ------------------------------------------------------------------ admin --
-    def put_tenant(self, config: TenantConfig) -> None:
-        self._tenants[config.tenant] = config
+    def put_overrides(self, config: ThresholdOverrides) -> None:
+        self._overrides = config
 
-    def put_portfolio(self, config: TenantConfig) -> None:
-        """A portfolio is just a TenantConfig used as a parent, mirroring
-        Infosys's AccountName/PortfolioName pair."""
-        self._portfolios[config.tenant] = config
-
-    def tenant(self, tenant: str | None) -> TenantConfig | None:
-        return self._tenants.get(tenant) if tenant else None
+    def overrides(self) -> ThresholdOverrides | None:
+        return self._overrides
 
     def audit(self) -> list[str]:
-        """Every misconfiguration across every registered account. This is what
-        an admin service should call before persisting, and what nobody in the
-        reviewed set actually does."""
-        problems: list[str] = []
-        for cfg in list(self._portfolios.values()) + list(self._tenants.values()):
-            problems.extend(cfg.audit())
-        return problems
+        """Every misconfiguration in the override layer. This is what an admin
+        service should call before persisting, and what nobody in the reviewed
+        set actually does."""
+        return list(self._overrides.audit()) if self._overrides is not None else []
 
     # -------------------------------------------------------------- detection --
     @property
@@ -247,15 +235,13 @@ class ThresholdStore:
         that proves a configured threshold is genuinely consulted."""
         return list(self._reads)
 
-    def read_count(self, tenant: str | None = None, key: str | None = None) -> int:
-        return sum(1 for r in self._reads
-                   if (tenant is None or r.tenant == tenant)
-                   and (key is None or r.key == key))
+    def read_count(self, key: str | None = None) -> int:
+        return sum(1 for r in self._reads if key is None or r.key == key)
 
     def clear_reads(self) -> None:
         self._reads.clear()
 
-    def resolve(self, tenant: str | None, key: str) -> ThresholdRead:
+    def resolve(self, key: str) -> ThresholdRead:
         """The detection path's only entry point. Always logs.
 
         Raises `ThresholdMisconfigured` when the winning value is not a score in
@@ -263,43 +249,30 @@ class ThresholdStore:
         default - silently substituting 0.85 for a bad config is how a tuned
         threshold turns into a lie.
         """
-        value, scope, source = self._lookup(tenant, key)
-        read = ThresholdRead(tenant=tenant, key=key, value=float(value), scope=scope,
+        value, scope, source = self._lookup(key)
+        read = ThresholdRead(key=key, value=float(value), scope=scope,
                              source=source, at=time.time())
         # Logged before validation on purpose: an attempted read of a broken
         # threshold is exactly the event an operator needs to see.
         self._reads.append(read)
         if not isinstance(value, (int, float)) or isinstance(value, bool):
             raise ThresholdMisconfigured(
-                f"threshold {key!r} for tenant {tenant!r} is {value!r}, not a number "
-                f"(source {source})")
+                f"threshold {key!r} is {value!r}, not a number (source {source})")
         if not 0.0 <= float(value) <= 1.0:
             raise ThresholdMisconfigured(
-                f"threshold {key!r} for tenant {tenant!r} is {value}, outside [0, 1] "
-                f"(source {source}) - cannot be compared against a detector score")
+                f"threshold {key!r} is {value}, outside [0, 1] (source {source}) "
+                "- cannot be compared against a detector score")
         return read
 
-    def _lookup(self, tenant: str | None, key: str
-                ) -> tuple[float, ThresholdScope, str]:
-        cfg = self._tenants.get(tenant) if tenant else None
+    def _lookup(self, key: str) -> tuple[float, ThresholdScope, str]:
+        cfg = self._overrides
         if cfg is not None:
             if key in cfg.thresholds:
-                return cfg.thresholds[key], ThresholdScope.TENANT, f"tenant:{cfg.tenant}"
+                return cfg.thresholds[key], ThresholdScope.OVERRIDE, "override"
             pattern = _prefix_match(cfg.thresholds, key)
             if pattern is not None:
-                return (cfg.thresholds[pattern], ThresholdScope.TENANT_PREFIX,
-                        f"tenant:{cfg.tenant}:{pattern}")
-
-        parent_name = cfg.portfolio if cfg is not None else None
-        parent = self._portfolios.get(parent_name) if parent_name else None
-        if parent is not None:
-            if key in parent.thresholds:
-                return (parent.thresholds[key], ThresholdScope.PORTFOLIO,
-                        f"portfolio:{parent.tenant}")
-            pattern = _prefix_match(parent.thresholds, key)
-            if pattern is not None:
-                return (parent.thresholds[pattern], ThresholdScope.PORTFOLIO_PREFIX,
-                        f"portfolio:{parent.tenant}:{pattern}")
+                return (cfg.thresholds[pattern], ThresholdScope.OVERRIDE_PREFIX,
+                        f"override:{pattern}")
 
         if key in self._defaults:
             return self._defaults[key], ThresholdScope.GLOBAL, "global-default"
@@ -309,7 +282,7 @@ class ThresholdStore:
                     f"global-default:{pattern}")
         return self._last_resort, ThresholdScope.LAST_RESORT, "last-resort"
 
-    def resolve_value(self, tenant: str | None, key: str) -> float | None:
+    def resolve_value(self, key: str) -> float | None:
         """The callable the cascade injects into `CheckContext.resolve`.
 
         Returns the resolved score, or **None** when the stored value is
@@ -319,9 +292,8 @@ class ThresholdStore:
         stating rather than burying. `resolve()` argues a bad config must become
         `unjudged`, never a default, because silently substituting a number turns
         a tuned threshold into a lie. The argument is right about the lie and
-        wrong about the remedy at this particular seam: `unjudged` fails closed
-        on client-facing traffic, so a single typo in one tenant's config would
-        take that tenant's production traffic down.
+        wrong about the remedy at this particular seam: `unjudged` fails closed,
+        so a single typo in the override layer would take all traffic down.
 
         So the fallback happens, and is made loud in two places instead of one:
         the store's own read log records the attempted read of the broken value
@@ -339,22 +311,24 @@ class ThresholdStore:
         labels the read `rail-default-after-resolver-error`, which keeps the two
         cases tellable apart in the audit trail.
         """
-        return self.resolve(tenant, key).value
+        return self.resolve(key).value
 
-    def check_enabled(self, tenant: str | None, check: str) -> bool:
-        """Infosys FMConfigRequest.ModerationChecks. An account with no declared
-        set runs everything mounted; declaring a set is opt-in narrowing."""
-        cfg = self._tenants.get(tenant) if tenant else None
+    def check_enabled(self, check: str) -> bool:
+        """Infosys FMConfigRequest.ModerationChecks, collapsed to one scope. No
+        declared set runs everything mounted; declaring a set is opt-in
+        narrowing."""
+        cfg = self._overrides
         if cfg is None or not cfg.checks_enabled:
             return True
         return check in cfg.checks_enabled
 
     def render(self) -> str:
-        lines = ["Per-tenant threshold configuration",
+        cfg = self._overrides
+        lines = ["Threshold configuration",
                  f"  global defaults : {len(self._defaults)} keys "
                  f"(last resort {self._last_resort})",
-                 f"  portfolios      : {sorted(self._portfolios)}",
-                 f"  accounts        : {sorted(self._tenants)}",
+                 f"  overrides       : "
+                 f"{len(cfg.thresholds) if cfg else 0} keys",
                  f"  resolutions     : {len(self._reads)} recorded"]
         problems = self.audit()
         if problems:

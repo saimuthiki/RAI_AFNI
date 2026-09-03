@@ -90,14 +90,12 @@ def event_for(record: dict) -> GuardEvent:
             agent_type="batch", agent_workspace="afni", agent_user="corpus",
             llm_protocol=LLMProtocol.OPENAI_CHAT,
             payload={"choices": [{"message": {"role": "assistant",
-                                              "content": text}}]},
-            client_facing=True)
+                                              "content": text}}]})
     return GuardEvent(
         kind=EventKind.REQUEST, step_id=record["id"], agent_id="corpus",
         agent_type="batch", agent_workspace="afni", agent_user="corpus",
         llm_protocol=LLMProtocol.OPENAI_CHAT,
-        payload={"messages": [{"role": "user", "content": text}]},
-        client_facing=True)
+        payload={"messages": [{"role": "user", "content": text}]})
 
 
 def judge(cascade, record: dict) -> dict:

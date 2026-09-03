@@ -50,7 +50,7 @@ BENIGN = [
 ]
 
 
-def response_event(text, client_facing=True):
+def response_event(text):
     """The same text judged as a MODEL RESPONSE rather than a user prompt.
 
     Needed because rails now declare a `Direction`, so which side of the AI
@@ -61,16 +61,14 @@ def response_event(text, client_facing=True):
         agent_type="chat", agent_workspace="afni", agent_user="tester",
         llm_protocol=LLMProtocol.OPENAI_CHAT,
         payload={"choices": [{"message": {"role": "assistant", "content": text}}]},
-        client_facing=client_facing,
     )
 
 
-def event(text, client_facing=True):
+def event(text):
     return GuardEvent(
         kind=EventKind.REQUEST, step_id="step-1", agent_id="agent-1",
         agent_type="chat", agent_workspace="afni", agent_user="tester",
         llm_protocol=LLMProtocol.OPENAI_CHAT, payload={"text": text},
-        client_facing=client_facing,
     )
 
 
@@ -498,8 +496,8 @@ class TestDependencyAbsentRails(unittest.TestCase):
                     os.environ[key] = value
 
     def test_unjudged_fails_closed_through_the_engine(self):
-        """On client-facing traffic a gap in coverage blocks. That is the point
-        of reporting it honestly.
+        """A gap in coverage blocks, unconditionally. That is the point of
+        reporting it honestly.
 
         Driven by an explicit stand-in rather than by whichever Stage-2 rail
         happens to be unprovisioned on this machine. The earlier version mounted
@@ -513,7 +511,7 @@ class TestDependencyAbsentRails(unittest.TestCase):
             def check(self, path, text):
                 return RailResult.unjudged("stand-in: dependency absent")
 
-        out = Cascade([CannotLook()]).evaluate(event("hello", True))
+        out = Cascade([CannotLook()]).evaluate(event("hello"))
         self.assertIs(out.verdict.decision, Decision.BLOCK)
         self.assertTrue(out.verdict.could_not_judge)
 

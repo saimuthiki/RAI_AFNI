@@ -108,7 +108,7 @@ class Passthrough:
     Holds no state of its own. It borrows the Gateway's cascade, policy, audit
     store and trust boundary rather than re-deriving any of them, so a
     passthrough decision is the same decision `/v1/guard` would have made about
-    the same text - including the tenant's thresholds and fail_mode, and
+    the same text - including the configured thresholds and fail_mode, and
     including `AFNI_REVEAL_SUBJECT`.
     """
 
@@ -148,9 +148,6 @@ class Passthrough:
             llm_protocol=LLMProtocol.OPENAI_CHAT,
             payload=payload,
             integration=getattr(body, "integration", None),
-            client_facing=getattr(body, "client_facing", True),
-            project=getattr(body, "project", None),
-            tenant=getattr(body, "tenant", None),
         )
 
     @staticmethod

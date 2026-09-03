@@ -27,7 +27,7 @@ from afni_rai.registry.capabilities import CapabilityRegistry, Coverage  # noqa:
 from afni_rai.tenets import hallucination as H  # noqa: E402
 
 
-def event(payload=None, client_facing=True):
+def event(payload=None):
     return GuardEvent(
         kind=EventKind.RESPONSE,
         step_id="step-1",
@@ -37,7 +37,6 @@ def event(payload=None, client_facing=True):
         agent_user="tester",
         llm_protocol=LLMProtocol.OPENAI_CHAT,
         payload=payload if payload is not None else {"output": "hello"},
-        client_facing=client_facing,
     )
 
 
@@ -654,16 +653,16 @@ class TestRailsAndStages(unittest.TestCase):
         self.assertEqual(len(names), len(set(names)))
 
     def test_a_clean_response_produces_an_allow_on_internal_traffic(self):
-        # Stage 2 reports unjudged (no weights), so client-facing traffic is
+        # Stage 2 reports unjudged (no weights), so the request is
         # blocked by design. Internal traffic is allowed and the gap is still
         # on the record - that is the fail-loud contract, not a bug.
         out = Cascade(H.RAILS).evaluate(
-            event({"output": "The capital of France is Paris."}, client_facing=False))
+            event({"output": "The capital of France is Paris."}))
         self.assertIs(out.verdict.decision, Decision.ALLOW)
 
     def test_a_malformed_structured_response_reaches_the_verdict(self):
         out = Cascade(H.RAILS).evaluate(
-            event({"output": 'here: {"a": 1,}'}, client_facing=False))
+            event({"output": 'here: {"a": 1,}'}))
         self.assertIn("x.afni.structured_output.malformed_json",
                       [f.category for f in out.verdict.findings])
 

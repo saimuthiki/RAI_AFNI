@@ -61,7 +61,7 @@ Two rails are honestly not protection yet:
   injection.deberta     Stage 2. `protectai/deberta-v3-base-prompt-injection-v2`
                         needs transformers + torch, which are not installed. It
                         returns `unjudged`, the cascade records the gap, and
-                        fail-closed blocks client-facing traffic. That is the
+                        fail-closed blocks the request. That is the
                         designed behaviour, not a bug.
 
   prompt_shields        Stage 3. Azure AI Content Safety Prompt Shields is the
@@ -76,7 +76,7 @@ attempt and belong in CI. Registered `Coverage.OFFLINE`, never mounted - the
 A note on posture. NeMo Guardrails' own jailbreak rail defaults to fail-OPEN
 (references/Guardrails-develop/docs/configure-rails/guardrail-catalog/jailbreak-protection.mdx:112):
 if its detection service is unreachable the request is allowed. Every rail here
-returns `unjudged` instead, and the engine fails closed on client-facing traffic.
+returns `unjudged` instead, and the engine fails closed.
 No rail in this module ever decides to let something through because it could not
 look.
 """
@@ -1097,7 +1097,7 @@ class DebertaInjectionRail:
 
     def check(self, path: str, text: str,
               ctx: CheckContext | None = None) -> RailResult:
-        # Per-tenant threshold, falling back to the ported default when no
+        # Configured threshold, falling back to the ported default when no
         # store is wired. THRESHOLD_KEY is resolved once per call, not per
         # finding, so the read log carries one entry per check.
         threshold = (ctx.threshold(self.THRESHOLD_KEY, self.threshold)
@@ -1412,7 +1412,7 @@ def register(registry) -> None:
         available=DebertaInjectionRail.dependency_available(),
         note=f"needs transformers + torch and the {classifier.MODEL_ID} weights; "
              "returns unjudged until then, which fail-closed turns into a block on "
-             "client-facing traffic")
+             "any request")
 
     # Offline: PyRIT's multi-turn strategies need many model turns per attempt.
     # Claiming this as runtime cover would be the single most misleading row in

@@ -78,7 +78,7 @@ from .thresholds import ThresholdMisconfigured, ThresholdStore
 # AFNI-specific detector belongs.
 DEFAULT_CATEGORY = "x.afni.attack_corpus.confirmed_repeat"
 
-# The threshold key the rail resolves per tenant. Default 0.60 lives in
+# The threshold key the rail resolves. Default 0.60 lives in
 # `thresholds.GLOBAL_DEFAULTS`, cited to JCB.
 SIMILARITY_KEY = "x.afni.attack_corpus.similarity"
 
@@ -295,7 +295,7 @@ ATTRIBUTION = RailAttribution(
 class AttackCorpusRail:
     """Stage 1. Blocks a replay or light mutation of an attack already confirmed.
 
-    Per-tenant threshold, resolved on every check through `ThresholdStore` - and
+    The threshold is resolved on every check through `ThresholdStore` - and
     that is deliberate rather than incidental. Safe Zone stores per-pattern
     thresholds and never reads them (`internal/guardrails/thresholds.go:8-24`
     uses env globals instead); this rail's threshold comes from the store on the
@@ -304,8 +304,7 @@ class AttackCorpusRail:
 
     A misconfigured threshold produces `unjudged`, not a default. Substituting a
     sane-looking fallback for a broken config is how a tuned threshold becomes a
-    lie; fail-closed then blocks the client-facing request and somebody fixes the
-    config.
+    lie; fail-closed then blocks the request and somebody fixes the config.
     """
 
     tenet = Tenet.ACCOUNTABILITY
@@ -316,23 +315,10 @@ class AttackCorpusRail:
 
     def __init__(self, corpus: AttackCorpus | None = None,
                  thresholds: ThresholdStore | None = None,
-                 tenant: str | None = None,
                  name: str = "attack-corpus-repeat") -> None:
         self.name = name
         self.corpus = corpus if corpus is not None else AttackCorpus()
         self.thresholds = thresholds if thresholds is not None else ThresholdStore()
-        self.tenant = tenant
-
-    def for_tenant(self, tenant: str | None) -> "AttackCorpusRail":
-        """A rail pre-bound to one account, sharing the corpus and the store.
-
-        Retained for a single-tenant deployment and for tests. It is no longer
-        how the gateway does it: `check` now takes the tenant from the request
-        context, because a rail whose tenant is fixed at construction applies one
-        account's threshold to every account's traffic once it is mounted in a
-        shared cascade. `ctx.tenant` wins over this when a context is passed.
-        """
-        return AttackCorpusRail(self.corpus, self.thresholds, tenant, self.name)
 
     def check(self, path: str, text: str,
               ctx: "CheckContext | None" = None) -> RailResult:
@@ -341,11 +327,8 @@ class AttackCorpusRail:
             # an empty corpus means no attack has ever been confirmed.
             return RailResult.clean()
 
-        # The request's tenant, not the one this instance happened to be built
-        # with. A mounted rail serves every account.
-        tenant = ctx.tenant if ctx is not None else self.tenant
         try:
-            read = self.thresholds.resolve(tenant, SIMILARITY_KEY)
+            read = self.thresholds.resolve(SIMILARITY_KEY)
         except ThresholdMisconfigured as exc:
             return RailResult.unjudged(f"{self.name}: {exc}")
         if ctx is not None:
