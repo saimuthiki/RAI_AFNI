@@ -849,10 +849,16 @@ class RubricJudgeRail:
             # run with nothing installed.
             from deepeval.metrics import GEval
             from deepeval.test_case import LLMTestCase, SingleTurnParams
-        except ImportError as exc:
+        # `Exception`, not `ImportError`: a dependency that is installed but
+        # BROKEN is as unusable as an absent one and does not raise
+        # ImportError. deepeval pulls in the same numpy/pandas/sklearn stack
+        # that produced a bare RuntimeError on a numpy-2-vs-numpy-1 mismatch on
+        # 2026-09-03, and a rail is supposed to RETURN `unjudged` rather than
+        # raise - see the long note in tenets/security.
+        except Exception as exc:  # noqa: BLE001 - absent OR broken
             return RailResult.unjudged(
-                f"{self.name}: deepeval not installed ({exc}) - G-Eval rubric judge "
-                "unavailable")
+                f"{self.name}: deepeval unusable ({exc.__class__.__name__}: "
+                f"{exc}) - G-Eval rubric judge unavailable")
         if self._model is None:
             # g_eval.py:79 - initialize_model(None) resolves to a paid OpenAI
             # judge. Defaulting into someone's bill is not a degradation this

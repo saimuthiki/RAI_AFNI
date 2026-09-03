@@ -1069,15 +1069,26 @@ class ToxicityClassifier:
         self.source: str | None = None
 
     def available(self) -> bool:
-        """Cheap, side-effect-free probe: is the library importable at all?
-        Deliberately does not construct the scanner, because that downloads
-        weights - and this is called from `register()`."""
+        """Is the library importable AND usable? Does not construct the
+        scanner, because that downloads weights - and this is called from
+        `register()`.
+
+        `find_spec` for llm_guard and torch, but the real memoised import probe
+        for transformers, because on 2026-09-03 a machine had transformers
+        present on disk and every import of it dying on a numpy ABI mismatch.
+        `find_spec` said yes, `register()` recorded the capability as covered,
+        and the rail then reported `unjudged` on every request. See
+        `tenets.security._transformers_available` for the cost of the real
+        probe and why it is bounded.
+        """
         import importlib.util
 
-        for module in ("llm_guard", "transformers", "torch"):
+        from ..security import _transformers_available  # noqa: PLC0415
+
+        for module in ("llm_guard", "torch"):
             if importlib.util.find_spec(module) is None:
                 return False
-        return True
+        return _transformers_available()
 
     def _load(self, threshold: float | None = None):
         """Return a scanner whose internal threshold IS `threshold`.
@@ -1199,12 +1210,17 @@ class ZeroShotTopics:
         self.source: str | None = None
 
     def available(self) -> bool:
+        # Same split as ToxicityClassifier above: find_spec for the pure-Python
+        # side, the real memoised probe for transformers. A broken transformers
+        # is as unusable as an absent one.
         import importlib.util
 
-        for module in ("llm_guard", "transformers", "torch"):
+        from ..security import _transformers_available  # noqa: PLC0415
+
+        for module in ("llm_guard", "torch"):
             if importlib.util.find_spec(module) is None:
                 return False
-        return True
+        return _transformers_available()
 
     def _load(self, threshold: float | None = None):
         """Return a BanTopics whose internal threshold IS `threshold`.

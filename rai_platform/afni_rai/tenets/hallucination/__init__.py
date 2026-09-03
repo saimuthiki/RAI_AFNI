@@ -928,7 +928,26 @@ class NliGroundednessRail:
             )
 
             _quieten_loaded()
-        except ImportError as exc:
+        # `Exception`, not `ImportError`, and the reason is worth the two lines.
+        #
+        # A dependency that is INSTALLED BUT BROKEN is as unusable as an absent
+        # one, and it does not raise ImportError. Observed on 2026-09-03 on a
+        # Windows box where a global `pip install` had upgraded numpy to 2.5.2
+        # while pandas was still compiled against numpy 1.x: importing
+        # `transformers` reaches `transformers.generation.candidate_generator`,
+        # which imports sklearn, which imports pandas, which dies with
+        #
+        #   ValueError: numpy.dtype size changed ... Expected 96 from C header,
+        #   got 88 from PyObject
+        #
+        # re-raised by transformers as a plain RuntimeError. With `ImportError`
+        # here that escaped `_load()` and propagated out of `check()`.
+        #
+        # The engine catches it and fails closed, so production was never
+        # unsafe - but a rail is supposed to RETURN `unjudged`, not raise, and
+        # a rail that raises makes a broken install look like a platform bug
+        # instead of a broken install.
+        except Exception as exc:  # noqa: BLE001 - absent OR broken; see above
             self._load_error = f"{exc.__class__.__name__}: {exc}"
             return None
         try:

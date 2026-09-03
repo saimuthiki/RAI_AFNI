@@ -1073,8 +1073,28 @@ class DebertaInjectionRail:
             from transformers import pipeline  # noqa: PLC0415 - lazy on purpose
             
             _quieten_loaded()
-        except ImportError as exc:
-            self._unavailable = f"transformers not installed ({exc.__class__.__name__})"
+        # `Exception`, not `ImportError`, and the reason is worth the two lines.
+        #
+        # A dependency that is INSTALLED BUT BROKEN is as unusable as an absent
+        # one, and it does not raise ImportError. Observed on 2026-09-03 on a
+        # Windows box where a global `pip install` had upgraded numpy to 2.5.2
+        # while pandas was still compiled against numpy 1.x: importing
+        # `transformers` reaches `transformers.generation.candidate_generator`,
+        # which imports sklearn, which imports pandas, which dies with
+        #
+        #   ValueError: numpy.dtype size changed ... Expected 96 from C header,
+        #   got 88 from PyObject
+        #
+        # re-raised by transformers as a plain RuntimeError. With `ImportError`
+        # here that escaped `_load()` and propagated out of `check()`.
+        #
+        # The engine catches it and fails closed, so production was never
+        # unsafe - but a rail is supposed to RETURN `unjudged`, not raise, and
+        # a rail that raises makes a broken install look like a platform bug
+        # instead of a broken install.
+        except Exception as exc:  # noqa: BLE001 - absent OR broken; see above
+            self._unavailable = (
+                f"transformers unusable ({exc.__class__.__name__}: {exc})")
             return None
         from ...models import resolve  # noqa: PLC0415
         resolved = resolve(self.MODEL_ID, self.MODEL_REVISION)
@@ -1332,20 +1352,63 @@ RAILS = [
 ]
 
 
-def _transformers_available() -> bool:
-    """Is `transformers` importable? `find_spec` does not execute the package, so
-    this stays free of import side effects.
+#: Memoised result of the real import. `None` = not probed yet.
+_TRANSFORMERS_USABLE: bool | None = None
 
-    NOT sufficient on its own to claim the Stage-2 capability - see
-    `DebertaInjectionRail.dependency_available`. The library being importable
-    says nothing about whether the weights are here.
+
+def _transformers_available() -> bool:
+    """Is `transformers` actually USABLE - not merely present on disk?
+
+    `find_spec` alone was not enough, and the day it stopped being enough is
+    worth recording. On 2026-09-03 a machine had transformers installed and all
+    five model folders downloaded, so `find_spec` said yes and this returned
+    True - while every actual import died on a numpy 2 / pandas-built-for-numpy-1
+    ABI mismatch. Coverage, `/healthz` and the CLI all reported the Stage-2
+    rails as available; the rails then reported `unjudged` on every request.
+    **Claiming a capability the platform cannot deliver is the exact
+    over-reporting this module's other docstrings warn about**, so the cheap
+    probe was not good enough.
+
+    THE COST, STATED RATHER THAN HIDDEN. This does a real import, so the FIRST
+    caller on a provisioned machine pays a few seconds. That is why it is:
+
+      * short-circuited by `find_spec` first, so a bare machine - which is where
+        `coverage` and `preflight` are run most - pays nothing at all; and
+      * memoised for the life of the process, so the cost is paid once. The
+        gateway's warm-up imports transformers anyway, so in the gateway this is
+        free.
+
+    A broken install is indistinguishable from an absent one as far as every
+    caller of this function is concerned, which is the whole point.
     """
+    global _TRANSFORMERS_USABLE
+    if _TRANSFORMERS_USABLE is not None:
+        return _TRANSFORMERS_USABLE
+
     import importlib.util
 
     try:
-        return importlib.util.find_spec("transformers") is not None
+        if importlib.util.find_spec("transformers") is None:
+            _TRANSFORMERS_USABLE = False
+            return False
     except (ImportError, ValueError):
+        _TRANSFORMERS_USABLE = False
         return False
+
+    try:
+        import transformers  # noqa: F401, PLC0415
+        from transformers import pipeline  # noqa: F401, PLC0415
+    except Exception:  # noqa: BLE001 - absent, broken ABI, or a bad build
+        _TRANSFORMERS_USABLE = False
+        return False
+    _TRANSFORMERS_USABLE = True
+    return True
+
+
+def _reset_transformers_probe() -> None:
+    """Drop the memoised probe. For tests that fake a broken import."""
+    global _TRANSFORMERS_USABLE
+    _TRANSFORMERS_USABLE = None
 
 
 def _weights_reachable(repo_id: str, revision: str | None) -> bool:

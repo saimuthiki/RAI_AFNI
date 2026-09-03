@@ -56,24 +56,51 @@ python -m pip install "numpy<2" "pillow<11" "protobuf<5"
 ### 3 · Everything from PyPI, in one command
 
 ```powershell
+python -m pip install "numpy<2"
 python -m pip install fastapi uvicorn httpx pytest
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 python -m pip install transformers llm-guard==0.3.16 presidio-analyzer huggingface_hub
 python -m pip install nudenet onnxruntime opencv-python-headless
 python -m spacy download en_core_web_lg
+python -m pip install "numpy<2"
 ```
 
 ```bash
+python3 -m pip install "numpy<2"
 python3 -m pip install fastapi uvicorn httpx pytest
 python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 python3 -m pip install transformers llm-guard==0.3.16 presidio-analyzer huggingface_hub
 python3 -m pip install nudenet onnxruntime opencv-python-headless
 python3 -m spacy download en_core_web_lg
+python3 -m pip install "numpy<2"
 ```
 
 `torch` needs the CPU index (900 MB instead of 2.5 GB). `en_core_web_lg` needs
 `spacy download`, not a pinned URL. `nudenet` carries its own 12 MB model inside
 the wheel — no separate download.
+
+**`numpy<2` twice, first and last, and the repetition is not a mistake.** This
+stack is pinned around `llm-guard==0.3.16`, which is from the numpy-1 era, and
+several packages here do not pin numpy at all — `nudenet` among them — so pip
+will happily pull numpy 2 in the middle of the sequence and leave a
+numpy-1-compiled `pandas` behind it. The last line puts it back.
+
+What that looks like when it goes wrong, so you recognise it:
+
+```
+ValueError: numpy.dtype size changed, may indicate binary incompatibility.
+            Expected 96 from C header, got 88 from PyObject
+```
+
+Read it backwards: a package compiled against numpy **1.x** (96) is running
+against numpy **2.x** (88). Observed on 2026-09-03 — `transformers` reaches
+`sklearn`, which reaches `pandas`, which dies, so **all four Stage-2 model rails
+report `unjudged` and every check that needs one fails closed**. The platform
+behaves correctly and tells you; it just cannot look. One command fixes it:
+
+```powershell
+python -m pip install "numpy<2"
+```
 
 ### 4 · The five Stage-2 model files (~3.8 GB, resumable)
 
@@ -495,6 +522,26 @@ application, is the list of topics that application may discuss and the ones it
 must refuse.
 
 ---
+
+### If a Stage-2 rail says it cannot judge but the weights are there
+
+Run this first — it now tells you the truth rather than the optimistic answer:
+
+```bash
+python3 rai_platform/cli.py preflight
+python3 rai_platform/cli.py coverage
+```
+
+The availability probe used to be `find_spec("transformers")`, which answers
+"is it on disk" rather than "does it work". On 2026-09-03 that reported all four
+Stage-2 rails as available on a machine where every import of transformers died
+on a numpy ABI mismatch — so `coverage` claimed the capability while the gateway
+returned `unjudged` on every request. It now does a real import, memoised once
+per process, and a **broken** install reports exactly like an **absent** one.
+
+The cost of that honesty: on a provisioned machine the first call to `coverage`
+pays one transformers import, a few seconds. On a bare machine it costs nothing,
+because `find_spec` short-circuits first.
 
 ### If pip says `Ignoring invalid distribution ~something`
 

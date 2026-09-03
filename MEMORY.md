@@ -2337,3 +2337,101 @@ starting. `docs/setup.md` now has a section naming the pattern, the one-line che
 langchain>=0.3.26` — both already true before the install. pip reports every conflict it
 can see in the environment, not only the ones the current command caused, which reads as
 though one command broke four things.
+
+---
+
+## 2026-09-03 — A broken dependency was raising where it should have been `unjudged`
+
+AFNI's provisioned run came back `FAILED (errors=3)` and they asked whether it was going
+correctly. It was not, all three errors had **one** root cause, and that cause exposed a
+real defect in the platform rather than just a broken machine.
+
+### The machine
+
+```
+ValueError: numpy.dtype size changed, may indicate binary incompatibility.
+            Expected 96 from C header, got 88 from PyObject
+```
+
+Read it backwards: a package compiled against numpy **1.x** (96 bytes) running against
+numpy **2.x** (88 — numpy 2.0 *shrank* `PyArray_Descr`). The chain:
+
+`transformers` → `transformers.generation.candidate_generator` → `sklearn.metrics` →
+`sklearn.utils.fixes` → **`pandas`** → dead.
+
+pandas 2.1.4 was compiled for numpy 1; the earlier global `pip install nudenet` had
+upgraded numpy to 2.5.2. transformers re-raises the whole thing as a bare
+**`RuntimeError`**.
+
+The five model downloads were fine — all five reported `OK` with commit shas.
+
+### The defect it exposed
+
+Three rails guarded their lazy import with **`except ImportError`**. A RuntimeError is
+not an ImportError, so it walked straight out of `_load()` and out of `check()`.
+
+- `tenets/security/__init__.py` — DeBERTa injection classifier
+- `tenets/hallucination/__init__.py` — groundedness NLI
+- `tenets/explainability/__init__.py` — G-Eval rubric judge
+
+`content_safety` already used `except Exception`, which is why *its* two rails printed a
+tidy "preload returned False" while the other two printed stack traces. That was the
+clue: one tenet had the pattern right and three did not.
+
+**Production was never unsafe** — `engine.py` wraps every rail call and converts any
+exception into `unjudged`, which fails closed. But a rail is *supposed to return*
+`unjudged`, and a rail that raises makes a broken install look like a platform bug.
+Now `except Exception`, with the reason carrying the real exception type: the old text
+said "transformers not installed", which was **a lie on that machine** — it was
+installed.
+
+### The worse half: the availability probe was over-reporting
+
+`_transformers_available()` was `find_spec("transformers") is not None` — which answers
+*"is it on disk"*, not *"does it work"*. So on that machine:
+
+- `coverage` reported all four Stage-2 rails as **covered**
+- `/healthz` reported them as available
+- every actual request came back `unjudged`
+
+**Claiming a capability the platform cannot deliver is exactly the over-reporting this
+module's own docstrings warn about**, and it was doing it. It now does a real import,
+short-circuited by `find_spec` (so a bare machine pays nothing) and **memoised** for the
+process (so the multi-second import is paid once, and the gateway's warm-up pays it
+anyway). A broken install now reports identically to an absent one, which is the point.
+
+`content_safety`'s three `available()` methods now consult the same probe rather than
+keeping their own `find_spec`.
+
+The cost is stated in the docstring rather than hidden: the first `coverage` call on a
+provisioned box gets a few seconds slower. Worth it — the alternative is a coverage
+number somebody signs off.
+
+### `tests/test_broken_dependency.py` — 11 tests
+
+The fixture is the interesting part: a module that **imports fine and raises on attribute
+access**, which is exactly the shape of a broken `transformers` (a lazy `__getattr__` that
+explodes when a submodule is touched). A `raise ImportError` fixture would not have
+reproduced the bug, because ImportError was already handled.
+
+It also pins the safety net — a rail that raises still becomes a BLOCK with the path
+recorded as `unjudged` — and that absent and broken produce the same outcome.
+
+One test passed for the wrong reason first: `RubricJudgeRail()` with no rubric
+short-circuits on "no G-Eval rubric configured" and never reaches the import. Fixed by
+constructing it with a rubric and a judge model.
+
+### The guide
+
+`numpy<2` now appears **twice** in the install block, first and last, and the repetition
+is deliberate: this stack is pinned around `llm-guard==0.3.16` from the numpy-1 era, and
+several packages here (nudenet among them) do not pin numpy at all, so pip pulls numpy 2
+in mid-sequence. The last line puts it back. Both the symptom and the one-command fix are
+in `docs/setup.md`, plus a section on what to do when a Stage-2 rail says it cannot judge
+while the weights are visibly present.
+
+Also worth recording for anyone reading a future run: **266 s for the full suite is
+normal** on a provisioned box — the model rails load real weights. It is 23 s here with
+none present.
+
+**1202 tests pass.**
