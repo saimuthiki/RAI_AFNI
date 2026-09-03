@@ -169,16 +169,43 @@ class Selection:
     seed: int = 0
     max_stage: int = 2
 
+    # A POSITIONAL RANGE, 1-based and INCLUSIVE: start=10, end=20 is eleven
+    # records, the 10th through the 20th. 1-based because that is how a person
+    # counts records ("run the 10th to the 20th"), and inclusive for the same
+    # reason - a range that quietly returned ten records for 10..20 would be
+    # read as a bug in the corpus rather than in the indexing.
+    #
+    # A range indexes the ID-SORTED pool and DELIBERATELY BYPASSES THE SHUFFLE.
+    # That is the whole point: "the 10th record" has to be the same record on
+    # every machine and at every seed, or the number means nothing. Sampling and
+    # ranging are different intents - one wants a representative handful, the
+    # other wants specific records - so they do not compose, and asking for both
+    # a range and per_tenet is rejected rather than silently resolved.
+    start: int | None = None
+    end: int | None = None
+
+    @property
+    def is_range(self) -> bool:
+        return self.start is not None or self.end is not None
+
     def describe(self) -> str:
-        parts = [f"{self.per_tenet} per tenet" if self.per_tenet
-                 else f"limit {self.limit}"]
+        if self.is_range:
+            parts = [f"records {self.start or 1}-{self.end if self.end else 'end'}"
+                     " of the filtered pool, in id order"]
+        else:
+            parts = [f"{self.per_tenet} per tenet" if self.per_tenet
+                     else f"limit {self.limit}"]
         if self.tenet:
             parts.append(f"tenet={self.tenet}")
         if self.owasp:
             parts.append(f"owasp={self.owasp}")
         if self.direction:
             parts.append(f"direction={self.direction}")
-        parts.append("random" if self.seed < 0 else f"seed={self.seed}")
+        # A range is not sampled, so the seed is not part of what identifies it.
+        # Printing "seed=0" beside a range would imply the seed changed which
+        # records you got, which is exactly the confusion the range avoids.
+        if not self.is_range:
+            parts.append("random" if self.seed < 0 else f"seed={self.seed}")
         parts.append(f"max stage {self.max_stage}")
         return ", ".join(parts)
 
@@ -214,9 +241,30 @@ def _shuffled(group: list[dict[str, Any]], seed: int) -> list[dict[str, Any]]:
     return ordered
 
 
+def _ordered(group: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The pool in a stable, machine-independent order: sorted by id.
+
+    This is `_shuffled` without the shuffle, and it is what a positional range
+    indexes into. Same reasoning as `_shuffled`: the file's line order is an
+    artefact of the ingest run, so "the 10th line of the file" would change if
+    the corpus were regenerated, while "the 10th record by id" never does.
+    """
+    return sorted(group, key=lambda r: r["id"])
+
+
+class RangeOutOfBounds(ValueError):
+    """A positional range that names no records, or an inverted one.
+
+    Distinct from an EMPTY result: `start=99999` on an 11,369-record corpus is a
+    mistake worth reporting, whereas a filter that legitimately matches nothing
+    is an answer. Returning zero records for a typo'd range would read as "the
+    guardrail allowed all zero of them", which is a pass rate of nothing at all.
+    """
+
+
 def select(records: list[dict[str, Any]], sel: Selection,
            cap: int | None = None) -> list[dict[str, Any]]:
-    """Filter, then sample. Raises `SampleTooLarge` above the cap.
+    """Filter, then either RANGE or sample. Raises `SampleTooLarge` above the cap.
 
     The cap is checked against the size of the sample that would be RETURNED,
     not against the requested limit, so `--limit 5000` over a tenet holding 60
@@ -224,7 +272,35 @@ def select(records: list[dict[str, Any]], sel: Selection,
     """
     cap = max_sample() if cap is None else cap
     pool = _filter(records, sel)
-    if sel.per_tenet:
+
+    if sel.is_range:
+        if sel.per_tenet:
+            raise RangeOutOfBounds(
+                "a positional range and per-tenet sampling are different "
+                "intents and do not combine: a range asks for specific records, "
+                "per-tenet asks for a representative spread. Choose one.")
+        ordered = _ordered(pool)
+        start = 1 if sel.start is None else sel.start
+        end = len(ordered) if sel.end is None else sel.end
+        if start < 1:
+            raise RangeOutOfBounds(
+                f"start={start} - the range is 1-based, so the first record is "
+                f"1, not 0.")
+        # Bounds BEFORE inversion. `end` defaults to the pool size, so checking
+        # inversion first told someone who typed start=99999 that their "range
+        # runs backwards" - true of the defaulted end, and the wrong diagnosis.
+        if start > len(ordered):
+            raise RangeOutOfBounds(
+                f"start={start:,} but this selection only holds "
+                f"{len(ordered):,} records, so the range names none of them. "
+                f"(The whole corpus is {len(records):,}; any filters were "
+                f"applied first.)")
+        if end < start:
+            raise RangeOutOfBounds(
+                f"start={start} is after end={end}. A range runs forwards.")
+        # INCLUSIVE of `end`, hence the +1: 10..20 is eleven records.
+        chosen = ordered[start - 1:end]
+    elif sel.per_tenet:
         buckets: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for record in pool:
             buckets[record.get("tenet") or UNMAPPED].append(record)

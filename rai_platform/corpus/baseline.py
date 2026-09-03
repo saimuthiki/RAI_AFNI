@@ -30,16 +30,16 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import random
 import subprocess
 import sys
 import time
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from afni_rai import regression                                 # noqa: E402
 from afni_rai.cascade.engine import Cascade                      # noqa: E402
 from afni_rai.cascade.rail import Stage                          # noqa: E402
 from afni_rai.cli import load_tenets                             # noqa: E402
@@ -115,26 +115,23 @@ def judge(cascade, record: dict) -> dict:
 
 
 def sample(records: list[dict], limit: int | None, per_tenet: int | None,
-           seed: int) -> list[dict]:
-    if per_tenet:
-        buckets: dict[str, list[dict]] = defaultdict(list)
-        for r in records:
-            buckets[r.get("tenet") or "(unmapped)"].append(r)
-        out = []
-        for key in sorted(buckets):
-            group = sorted(buckets[key], key=lambda r: r["id"])
-            if seed >= 0:
-                random.Random(seed).shuffle(group)
-            else:
-                random.shuffle(group)
-            out.extend(group[:per_tenet])
-        return out
-    ordered = sorted(records, key=lambda r: r["id"])
-    if seed >= 0:
-        random.Random(seed).shuffle(ordered)
-    else:
-        random.shuffle(ordered)
-    return ordered if limit is None else ordered[:limit]
+           seed: int, start: int | None = None,
+           end: int | None = None) -> list[dict]:
+    """Delegates to `regression.select`, which the API and the console also use.
+
+    This function used to reimplement the sampling, and the duplication was a
+    real hazard: the positional-range feature would have had to be written twice
+    and could then disagree with itself, so a range run from the CLI and the same
+    range run from the console would have judged different records.
+
+    `cap` is the size of the corpus, i.e. UNCAPPED. The 500-record ceiling exists
+    to stop a browser holding a request open for minutes; this is the offline
+    tool and a full pass is its whole purpose.
+    """
+    sel = regression.Selection(
+        limit=(len(records) if limit is None else limit),
+        per_tenet=per_tenet, seed=seed, start=start, end=end)
+    return regression.select(records, sel, cap=len(records))
 
 
 def main(argv=None) -> int:
@@ -147,6 +144,15 @@ def main(argv=None) -> int:
                     help="stratified sample: N per tenet, instead of --limit")
     ap.add_argument("--seed", type=int, default=0,
                     help="deterministic sample (default 0). -1 for random.")
+    ap.add_argument("--start", type=int, default=None,
+                    help="positional range, 1-BASED and INCLUSIVE: --start 10 "
+                         "--end 20 runs the 10th to the 20th record, eleven of "
+                         "them. Indexes the id-sorted pool and ignores --seed, "
+                         "so the 10th record is the same record every time. Use "
+                         "instead of --limit when you want SPECIFIC records.")
+    ap.add_argument("--end", type=int, default=None,
+                    help="last record of the range, inclusive. Omit to run from "
+                         "--start to the end of the corpus.")
     ap.add_argument("--stage-1-only", action="store_true",
                     help="mount only Stage-1 rails: fast, and the only sane "
                          "choice for a large sample on CPU")
@@ -171,12 +177,24 @@ def main(argv=None) -> int:
     tier = "stage_1_only" if args.stage_1_only else tier_label(rails)
     commit = build_commit()
 
-    chosen = sample(records, args.limit, args.per_tenet, args.seed)
+    ranged = args.start is not None or args.end is not None
+    try:
+        chosen = sample(records, args.limit, args.per_tenet, args.seed,
+                        args.start, args.end)
+    except regression.RangeOutOfBounds as exc:
+        sys.exit(f"bad --start/--end: {exc}")
     print(f"corpus      {args.corpus}  ({len(records):,} records)")
-    print(f"sample      {len(chosen):,}"
-          + (f"  ({args.per_tenet} per tenet)" if args.per_tenet
-             else f"  (--limit {args.limit})")
-          + f"  seed={args.seed}")
+    if ranged:
+        # No seed printed: a range is not sampled, and showing a seed beside one
+        # would imply it changed which records you got.
+        print(f"range       records {args.start or 1}-"
+              f"{args.end if args.end else len(records)}  (1-based, inclusive)"
+              f"  ->  {len(chosen):,} records, in id order")
+    else:
+        print(f"sample      {len(chosen):,}"
+              + (f"  ({args.per_tenet} per tenet)" if args.per_tenet
+                 else f"  (--limit {args.limit})")
+              + f"  seed={args.seed}")
     print(f"build       {commit}   tier={tier}")
     print()
 

@@ -1660,6 +1660,19 @@ table.fw td, table.fw th { padding-left: var(--sp-3); padding-right: var(--sp-3)
   text-align: right;
 }
 
+/* The positional-range row. Shown INSTEAD of the size slider, never beside it:
+   a range and a sample size are the same decision expressed two ways, and
+   offering both invites someone to set each and wonder which won. */
+.rangerow {
+  display: flex; gap: var(--sp-3); align-items: center; flex-wrap: wrap;
+  padding-bottom: var(--sp-4); margin-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--line-soft);
+}
+.rangerow .micro { flex: 1 1 24rem; line-height: 1.5; }
+/* Repeated outside .sizer__eta on purpose: the range row needs the same hazard
+   colour and is not inside that container. */
+.rangerow .eta--warn { color: var(--hazard-ink); font-weight: 650; }
+
 .filters--corpus { margin-bottom: var(--sp-4); }
 .filters--corpus .field { min-width: 13rem; flex: 1 1 13rem; }
 
