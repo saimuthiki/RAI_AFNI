@@ -35,3 +35,66 @@ afni_audit.sqlite-wal
 output.txt
 *.out
 *.log
+
+# --------------------------------------------------------------------------- #
+# references/ holds 23 open-source repos read at SOURCE level. Every rail cites
+# a `references/<repo>/<file>:<line>` as its evidence, so the source files are
+# load-bearing - they are what makes a ported pattern auditable.
+#
+# The non-source payload is not. On 2026-09-03 it was 1,643 MB across 2,527
+# files - model weights, conference slide decks, notebooks with embedded
+# outputs, sample DICOMs, a 13 MB screencast - and NOT ONE of the 49 cited paths
+# pointed at any of it. Deleted, and ignored here so re-extracting a reference
+# repo does not put it back.
+#
+# If you ever need one of these blobs, fetch it from the upstream project. Do
+# not commit it.
+references/**/*.pkl
+references/**/*.pickle
+references/**/*.pth
+references/**/*.pt
+references/**/*.joblib
+references/**/*.caffemodel
+references/**/*.npy
+references/**/*.npz
+references/**/*.h5
+references/**/*.hdf5
+references/**/*.onnx
+references/**/*.safetensors
+references/**/*.bin
+references/**/*.png
+references/**/*.jpg
+references/**/*.jpeg
+references/**/*.gif
+references/**/*.bmp
+references/**/*.tiff
+references/**/*.ico
+references/**/*.webp
+references/**/*.mp4
+references/**/*.mov
+references/**/*.avi
+references/**/*.webm
+references/**/*.mp3
+references/**/*.wav
+references/**/*.pptx
+references/**/*.ppt
+references/**/*.pdf
+references/**/*.docx
+references/**/*.xlsx
+references/**/*.zip
+references/**/*.tar
+references/**/*.gz
+references/**/*.tgz
+references/**/*.whl
+references/**/*.jar
+references/**/*.ipynb
+references/**/*.woff
+references/**/*.woff2
+references/**/*.ttf
+references/**/*.eot
+references/**/*.otf
+references/**/*.dcm
+references/**/*.tab
+references/**/*.html
+references/**/*.parquet
+references/**/*.sqlite
