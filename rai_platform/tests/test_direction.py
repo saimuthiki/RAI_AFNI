@@ -24,6 +24,7 @@ Run: python3 rai_platform/run_tests.py
 """
 import os
 import sys
+import pathlib
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -351,6 +352,69 @@ class TestTheRailsEndpointExposesDirection(unittest.TestCase):
         for row in self.rows:
             with self.subTest(rail=row["name"]):
                 self.assertEqual(row["direction"], rails[row["name"]].value)
+
+
+# --------------------------------------------------- the generated doc ------ #
+class TestTheRequestFlowDocMatchesTheCode(unittest.TestCase):
+    """`knowledge/request-flow.md` is generated from the rail registry.
+
+    It exists because the hand-written version drifted badly: it had been copied
+    from a deck slide and listed five example checks on the input side and five
+    DIFFERENT ones on the output side, which read as though the two guardrails
+    did unrelated jobs. AFNI read it that way and asked. The counts are the part
+    a reader acts on, so they are asserted here rather than trusted.
+    """
+
+    DOC = (pathlib.Path(__file__).resolve().parents[2]
+           / "knowledge" / "request-flow.md")
+
+    @classmethod
+    def setUpClass(cls):
+        if not cls.DOC.exists():
+            raise unittest.SkipTest(f"{cls.DOC} not present")
+        cls.text = cls.DOC.read_text(encoding="utf-8")
+        rails = load_tenets()[0]
+        cls.dirs = [getattr(r, "direction", Direction.BOTH) for r in rails]
+        cls.n_both = sum(1 for d in cls.dirs if d is Direction.BOTH)
+        cls.n_in = sum(1 for d in cls.dirs if d is Direction.INPUT)
+        cls.n_out = sum(1 for d in cls.dirs if d is Direction.OUTPUT)
+        cls.total = len(rails)
+
+    def test_the_headline_counts_are_the_real_ones(self):
+        for n, what in ((self.n_both, "both"), (self.n_in, "input-only"),
+                        (self.n_out, "output-only")):
+            with self.subTest(what=what):
+                self.assertIn(f"**{n} ", self.text,
+                              f"the doc does not state {n} for {what} rails")
+
+    def test_the_per_side_totals_are_the_real_ones(self):
+        self.assertIn(f"**{self.n_both + self.n_out}**", self.text,
+                      "the doc does not state the output-side rail count")
+        self.assertIn(f"**{self.n_both + self.n_in}**", self.text,
+                      "the doc does not state the input-side rail count")
+
+    def test_every_one_sided_rail_is_named_and_explained(self):
+        """A one-sided rail is the thing a reader will query, so the doc has to
+        name it AND give the reason - a table of names with no reasons is what
+        made the old version unreadable."""
+        one_sided = [r.name for r in load_tenets()[0]
+                     if getattr(r, "direction", Direction.BOTH) is not Direction.BOTH]
+        why = self.text.split("Why nine rails are one-sided")[-1]
+        for name in one_sided:
+            with self.subTest(rail=name):
+                self.assertIn(f"`{name}`", self.text, "rail missing from the doc")
+                self.assertIn(f"`{name}`", why, "rail has no stated reason")
+
+    def test_it_does_not_still_claim_the_two_sides_run_different_checks(self):
+        """The specific defect this rewrite fixed. These five strings were the
+        old input list; four of the five actually run on BOTH sides, and the doc
+        presenting them as input-only is what caused the misreading."""
+        for stale in ("· InvisibleText / unicode smuggling",
+                      "· Secrets (regex + entropy floor)",
+                      "· PII re-check",
+                      "· toxicity classification"):
+            with self.subTest(line=stale):
+                self.assertNotIn(stale, self.text)
 
 
 if __name__ == "__main__":

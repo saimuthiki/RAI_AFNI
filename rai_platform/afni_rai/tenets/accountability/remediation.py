@@ -17,7 +17,7 @@ and `filter` (drop the invalid value) is not the same thing as masking a span an
 continuing, because filtering loses the surrounding text.
 
 AFNI is an enforcement point, so the vocabulary comes from the deck's
-request-flow slide instead (`knowledge/request-flow.md:37-41`), which names four
+request-flow slide instead (`knowledge/request-flow.md` §"Four things that are easy to get wrong"), which names four
 and only four branches for a response that is not safe:
 
     Toxic         -> Block / Refuse
@@ -25,7 +25,7 @@ and only four branches for a response that is not safe:
     Not grounded  -> Flag / Regenerate
     Bad tool call -> Block
 
-and the accompanying design note (`request-flow.md:55-57`) is emphatic that this
+and the accompanying design note (`request-flow.md §'Four things that are easy to get wrong'`) is emphatic that this
 is not one branch wearing four hats: "'Not safe' is not one branch. Four distinct
 mitigations, and only two of them block - PII leak masks and continues,
 ungrounded flags or regenerates. Treating 'unsafe' as a single refuse path loses
@@ -56,16 +56,16 @@ class RemediationAction(str, Enum):
     record from "nothing fired".
     """
 
-    BLOCK_REFUSE = "block_refuse"        # request-flow.md:38 - Toxic -> Block/Refuse
-    MASK_CONTINUE = "mask_continue"      # request-flow.md:39 - PII leak -> Mask & Continue
-    FLAG_REGENERATE = "flag_regenerate"  # request-flow.md:40 - Not grounded -> Flag/Regenerate
-    BLOCK_TOOL_CALL = "block_tool_call"  # request-flow.md:41 - Bad tool call -> Block
+    BLOCK_REFUSE = "block_refuse"        # request-flow.md §four-outcomes - Toxic -> Block/Refuse
+    MASK_CONTINUE = "mask_continue"      # request-flow.md §four-outcomes - PII leak -> Mask & Continue
+    FLAG_REGENERATE = "flag_regenerate"  # request-flow.md §four-outcomes - Not grounded -> Flag/Regenerate
+    BLOCK_TOOL_CALL = "block_tool_call"  # request-flow.md §four-outcomes - Bad tool call -> Block
     NOOP = "noop"                        # recorded, not remediated
 
     @property
     def blocks(self) -> bool:
         """Two of the four block. This property is the guard against the mistake
-        request-flow.md:55-57 warns about - collapsing four mitigations into one
+        request-flow.md §'Four things that are easy to get wrong' warns about - collapsing four mitigations into one
         refuse path."""
         return self in (RemediationAction.BLOCK_REFUSE,
                         RemediationAction.BLOCK_TOOL_CALL)
@@ -271,7 +271,7 @@ class RemediationDispatcher:
         if finding.action is Action.BLOCK:
             if self._prefixed(category, self._mask):
                 # A PII/secret category that a detector marked `block` still
-                # masks rather than refuses - request-flow.md:39. Escalating it to
+                # masks rather than refuses - request-flow.md §four-outcomes. Escalating it to
                 # a refusal is the collapse the design note warns about.
                 return Remediation(
                     action=RemediationAction.MASK_CONTINUE,

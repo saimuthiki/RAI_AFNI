@@ -418,6 +418,12 @@ class RailInfo(BaseModel):
     tenet: str
     stage: int
     stage_label: str
+    direction: str = Field(default="both", description=(
+        "Which side of the model this rail applies to: `input` (the prompt), "
+        "`output` (the response), or `both`. A rail that declares nothing is "
+        "`both` - the default must never silently REMOVE a check. 23 of the 32 "
+        "mounted rails are `both`, so the output guardrail runs everything the "
+        "input guardrail runs plus the response-specific rails on top."))
     attribution: AttributionModel | None = Field(default=None, description=(
         "Absent when a rail has no attribution row. An unattributed rail still "
         "runs; it just cannot be traced to a source repo."))

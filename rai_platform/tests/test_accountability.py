@@ -581,7 +581,7 @@ class TestVerdictStore(unittest.TestCase):
         self.assertEqual(self.store.history("evt-x")[0]["stages_run"], 1)
 
     def test_live_and_offline_records_share_one_schema(self):
-        # request-flow.md:60-61 - "A red-team finding, a CI failure and a live
+        # request-flow.md §'Also true' - "A red-team finding, a CI failure and a live
         # production block are all one schema."
         for origin, event_id in ((ORIGIN_LIVE, "live-1"), (ORIGIN_OFFLINE, "ci-1")):
             self.store.record(
@@ -596,7 +596,7 @@ class TestVerdictStore(unittest.TestCase):
                          {"security.jailbreak": 1})
 
     def test_delivered_responses_are_logged_not_only_blocks(self):
-        # request-flow.md:58-59 - "a log of only refusals proves nothing".
+        # request-flow.md §'Also true' - "a log of only refusals proves nothing".
         self.store.record(Verdict(event_id="ok-1", provider="p",
                                   decision=Decision.ALLOW), event=event())
         self.assertEqual(self.store.count("verdicts"), 1)
@@ -680,7 +680,7 @@ class TestRemediation(unittest.TestCase):
         self.assertFalse(r.blocks)
 
     def test_pii_marked_block_still_masks_rather_than_refusing(self):
-        # request-flow.md:55-57 - collapsing the four branches into one refuse
+        # request-flow.md §'Four things that are easy to get wrong' - collapsing the four branches into one refuse
         # path "loses most of the usable behaviour".
         r = self._one(Finding(category="privacy.pii.us_ssn", action=Action.BLOCK))
         self.assertIs(r.action, RemediationAction.MASK_CONTINUE)
