@@ -394,7 +394,7 @@ Blob Storage dependency**.
 
 Known NeMo facts to carry into design: NIM F1 scores and Enterprise pricing are
 published; **there is an HA gap**; the **jailbreak rail defaults to fail-open** and
-must be explicitly flipped to fail-closed for client-facing traffic.
+must be explicitly flipped to fail-closed.
 
 ### What AFNI must build itself
 
@@ -405,7 +405,7 @@ NeMo provides none of these — all three are carried over from the Infosys patt
    forking the gateway.
 2. **One consolidated verdict summary** per request — not a raw list of rail outputs.
 3. A **loud-failure policy**: any check that could not complete is reported as
-   `unjudged`, and for client-facing traffic the gateway fails closed.
+   `unjudged`, and the gateway fails closed — unconditionally, for every caller.
 
 Plus the contract itself: the **OpenGuardrails Verdict/GuardEvent schema** as the
 fixed interface between the gateway and every application. That is what lets AFNI

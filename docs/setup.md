@@ -37,7 +37,7 @@ cd D:\Afni\RAI_AFNI-main
 python D:\Afni\RAI_AFNI-main\rai_platform\run_tests.py
 ```
 
-Expect `OK`. If that passes, 22 rails work.
+Expect `OK`. If that passes, 23 rails work.
 
 Try it:
 
@@ -613,7 +613,7 @@ can gate on it.
 
 ### What none of this blocks
 
-**Stage 1 — 22 rails across all seven tenets — is pure Python standard library
+**Stage 1 — 23 rails across all seven tenets — is pure Python standard library
 and needs none of the above.** Every item here is a rail that reports `unjudged`
-until it arrives, which fails closed on client-facing traffic. That is honest
-behaviour, and it is not the same as protection.
+until it arrives, and `unjudged` fails closed — unconditionally, for every
+caller. That is honest behaviour, and it is not the same as protection.

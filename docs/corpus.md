@@ -126,7 +126,7 @@ There is nothing there for a regex to match. Harmful **intent** expressed in
 ordinary polite English is invisible to the entire free tier.
 
 That is what Stage 2 and Stage 3 exist for, and it means the honest claim is
-narrower than "22 rails guard all your traffic":
+narrower than "23 rails guard all your traffic":
 
 | Threat | Caught by |
 |---|---|

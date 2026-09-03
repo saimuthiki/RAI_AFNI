@@ -17,6 +17,7 @@ import {
   stageTag, kindChip, errorBox, empty, table, statRow, plural,
 } from '../ui.js';
 import { coverage, railsWithHealth } from '../api.js';
+import * as governanceView from './governance.js';
 
 export async function render(root) {
   clear(root);
@@ -211,6 +212,11 @@ export async function render(root) {
 
     root.append(card);
   }
+
+  // The register goes last: it summarises the seven tenets, and a summary
+  // above the detail it summarises reads as the page's thesis rather than
+  // its conclusion.
+  governanceView.section(root);
 }
 
 /* ==========================================================================

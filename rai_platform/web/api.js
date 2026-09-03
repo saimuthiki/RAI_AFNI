@@ -523,6 +523,15 @@ export async function saveTopicPolicy({ enabled, blocking }) {
 
 export const thresholds = () => getJSON('/v1/thresholds', { timeout: 10000 });
 
+// ---------------------------------------------------------- governance --
+// One accountable ROLE per tenet, with the thresholds in force. Read-only:
+// the roles are generated, and the one thing a deployment configures
+// (AFNI_GOVERNANCE_DOMAIN) is a server environment variable rather than a
+// console setting - an escalation path that anyone with the console could
+// rewrite is not an escalation path.
+
+export const governance = () => getJSON('/v1/governance', { timeout: 15000 });
+
 /** Save overrides, or apply a preset.
  *
  *  `thresholds` REPLACES the saved map rather than merging into it — a merge

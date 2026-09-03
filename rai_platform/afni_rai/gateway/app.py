@@ -996,6 +996,35 @@ def _router(gateway: Gateway) -> APIRouter:
         gone and the adoption verdict is the grouping."""
         return JSONResponse(repositories.status())
 
+    @router.get("/v1/governance", tags=["introspection"],
+                summary="The governance register, generated from the live platform")
+    def governance_register() -> JSONResponse:
+        """One accountable ROLE per tenet, with the thresholds in force.
+
+        Build-plan item 21 asked AFNI for seven names. AFNI's answer was that
+        the framework should handle it, and they were right: a person's name in
+        a governance register is stale the moment they change team, and a
+        register with a wrong escalation path is worse than one with an honest
+        gap - the first sends an incident to somebody who left.
+
+        So the roles are GENERATED with no configuration at all, and what AFNI
+        supplies is at most **one** setting: `AFNI_GOVERNANCE_DOMAIN`, which
+        arms all seven escalation addresses at once. Until it is set the
+        addresses are aliases without a domain and `problems` says so - no
+        domain is invented, because a plausible-looking address that goes
+        nowhere is exactly the failure this design avoids.
+        `AFNI_GOVERNANCE_OWNERS` accepts real people per tenet if AFNI later
+        wants them, without a code change.
+
+        Everything else here is read from the RUNNING platform - rails mounted
+        per tenet, capability coverage, and the threshold values in force right
+        now including operator overrides - so the register cannot describe a
+        configuration nobody is running.
+        """
+        from .. import governance                                # noqa: PLC0415
+        return JSONResponse(governance.register(
+            rails=gateway.rails, thresholds=gateway.thresholds))
+
     @router.get("/v1/rails", tags=["introspection"], response_model=RailsResponse,
                 summary="Every mounted rail and its provenance")
     def rails() -> JSONResponse:

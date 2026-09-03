@@ -7,6 +7,7 @@ Command line entry point. The fastest way to see the gateway decide something.
     python3 rai_platform/cli.py image photo.jpg
     python3 rai_platform/cli.py image clip.mp4 --video --blur out.png
     python3 rai_platform/cli.py compare --limit 200
+    python3 rai_platform/cli.py governance --markdown
     python3 rai_platform/cli.py coverage
     python3 rai_platform/cli.py rails
     python3 rai_platform/cli.py preflight
@@ -317,6 +318,42 @@ def cmd_compare(args) -> int:
     return min(top["delivered_to_model"], 100)
 
 
+def cmd_governance(args) -> int:
+    """The governance register.
+
+    Build-plan item 21's "seven names from AFNI, no code can do this" turned out
+    to be answerable in code after all, once the question changed from WHO to
+    WHICH ROLE. Exit code is the number of tenets with no reachable escalation
+    address, so a provisioning script can gate on it.
+    """
+    from . import governance                                     # noqa: PLC0415
+
+    body = governance.register()
+    if args.markdown:
+        print(governance.render(body))
+    elif args.json:
+        print(json.dumps(body, indent=2))
+    else:
+        print("AFNI Responsible AI - governance register  (generated)\n")
+        # Width from the data, not a guess: a configured domain makes
+        # "rai-explainability@..." far wider than the unconfigured alias, and a
+        # fixed 24 shunted the numeric columns out of alignment.
+        width = max([len("ESCALATION")]
+                    + [len(r["contact"]) for r in body["tenets"]])
+        print(f"  {'TENET':32s} {'ESCALATION':{width}s} {'RAILS':>5s} "
+              f"{'KNOBS':>5s}")
+        for row in body["tenets"]:
+            mark = "" if row["resolved"] else "  (domain unset)"
+            print(f"  {row['tenet']:32s} {row['contact']:{width}s} "
+                  f"{row['rails_mounted']:5d} {len(row['thresholds']):5d}{mark}")
+        print(f"\n  Fail mode: {body['fail_mode']}.")
+        print(f"  {body['why_no_names']}")
+        for problem in body["problems"]:
+            print(f"\n  ! {problem}")
+
+    return sum(1 for r in body["tenets"] if not r["resolved"])
+
+
 def cmd_preflight(args) -> int:
     """Every asset the platform needs but does not ship.
 
@@ -378,6 +415,14 @@ def main(argv=None) -> int:
                            "sets AFNI_CORPUS_ALLOW_CLOUD=1.")
     cmp_.add_argument("--json", action="store_true")
     cmp_.set_defaults(func=cmd_compare)
+
+    gov = sub.add_parser("governance",
+                         help="the governance register: one accountable role "
+                              "per tenet, with the thresholds in force")
+    gov.add_argument("--markdown", action="store_true",
+                     help="render as Markdown, for the client approval pack")
+    gov.add_argument("--json", action="store_true")
+    gov.set_defaults(func=cmd_governance)
 
     sub.add_parser("coverage", help="capability coverage report").set_defaults(
         func=cmd_coverage)

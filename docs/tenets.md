@@ -89,9 +89,10 @@ suite in a scheduled job. (AGPL-3.0 clearance was granted by AFNI on
 
 ## 7 · Accountability  (24 checklist items)
 **Principle:** a loud-failure policy — any check that could not run is reported as
-`unjudged`, never silently passed, and the gateway fails closed on client-facing
-traffic. One record shape end to end, a named owner per tenet, and a *measured*
-accuracy figure per detector rather than a vendor claim.
+`unjudged`, never silently passed, and the gateway fails closed **unconditionally**:
+no request field and no console switch relaxes it. One record shape end to end, an
+accountable **role** per tenet — generated, see [the governance register](#the-governance-register)
+— and a *measured* accuracy figure per detector rather than a vendor claim.
 **Stack:** OpenGuardrails (GuardEvent + Verdict schema, taxonomy, fail-closed
 contract) → PyRIT (memory persistence, harm taxonomy, scorer accuracy vs human
 labels) → promptfoo (OWASP / NIST / EU AI Act mapped reports from CI) → Azure Monitor
@@ -161,3 +162,51 @@ cloud API - and which cascade stage that puts it in, see
 **LLM Guard is the runtime primary for four of seven tenets.** That concentration is
 why D4 (fork it, pin the model revisions, own it) matters more than any other single
 adoption decision.
+
+---
+
+## The governance register
+
+Build-plan item 21 asked AFNI for **seven names** — one accountable owner per tenet —
+and said no code could produce it. AFNI's answer was that the framework comes with all
+of this, so why does it need names.
+
+**They were right, and the design changed rather than the default.** A person's name in
+a governance register is stale the moment they change team, and a register with a *wrong*
+escalation path is worse than one with an honest gap: the first sends an incident to
+somebody who left, the second is visibly unfinished.
+
+What governance actually needs is an **escalation path**, and a role plus an address is
+one. So:
+
+- **The roles are generated**, with no configuration at all. `Privacy steward — AFNI
+  Responsible AI`, and so on for all seven, each with a sentence saying what arriving
+  there *means* — because "owner of Privacy" is a label, not an accountability.
+- **One setting arms all seven addresses.** `AFNI_GOVERNANCE_DOMAIN` turns
+  `rai-privacy` into `rai-privacy@your-domain`. One environment variable instead of
+  seven names.
+- **Nothing is invented in the meantime.** Until that variable is set the addresses are
+  aliases with no domain and the register says so. A plausible-looking address that goes
+  nowhere is worse in a compliance artefact than a visibly unfinished one.
+- **Real people are still possible**, per tenet, via `AFNI_GOVERNANCE_OWNERS` — a JSON
+  object of `{tenet: contact}` — without a code change.
+
+The register is not a contact list. Every other number in it is read from the **running
+platform**: rails mounted per tenet, capability coverage, and the threshold values in
+force right now *including operator overrides*. It cannot describe a configuration
+nobody is running.
+
+```bash
+# on screen
+python -m afni_rai.cli governance
+
+# as Markdown, for the client approval pack
+python -m afni_rai.cli governance --markdown > governance-register.md
+```
+
+It is also `GET /v1/governance`, and it renders at the bottom of the console's **Tenets**
+screen.
+
+**It is read-only from the console, on purpose.** An escalation path that anybody with
+the console could rewrite is not an escalation path, so the domain is a server
+environment variable rather than a UI setting.

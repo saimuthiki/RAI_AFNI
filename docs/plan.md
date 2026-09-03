@@ -118,9 +118,15 @@ asserted:
 20. **BUILT** — The audit store: every verdict from runtime, offline and replay in one
     schema, with findings, redaction spans and trace spans. **Matched values are never
     stored — only a fingerprint.** OpenTelemetry export is wired but off by default.
-21. **NOT STARTED — THE LAST REAL BLOCKER** — Name **one accountable owner per tenet**.
-    Seven names from AFNI, recorded with the seven tenets and their current thresholds
-    in a single governance register. No code can do this.
+21. **BUILT** — The **governance register**: one accountable *role* per tenet, with the
+    rails mounted, the capability coverage and the thresholds in force, generated from
+    the running platform. This item used to read "seven names from AFNI, no code can do
+    this". AFNI pushed back — the framework comes with all of this, why does it need
+    names — and they were right. A person's name goes stale the moment they change team,
+    and a register with a wrong escalation path is worse than one with an honest gap. So
+    roles are generated and **one** setting (`AFNI_GOVERNANCE_DOMAIN`) arms all seven
+    escalation addresses. `AFNI_GOVERNANCE_OWNERS` still accepts real people per tenet if
+    AFNI wants them. See [tenets.md](tenets.md#the-governance-register).
 22. **NOT STARTED** — The **standard client approval pack**, produced from CI artefacts:
     OWASP LLM Top 10, NIST AI RMF, MITRE ATLAS and EU AI Act mapped reports, plus the
     measured detector-accuracy table from item 15 and an audit-trail sample.
@@ -235,8 +241,9 @@ right design and should be reproduced. Deploying the toolkit itself is not — s
 
 ### The two rules that never bend
 
-1. **Fail closed.** For client-facing traffic the gateway blocks on failure. NeMo's
-   jailbreak rail defaults to fail-*open* — that default must be explicitly flipped.
+1. **Fail closed.** The gateway blocks on failure — unconditionally, with no
+   request field and no console switch that relaxes it. NeMo's jailbreak rail
+   defaults to fail-*open*; that default must be explicitly flipped.
 2. **Fail loud.** Any check that could not run is reported as **`unjudged`**, never
    silently passed. This exists because Infosys's dispatcher wraps each check in a
    broad `try/except` that logs and returns `None` — one timeout silently drops a
@@ -267,15 +274,19 @@ Last reviewed **2026-09-03**.
 
 ### Still open — and why each one matters
 
-#### 1 · One accountable owner per tenet · **Kiran / AFNI** · the last real blocker
+#### 1 · One mail domain for the governance register · **AFNI** · one environment variable
 
-Seven names. Build-plan item 21. Nothing in the codebase can produce this, and without it
-there is no governance register and no escalation path — the framework stays a document
-rather than a standard.
+**No longer seven names.** This item asked AFNI for one accountable owner per tenet, and
+AFNI's answer was that the framework should handle it. It now does: the roles are
+generated, and what is outstanding is a single setting.
 
-It is the *only* remaining item that blocks the platform being presentable as an AFNI
-standard. Everything else below is either an engineering decision or a measurement not
-yet taken.
+Set `AFNI_GOVERNANCE_DOMAIN` on the gateway and all seven escalation addresses resolve —
+`rai-privacy@…`, `rai-security@…`, and so on. Until then the register shows aliases with
+no domain and reports the gap; no domain is invented, because a plausible-looking address
+that goes nowhere is worse in a compliance artefact than a visibly unfinished one.
+
+If AFNI would rather name individuals, `AFNI_GOVERNANCE_OWNERS` takes a JSON object of
+`{tenet: contact}` per tenet, no code change. That is a choice, not a requirement.
 
 #### 2 · Deployment target and latency budget
 
@@ -284,7 +295,7 @@ model, and — the one that changes the design — **the per-rail millisecond bu
 
 The whole cost doctrine rests on "cheap checks on every request". Without a number, there
 is no way to answer how many local models can sit in the request path. Measured on this
-machine: Stage 1 is sub-millisecond across 22 rails; Stage 2 costs **1–3 seconds on
+machine: Stage 1 is sub-millisecond across 23 rails; Stage 2 costs **1–3 seconds on
 CPU**. If the budget is 200 ms, Stage 2 cannot be synchronous at all, and that is an
 architectural consequence, not a tuning one.
 

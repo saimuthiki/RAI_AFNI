@@ -269,7 +269,7 @@ flowchart TB
     S2 --> D2{"decided?"}
     D2 -->|"entity above threshold"| BLOCK2["<b>BLOCK</b> or redact"]
     D2 -->|"below"| ALLOW2["<b>ALLOW</b>"]
-    D2 -->|"weights absent"| UNJ["<b>unjudged</b><br/>fails closed on<br/>client-facing traffic"]
+    D2 -->|"weights absent"| UNJ["<b>unjudged</b><br/>fails closed<br/>unconditionally"]
     D2 -->|"a response that looks<br/>like a leak of context"| S3
 
     S3["<b>STAGE 3</b> · pii_leakage_judge<br/><i>deepteam</i> PIIMetric prompt<br/>via the judge chain:<br/>openai[0] → openai[1] → gemini[0]<br/><b>metered · 1-5 s · last resort</b>"]
@@ -388,7 +388,7 @@ ALLOWED after 1 cascade stage(s) in 0ms
   (2 stage(s) never ran - that is the saving)
 ```
 
-**That last line is the product.** 22 rails ran in under a millisecond; the two
+**That last line is the product.** 23 rails ran in under a millisecond; the two
 expensive tiers were never touched.
 
 #### Leaked credential — blocked at Stage 1, nothing paid for
@@ -518,9 +518,10 @@ with no score, and one `1.00 (classifier)`. They are not comparable, and the
 output refuses to pretend otherwise.
 
 Printed **first and loudest**, because a finding means something looked and this
-means nothing did. On client-facing traffic it blocks. Three states, not two:
+means nothing did. It blocks — unconditionally, for every caller. Three states,
+not two:
 
-| State | Meaning | Client-facing result |
+| State | Meaning | Result |
 |---|---|---|
 | clean | a rail looked and found nothing | allow |
 | finding | a rail looked and found something | allow or block by action |
@@ -618,7 +619,10 @@ only one engine.
 
 #### Fail closed
 
-On client-facing traffic, a request that could not be *fully* judged is blocked.
+A request that could not be *fully* judged is blocked. **Unconditionally** —
+there is no request field and no console switch that relaxes it. A `fail_mode`
+can be set per risk category by the deployment, but the fallback is closed and a
+caller cannot change it.
 
 This is not paranoia — it is a direct response to something found in the source
 review. NeMo Guardrails' own jailbreak rail defaults to fail-**open**, documented
@@ -723,8 +727,8 @@ BLOCKED after 1 cascade stage(s) in 1ms
   an optimisation. A real per-tenant latency budget is still an open item.
 - **A rail with its dependency missing reports `unjudged`, which fails closed.**
   That is correct, and it also means a fresh install with no model weights will
-  block client-facing traffic until either the weights are installed or the rail
-  is explicitly disabled. That is deliberate, but it will surprise you once.
+  block traffic until either the weights are installed or the rail is explicitly
+  disabled. That is deliberate, but it will surprise you once.
 - **Detector accuracy is not yet measured.** The precision and recall of every
   rail here is currently a vendor claim or an inference from the mechanism. The
   plan of record is PyRIT's `scorer_evaluation` with Krippendorff's alpha against
