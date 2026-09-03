@@ -9,11 +9,11 @@ holds the answer.
 | Read this | When you want |
 |---|---|
 | [**architecture.md**](architecture.md) | How a request travels, what the cascade does, and how the live path relates to the offline loop |
-| [**request-flow.md**](request-flow.md) | **Generated from the code.** Which of the 32 checks run on the prompt, the answer, or both — and the four outcomes |
-| [**tenets.md**](tenets.md) | The seven tenets and the 65 capabilities under them |
+| [**request-flow.md**](request-flow.md) | **Generated from the code.** Which of the 33 checks run on the prompt, the answer, or both — and the four outcomes |
+| [**tenets.md**](tenets.md) | The seven tenets, the 65 capabilities under them, and the [governance register](tenets.md#the-governance-register) |
 | [**frameworks.md**](frameworks.md) | All 23 reviewed open-source projects: verdict, mechanism, and the Infosys vs NeMo comparison |
 | [**plan.md**](plan.md) | What to build, what is decided, and what is still open |
-| [**setup.md**](setup.md) | Installing and running it, and getting the model files in place |
+| [**setup.md**](setup.md) | **[Quick start — just the commands](setup.md#quick-start)**, then the reference: every library, every model file, and where each one goes |
 | [**corpus.md**](corpus.md) | The 11,369-prompt harm corpus: what is in it, and how to run part of it |
 | [**ui-walkthrough.html**](ui-walkthrough.html) | **Open this in a browser.** Every console screen in plain English, with worked examples |
 
@@ -63,9 +63,14 @@ drugs?"* — allowed at Stage 1. Not a bug. Stage 1 matches **patterns**, and ha
 as protection against harmful intent.** It is data-loss and attack-pattern protection, and
 it is excellent at that, for free, on every message.
 
-**3 · Almost every check runs on both sides.** 23 of the 32 checks run on the prompt *and*
-the answer. So 24 checks see a question and **31 see an answer** — the outgoing guardrail
+**3 · Almost every check runs on both sides.** 24 of the 33 checks run on the prompt *and*
+the answer. So 25 checks see a question and **32 see an answer** — the outgoing guardrail
 is the *stricter* of the two, not a lighter afterthought.
+
+**3b · Text and images are separate routes.** `POST /v1/guard` checks text only, because a
+guard event's payload is strings and an image is not one. An application that accepts
+uploads has to call `POST /v1/media/image` as well — one does not cover the other, and
+`GET /v1/media` says so in its own description rather than leaving it to be discovered.
 
 **4 · "Offline" does not mean switched off, and it does not mean no internet.** It means
 **this check never runs while someone is waiting.** Stages 1, 2 and 3 all happen in the
@@ -78,6 +83,29 @@ physically refuses to start if an offline check is put in the live path.
 refused. There is no request field and no UI switch that relaxes it. A `fail_mode` can be
 set per risk category by the deployment, but the fallback is closed and a caller cannot
 change it.
+
+---
+
+## The nine console screens
+
+| Screen | What it is for |
+|---|---|
+| **Live check** | watch one decision resolve, stage by stage |
+| **How it works** | the request path, drawn |
+| **Tenets** | coverage honestly counted, plus the governance register |
+| **Rails** | every detector, its stage, its source repo and its evidence |
+| **Topics** | 6 always banned and compiled in, 24 optional and yours to pick |
+| **Sensitivity** | all 24 thresholds, the value in force, and three presets |
+| **Media** | one image or video, judged locally, with the regions drawn on it |
+| **Corpus** | sample the 11,369 records — and the **guardrails off vs on** ladder |
+| **Frameworks** | 23 reviewed projects, 16 contributing |
+
+Two screens WRITE server configuration: **Topics** and **Sensitivity**. A topic change
+arms on the next gateway **restart** (the rail compiles its pattern sets once at
+construction); a threshold change applies on the **next request** (the store deliberately
+does not cache). Each screen says its own answer rather than both hedging.
+
+Full walkthrough with worked examples: [ui-walkthrough.html](ui-walkthrough.html).
 
 ---
 

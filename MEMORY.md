@@ -2183,3 +2183,102 @@ footnote.
 | `tests/test_ab.py` | new — 32 tests, including the empty-cascade assumption |
 
 **1169 tests pass.**
+
+---
+
+## 2026-09-03 — Setup as commands, and the docs caught up with four sessions of change
+
+AFNI is deleting their local clone and re-cloning: *"I need the steps how to use to up and
+running this front end. And also how to download the models and libraries and modules all
+together. I need the complete guide. Just the commands I need. And please be concise and
+clear and dont be descriptive."*
+
+### `docs/setup.md` now opens with commands, not prose
+
+Eight numbered steps, PowerShell and bash side by side, clone to running console. The 619
+lines of reference did not go anywhere — they moved below a `## Reference` heading — but
+the first thing a reader meets is a copy-pasteable sequence.
+
+Also a **minimum viable install**: three commands, no model downloads. Stage 1 is 23 rails
+of pure standard library, and `/healthz` reporting `degraded` on that install is correct
+rather than broken.
+
+Every path and every subcommand in it was **executed** before shipping, not written from
+memory: all seven CLI subcommands answer `--help`, all seven files exist,
+`baseline.py --start/--end/--stage-1-only` are real flags.
+
+### Three README examples were BROKEN and would have 422'd
+
+`client_facing: true` appears in two committed `curl` bodies and one instruction. That
+field was removed this morning and the guard body is `extra="forbid"`, so **every one of
+those examples returns a 422**. A reader's first contact with this platform was a
+copy-paste that fails.
+
+Fixed, and then verified the way it should have been in the first place: a script
+**extracts both curl bodies out of README.md by regex and POSTs them** to a live gateway.
+Both now return 200. That check is repeatable, unlike reading them.
+
+The instruction was worse than broken - it was wrong advice. "Set `client_facing: true`
+for anything a customer will see — that is the flag that turns on fail-closed" now reads
+that fail-closed is unconditional and there is no flag.
+
+### `.env.example` gained four settings and lost a stale claim
+
+`AFNI_GOVERNANCE_DOMAIN`, `AFNI_GOVERNANCE_OWNERS`, `AFNI_TOPIC_POLICY`,
+`AFNI_THRESHOLD_POLICY`, `AFNI_MEDIA_MAX_BYTES` — every one of them shipped today with no
+entry in the template. And it still said judge exhaustion "fails closed on client-facing
+traffic".
+
+### The walkthrough: seven screens became nine
+
+New: **Sensitivity** (#6) and **Media** (#7). Corpus renumbered to 8, Frameworks to 9, the
+contents list and the section heading with them. Plus two substantial additions inside
+existing screens: the **governance register** under Tenets, and **Before and after** under
+Corpus.
+
+Stale things found while renumbering:
+
+- Topics was still described as *"the only screen that CHANGES things"*. There are two now.
+- "One row for each of the **32** checks" → 33.
+- The ten-minute demo script said *"Sixteen checks, free, on every single message"* at the
+  Rails step. Stage 1 is **23**.
+- Every Swagger URL said port **8080**. `AFNI_PORT` defaults to **8000**.
+
+### The demo numbers are measured, not illustrative
+
+I first wrote the demo close as "200 reach the model, then 198, then 184" — plausible
+numbers I had not run. Replaced with a real 200-record ladder from this machine: **200 →
+197 → 186**, Stage 2 adding **eleven** stops for **+0.05 ms at the median**. And the
+sentence says the third figure is a floor because this host is missing four of the seven
+Stage-2 model files.
+
+### Doc counts swept across the repo
+
+`22 rails` → 23 in four docs (the topic rail). `32 checks` → 33. Seven separate claims
+that the gateway "fails closed on client-facing traffic" corrected across
+`architecture.md`, `frameworks.md`, `plan.md`, `setup.md`, `tenets.md` and
+`.env.example` — `client_facing` was removed and fail-closed has been unconditional since
+this morning, so the docs were describing a switch that no longer exists. The two
+*legitimate* uses of the phrase in `tenets.md` (an Azure dashboard being client-facing)
+were left alone.
+
+### plan.md: two open items answered rather than restated
+
+**Item 4, the pilot application.** AFNI asked what "name the pilot application" actually
+means, in plain terms. Now spelled out: nothing gets built or moved, it means answering
+three questions about something that already exists — which application, who owns it and
+will allow a red-team scan, and can a few hundred real prompts (personal data removed) be
+seen to calibrate thresholds against. Without one, **every threshold in this platform is
+still the number its source project shipped with**.
+
+**Item 4b, a name.** AFNI asked for a suggestion and floated "test board". Recommended
+**`AFNI Sentry`**, and argued against Testboard: it names the *console* rather than the
+guardrail, and a name that says "test" invites people to treat a production gateway as a
+lab.
+
+**Item 7, media moderation.** Was "does AFNI need it at all?". Now BUILT, with the one
+honest question left stated as the question: accuracy is NudeNet's claim, not AFNI's
+measurement, and verifying it needs a labelled set AFNI supplies. DICOM PII scanning is
+still genuinely unanswered.
+
+**1191 tests pass.**

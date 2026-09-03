@@ -224,14 +224,16 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
     <li><a href="#flow"><span class="n">§</span>The whole journey</a></li>
     <li><a href="#words"><span class="n">§</span>Six words to learn</a></li>
     <li><a href="#decode"><span class="n">§</span>Reading the answer</a></li>
-    <li class="grp">The seven screens</li>
+    <li class="grp">The nine screens</li>
     <li><a href="#v1"><span class="n">1</span>Live check</a></li>
     <li><a href="#v2"><span class="n">2</span>How it works</a></li>
     <li><a href="#v3"><span class="n">3</span>Tenets</a></li>
     <li><a href="#v4"><span class="n">4</span>Rails</a></li>
     <li><a href="#v5"><span class="n">5</span>Topics</a></li>
-    <li><a href="#v6"><span class="n">6</span>Corpus</a></li>
-    <li><a href="#v7"><span class="n">7</span>Frameworks</a></li>
+    <li><a href="#v6"><span class="n">6</span>Sensitivity</a></li>
+    <li><a href="#v7"><span class="n">7</span>Media</a></li>
+    <li><a href="#v8"><span class="n">8</span>Corpus</a></li>
+    <li><a href="#v9"><span class="n">9</span>Frameworks</a></li>
     <li class="grp">Always on screen</li>
     <li><a href="#topbar"><span class="n">§</span>Top bar &amp; warning strip</a></li>
     <li><a href="#legend"><span class="n">§</span>The left-hand legend</a></li>
@@ -459,8 +461,8 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
 
 <!-- ===================================================================== -->
 <section id="screens" class="stack-lg">
-  <h2>The seven screens, one at a time</h2>
-  <p class="sub">These are the seven items down the left-hand side of the console,
+  <h2>The nine screens, one at a time</h2>
+  <p class="sub">These are the nine items down the left-hand side of the console,
   in the order they appear. Click any of them; nothing on any of these screens can
   break anything.</p>
 
@@ -658,6 +660,48 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       <div class="prose"><p>Read <b>The whole picture</b> at the top for the totals, then
       <b>By tenet</b> below it to see which of the seven is weakest. That is your
       priority list.</p></div>
+
+      <h4>The governance register, at the bottom of this screen</h4>
+      <div class="prose">
+        <p>Seven cards, one per tenet. Each says who is accountable, where to
+        escalate, how many checks are mounted for it, and <b>the exact threshold
+        numbers in force right now</b>.</p>
+      </div>
+      <div class="note"><span class="note__t">Why there are no people's names in it</span>
+      <span>The build plan originally asked AFNI for seven names. You pushed back —
+      the framework comes with all of this, why does it need names — and you were
+      right.
+      <br><br>
+      <b>A person's name in a governance register is out of date the moment they
+      change team.</b> And a register with a <em>wrong</em> escalation path is
+      worse than one with an honest gap: the first sends an incident to somebody
+      who left, the second is visibly unfinished and gets fixed.
+      <br><br>
+      So the framework generates a <b>role</b> — "Privacy steward — AFNI
+      Responsible AI" — with no configuration at all, and each one comes with a
+      sentence saying what arriving there <em>means</em>. "Owner of Privacy" is a
+      label; "decides what counts as personal data and signs off the redaction
+      behaviour" is an accountability.
+      <br><br>
+      <b>You supply one thing, not seven.</b> Set
+      <code>AFNI_GOVERNANCE_DOMAIN</code> on the server and all seven addresses
+      resolve at once: <span class="mono">rai-privacy@…</span>,
+      <span class="mono">rai-security@…</span>, and so on. Until then the cards
+      show the alias with no domain and say <b>domain unset</b>. Nothing is
+      invented in the meantime — a plausible-looking address that goes nowhere is
+      worse in a compliance document than one that is visibly unfinished.
+      <br><br>
+      If you would rather name real people, <code>AFNI_GOVERNANCE_OWNERS</code>
+      takes them per tenet. That is a choice, not a requirement.</span></div>
+      <div class="prose">
+        <p><b>It is read-only here, on purpose.</b> An escalation path that anybody
+        with the console could rewrite is not an escalation path, so the domain is a
+        server setting rather than a box on this screen.</p>
+        <p>Everything else in it is read from the <em>running</em> platform, so it
+        cannot describe a configuration nobody is using. For a client pack:
+        <code>python rai_platform/cli.py governance --markdown</code> renders the
+        same document as a file.</p>
+      </div>
     </div>
   </article>
 
@@ -668,7 +712,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       <span class="view__click">#/rails</span></div>
     <div class="view__body">
       <h4>What this screen is for</h4>
-      <div class="prose"><p>One row for each of the 32 checks. The Tenets screen answers
+      <div class="prose"><p>One row for each of the 33 checks. The Tenets screen answers
       "are we covered"; this one answers the question an engineer asks next — <em>what
       exactly is looking at my traffic, how does it work, where did it come from, and
       can it run right now?</em></p></div>
@@ -709,13 +753,13 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
   <article class="view" id="v5">
     <div class="view__head"><span class="view__n">5</span>
       <span class="view__t">Topics</span>
-      <span class="view__click">#/topics · the only screen that CHANGES things</span></div>
+      <span class="view__click">#/topics · one of the two screens that CHANGE things</span></div>
     <div class="view__body">
       <h4>What this screen is for</h4>
       <div class="prose">
-        <p>Choosing what your AI will refuse to talk about. <b>Every other screen
-        in this console only reads. This one writes</b> — it changes what the
-        gateway blocks.</p>
+        <p>Choosing what your AI will refuse to talk about. <b>Only two screens
+        in this console write anything: this one and Sensitivity.</b> Everything
+        else reads. This one changes what the gateway blocks.</p>
         <p>There are 30 topics. <b>Six are always banned</b> and cannot be
         switched off here. <b>Twenty-four are yours to tick</b>, and none is
         ticked when you start.</p>
@@ -827,9 +871,239 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
     </div>
   </article>
 
-  <!-- ---------- 6 CORPUS ---------- -->
+  <!-- ---------- 6 SENSITIVITY ---------- -->
   <article class="view" id="v6">
     <div class="view__head"><span class="view__n">6</span>
+      <span class="view__t">Sensitivity</span>
+      <span class="view__click">#/sensitivity · the other screen that CHANGES things</span></div>
+    <div class="view__body">
+      <h4>What this screen is for</h4>
+      <div class="prose">
+        <p>How sure a check has to be before it counts. Every detector produces a
+        <b>score between 0 and 1</b>, and a threshold is the line it has to cross.
+        Toxicity ships at <span class="mono">0.60</span>: a message the model
+        scores 0.59 goes through, 0.61 does not.</p>
+        <p>There are <b>24 of them</b>. This screen shows every one, what it
+        judges, the number the code ships, and the number in force here.</p>
+      </div>
+
+      <h4>Read this before you drag anything down</h4>
+      <div class="note note--stop"><span class="note__t">Lower does not mean safer</span>
+      <span>Lowering a threshold <b>does not find more harm</b>. It lowers the bar
+      for calling something harm. The detector's opinion of your messages is
+      completely unchanged — all that changes is where the line sits.
+      <br><br>
+      What <em>does</em> change is that more ordinary work gets refused. And a
+      guardrail that refuses ordinary work gets switched off by the business
+      inside a fortnight, which is a far worse outcome than a threshold at 0.7.
+      <br><br>
+      Nine of the 24 are marked <b>noisy</b>. That is the honest way of saying
+      "this is the one you will regret tightening".</span></div>
+
+      <h4>Where a threshold should live — and the answer to the question you asked</h4>
+      <div class="prose">
+        <p>Three layers, and <b>only the middle one is on this screen</b>:</p>
+        <ol>
+          <li><b>The code ships every default.</b> Each one is taken from the
+          open-source project the check was ported from, and cited there.
+          Changing one is a code change and a code review. This is the floor: a
+          deployment that never opens this screen still runs on real,
+          defensible numbers.</li>
+          <li><b>This screen overrides them, per deployment.</b> Tuning is
+          something you learn in production — "toxicity is too noisy on our
+          support queue" is not knowable at review time — so it must not need a
+          deploy.</li>
+          <li><b>A caller can never set one.</b> Not a field, not a header. If
+          the application could raise a threshold it could drive around the
+          guardrail, and the guardrail exists because the application is not
+          trusted.</li>
+        </ol>
+      </div>
+
+      <h4>The three presets</h4>
+      <div class="tw"><table>
+        <thead><tr><th>Button</th><th>What it does</th><th>Use it when</th></tr></thead>
+        <tbody>
+          <tr><td><b>Balanced (shipped)</b></td>
+              <td>Clears every override. Back to the numbers in the code.</td>
+              <td>Always, to start. And to undo an experiment.</td></tr>
+          <tr><td><b>Strict</b></td>
+              <td>Every detection threshold at three quarters of its shipped
+              value. Sets 21 of the 24.</td>
+              <td>A high-risk application where a false refusal costs less than
+              a miss.</td></tr>
+          <tr><td><b>Maximum sensitivity</b></td>
+              <td>Every detection threshold at 0.10. Sets 21 of the 24.</td>
+              <td><b>A demo or a red-team exercise. Not production.</b> At 0.10
+              a classifier's background noise becomes a finding.</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="note"><span class="note__t">A preset fills the form in. It does not save.</span>
+      <span>Press <b>Strict</b> and 21 rows change on screen and nothing changes
+      on the server. You can see everything it did before committing to it, and
+      <b>Discard changes</b> puts it all back. Only <b>Save</b> writes.</span></div>
+
+      <h4>Three of the 24 are not "how strict", and the presets skip them</h4>
+      <div class="prose">
+        <p>They are in their own group at the bottom, labelled:</p>
+        <ul>
+          <li><b>Refusal detection</b> — this measures <em>the model's</em>
+          behaviour, not a user's. Lowering it makes nothing stricter; it makes
+          more answers get classed as refusals.</li>
+          <li><b>Envelope — allow below</b> and <b>Envelope — block above</b> —
+          a <em>matched pair</em>. Moving one without the other changes what the
+          envelope means.</li>
+        </ul>
+        <p>Dragging these down with the rest would change what they measure
+        rather than tighten anything, so no preset touches them.</p>
+      </div>
+
+      <h4>This one takes effect immediately — no restart</h4>
+      <div class="note"><span class="note__t">Different from the Topics screen, and that is real</span>
+      <span>A threshold you save applies on the <b>very next message</b>. The
+      Topics screen needs a restart, because that check builds its word list once
+      when the gateway starts. Two different mechanisms, two different answers —
+      each screen tells you its own rather than both saying "restart to be
+      safe".</span></div>
+
+      <h4>Try it</h4>
+      <div class="prose">
+        <ol>
+          <li>Note that <b>Overridden here</b> at the top says <span class="mono">0</span>.</li>
+          <li>Press <b>Strict</b>. Twenty-one rows now say <b>overridden</b> in
+          amber, and <b>Save</b> becomes available. Nothing has been saved.</li>
+          <li>Press <b>Discard changes</b>. Everything returns to
+          <span class="mono">shipped</span>.</li>
+          <li>Now change one row by hand — set <b>Toxicity</b> to
+          <span class="mono">0.30</span> — and press <b>Save</b>. Go to Live
+          check and try a mildly rude message. Come back and press
+          <b>Balanced (shipped)</b> then <b>Save</b> to undo.</li>
+        </ol>
+      </div>
+    </div>
+  </article>
+
+  <!-- ---------- 7 MEDIA ---------- -->
+  <article class="view" id="v7">
+    <div class="view__head"><span class="view__n">7</span>
+      <span class="view__t">Media</span>
+      <span class="view__click">#/media</span></div>
+    <div class="view__body">
+      <h4>What this screen is for</h4>
+      <div class="prose">
+        <p>Checking a picture or a video instead of text. Drop a file in, press
+        <b>Check</b>, and it comes back with a verdict and with <b>rectangles
+        drawn on the image</b> showing exactly what the detector reacted to.</p>
+        <p>It runs a small model <b>on this machine</b>. About 90 milliseconds an
+        image. <b>Nothing is uploaded anywhere</b> and nothing leaves the
+        network.</p>
+      </div>
+
+      <h4>The one thing that will catch you out</h4>
+      <div class="note note--stop"><span class="note__t">Live check does not check images</span>
+      <span>Text and pictures go to <b>different addresses</b>, because the
+      message format the gateway speaks is made of strings and a picture is not a
+      string.
+      <br><br>
+      So an application of yours that lets people upload a photo has to call
+      <span class="mono">POST /v1/media/image</span> <b>as well as</b>
+      <span class="mono">POST /v1/guard</span>. One does not cover the other.
+      This is said in the API documentation too, rather than left for somebody to
+      find out the hard way.</span></div>
+
+      <h4>What it looks for</h4>
+      <div class="tw"><table>
+        <thead><tr><th>Band</th><th>What happens</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td><b>explicit</b> (5 kinds)</td>
+              <td><span class="chip c-block">blocks</span></td>
+              <td>Exposure. Not ambiguous.</td></tr>
+          <tr><td><b>suggestive</b> (5 kinds)</td>
+              <td><span class="chip c-allow">flags</span></td>
+              <td>Covered but suggestive. A person in a swimsuit is not a policy
+              violation everywhere, so this is reported as evidence and you
+              decide.</td></tr>
+          <tr><td><b>face</b></td>
+              <td><span class="chip c-allow">flags</span></td>
+              <td>A face is biometric personal data, so it is worth knowing
+              about. It <b>never blocks</b> — a photograph of a person is not a
+              policy violation.</td></tr>
+          <tr><td><b>not reported</b> (6 kinds)</td>
+              <td>nothing</td>
+              <td>Bellies, feet and armpits. The model finds them; we throw them
+              away. <b>A visible ankle is not a finding</b>, and filling the
+              audit record with them buries the ones that matter.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>The model guesses gender. We throw that away.</h4>
+      <div class="note"><span class="note__t">One line of code, and it matters</span>
+      <span>The detector labels a face as male or female, and splits some other
+      categories the same way. <b>We drop that guess before the finding is
+      made.</b> It reaches no verdict, no audit record and no compliance report.
+      <br><br>
+      Guessing somebody's gender from a photograph is exactly the kind of harm
+      this whole platform exists to catch. Using the detection while discarding
+      the demographic label is the only defensible way to use this model. A test
+      checks that the word never appears in a result.</span></div>
+
+      <h4>Why the blurred copy is what you see first</h4>
+      <div class="prose"><p>If anything was detected, the console shows you the
+      <b>blurred</b> version, and the original is behind a deliberate click. The
+      whole point of moderating an upload is that you do not have to look at it.
+      The blur comes from the <em>same</em> detection that produced the findings —
+      not a second pass that could redact something it never reported.</p></div>
+
+      <h4>Video is slow, and the honesty about it is the point</h4>
+      <div class="prose">
+        <p>A frame costs about 90 ms. So checking <em>every</em> frame of a
+        thirty-second clip is over a minute of computer time — not something to
+        put in front of somebody waiting for an answer.</p>
+        <p>So video <b>samples</b>: every 15th frame, stopping at 120. The result
+        tells you <b>how many frames it actually looked at, out of how many
+        exist</b>. That gap is real, and hiding it would make the check look
+        stronger than it is.</p>
+        <p>One explicit frame anywhere in the sample blocks the whole video — the
+        union of what was seen, never an average. An average lets one bad frame
+        in a long clean clip disappear.</p>
+      </div>
+
+      <h4>If it says the model is not installed</h4>
+      <div class="note note--stop"><span class="note__t">Then every image comes back BLOCKED, and that is not a detection</span>
+      <span>Without the package, nothing can be looked at — and "could not look"
+      is never allowed to mean "found nothing" anywhere in this platform. So it
+      blocks. <b>That is a coverage gap wearing a refusal</b>, and the screen says
+      so rather than letting you conclude your holiday photo was pornographic.
+      <br><br>
+      One command fixes it: <code>pip install nudenet onnxruntime
+      opencv-python-headless</code>. There is <b>no separate model download</b> —
+      the 12 MB model ships inside the package, so this works on a machine with
+      no internet at all once the package is on it.</span></div>
+
+      <h4>Try it</h4>
+      <div class="prose">
+        <ol>
+          <li>Any ordinary photograph — a building, a landscape. Expect
+          <span class="chip c-allow">allow</span>, "nothing detected above the
+          thresholds", and no rectangles.</li>
+          <li>A photograph with a person's face in it. Expect
+          <span class="chip c-allow">allow</span> <b>with a finding</b> —
+          <span class="mono">privacy.pii</span>, flagged — and a rectangle round
+          the face. This is outcome 2 from the four outcomes above: allowed, but
+          something was found.</li>
+          <li>Rename a text file to <code>.jpg</code> and try it. Expect
+          <span class="chip c-block">block</span> — "nothing could be judged". A
+          file the decoder cannot read is a coverage gap, and coverage gaps
+          block.</li>
+        </ol>
+      </div>
+    </div>
+  </article>
+
+  <!-- ---------- 8 CORPUS ---------- -->
+  <article class="view" id="v8">
+    <div class="view__head"><span class="view__n">8</span>
       <span class="view__t">Corpus</span>
       <span class="view__click">#/corpus</span></div>
     <div class="view__body">
@@ -900,6 +1174,92 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
         </tbody>
       </table></div>
 
+      <h4>Before and after — the number for a demo</h4>
+      <div class="prose">
+        <p>This is the panel at the top of the screen, above the sample picker,
+        and it is the one to open a demo with. It runs <b>the same prompts three
+        times</b>:</p>
+        <ul>
+          <li><b>off</b> — no guardrail at all</li>
+          <li><b>stage_1</b> — the free instant checks only</li>
+          <li><b>stage_1_2</b> — plus the local models</li>
+        </ul>
+        <p>Three bars, and you watch them shrink. Measured here on 200 prompts:
+        <b>200 of 200</b> reach the model with no guardrail, <b>197</b> with Stage
+        1, <b>186</b> with Stage 1 and 2. Those are real numbers from this
+        machine, which is <em>missing four of the seven Stage-2 model files</em> —
+        so the third figure is a floor and the panel marks it as one.</p>
+      </div>
+
+      <div class="note note--stop"><span class="note__t">What that number is, and what it is not</span>
+      <span>It measures <b>delivery</b>: how much known-harmful traffic reaches
+      the model. It does <b>not</b> measure whether the model would then have gone
+      along with it.
+      <br><br>
+      A nasty prompt that reaches a well-behaved model and gets politely refused
+      is counted here as <em>delivered</em>. That is deliberately the pessimistic
+      direction — it measures <em>your guardrail</em>, not the model's manners —
+      and it is why the number is labelled "reached the model" rather than "attack
+      succeeded".</span></div>
+
+      <h4>Why the "off" bar is 100% and always will be</h4>
+      <div class="prose"><p>Because with no guardrail there is no decision to
+      make. Every message reaches the model. It is a <b>definition</b>, not a
+      measurement, and it is marked <span class="mono">by definition</span> and
+      drawn with a hatched fill rather than a solid one so it never reads as
+      something we measured.</p></div>
+
+      <h4>What each rung buys — the number the design lives or dies by</h4>
+      <div class="prose">
+        <p>Under the bars is a short list: what each step adds over the one below
+        it, in prompts stopped <em>and</em> in milliseconds per message. On the
+        200-prompt run above, Stage 2 stopped <b>eleven more</b> prompts and added
+        <b>0.05 ms at the median</b> — because Stage 1 has already decided almost
+        everything and Stage 2 never runs on it.</p>
+        <p>That is the whole "cheap checks first" argument, measured rather than
+        asserted. And if a step ever stopped adding anything on this corpus, this
+        list would say so — which is the point of showing it.</p>
+      </div>
+
+      <div class="note"><span class="note__t">Median and p95, not the average</span>
+      <span>The average is the number one slow message ruins. The first prompt
+      that needs a model has to load it — four seconds, once — and spread across
+      eighty prompts that reads as 44 ms each, which is nonsense. So the models
+      are warmed up before the clock starts, and you get the <b>median</b> (the
+      typical message) and the <b>p95</b> (the tail your service level has to
+      survive).</span></div>
+
+      <h4>The tick-box for end-to-end attack success</h4>
+      <div class="prose">
+        <p><b>"Also estimate end-to-end attack success"</b> does something you
+        might not expect: it measures both halves of an attack <em>without
+        needing a model at all</em>.</p>
+        <p>The corpus holds the prompt <em>and</em>, for 519 records, the harmful
+        answer a broken model would have given. So both guardrails can be tested
+        against their own real input and combined: <b>an attack only succeeds if
+        the prompt gets past the input check AND the harmful answer gets past the
+        output check.</b></p>
+        <p>A typical run: prompt through 86.7%, harmful answer through 93.3%,
+        so end to end <b>80.9%</b> — against 100% with no guardrail.</p>
+      </div>
+      <div class="note"><span class="note__t">It assumes two things, and it tells you both</span>
+      <span>First, that <b>the model always goes along with the attack</b> — the
+      worst case, which is the right assumption when the claim is about your
+      guardrail rather than about the model's alignment. Second, that the two
+      checks are <b>independent</b>, which is not obviously true.
+      <br><br>
+      Both are printed next to the number rather than left in a footnote, because
+      an estimate whose assumptions are invisible is a number people quote without
+      them.</span></div>
+
+      <h4>If a bar says "floor — rails missing"</h4>
+      <div class="note"><span class="note__t">Then that bar is not a measurement</span>
+      <span>It means some of the checks in that step cannot run on this machine —
+      a model file is missing. The step still stopped whatever it stopped, so the
+      number is a <b>floor</b>: the real one is higher. The panel names the
+      missing checks, and <code>python rai_platform/cli.py preflight</code> tells
+      you how to fix them.</span></div>
+
       <h4>Colours are deliberately reversed on this screen</h4>
       <div class="note note--warn"><span class="note__t">On this screen, blocked is good</span>
       <span>Every prompt in this corpus is something we would rather the model never
@@ -950,9 +1310,9 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
     </div>
   </article>
 
-  <!-- ---------- 7 FRAMEWORKS ---------- -->
-  <article class="view" id="v7">
-    <div class="view__head"><span class="view__n">7</span>
+  <!-- ---------- 9 FRAMEWORKS ---------- -->
+  <article class="view" id="v9">
+    <div class="view__head"><span class="view__n">9</span>
       <span class="view__t">Frameworks</span>
       <span class="view__click">#/frameworks</span></div>
     <div class="view__body">
@@ -1308,16 +1668,25 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
     then scroll down</em> to Redactions offered. "It did not refuse to help the customer.
     It handed back the exact replacement text. That is the difference between a guardrail
     and a blocker."</span></li>
-    <li><b>Rails.</b> <span>Filter to Stage 1. "Sixteen checks, free, on every single
-    message." Then open one row and read out the source line. "That is the file and line
-    we took the pattern from. This is what makes it auditable."</span></li>
+    <li><b>Rails.</b> <span>Filter to Stage 1. "Twenty-three checks, free, on every
+    single message." Then open one row and read out the source line. "That is the file and
+    line we took the pattern from. This is what makes it auditable."</span></li>
     <li><b>Tenets.</b> <span>The five states. Spend your time on <em>Nothing looks</em>.
     "We are showing you our own gaps. A dashboard that hid them would not be worth
     having."</span></li>
-    <li><b>Corpus — the close.</b> <span>Set per-tenet 40, Stage 1, Run. Half a second
-    later: 276 allowed, 4 blocked. Then say it straight: <em>"the free tier catches
-    patterns, not intent. That is the case for funding the next tier — and this is the
-    measurement we will re-run to prove it."</em></span></li>
+    <li><b>Media.</b> <span>Drop in a photograph with a face in it. Allowed, with a
+    rectangle round the face and one finding. "That is personal data, flagged not
+    refused — and note that the model told us its guess at the person's gender and we
+    threw it away before it reached the record."</span></li>
+    <li><b>Corpus, Before and after — the close.</b> <span>The panel at the top of the
+    screen. Records per rung 200, Stage 1 + 2, Run. Three bars shrink: 200 reach the
+    model with nothing in front, then 197, then 186 — measured on this machine, which
+    is missing four of the seven Stage-2 model files, so the third bar is a floor and
+    the panel says so. Then say it straight: <em>"the free
+    tier catches patterns, not intent. Stage 2 costs no measurable extra time on the
+    typical message because Stage 1 has already decided it. That is the case for the next
+    tier — and this is the measurement we re-run to prove it after every
+    change."</em></span></li>
   </ol>
 
   <div class="note"><span class="note__t">The one line to leave them with</span>
@@ -1328,7 +1697,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
 <!-- ===================================================================== -->
 <section id="swagger" class="stack">
   <h2>Swagger, if you would rather send requests directly</h2>
-  <p class="sub">Open <code>http://127.0.0.1:8080/docs</code>. Every endpoint has a
+  <p class="sub">Open <code>http://127.0.0.1:8000/docs</code>. Every endpoint has a
   <b>Try it out</b> button and worked example payloads pre-filled.</p>
 
   <div class="tw"><table>
@@ -1381,9 +1750,9 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
 python -m uvicorn afni_rai.gateway.app:create_app --factory --port 8080</div>
     <p>Then open:</p>
     <ul>
-      <li><code>http://127.0.0.1:8080/</code> — the console (this guide's subject)</li>
-      <li><code>http://127.0.0.1:8080/docs</code> — Swagger</li>
-      <li><code>http://127.0.0.1:8080/healthz</code> — what is missing</li>
+      <li><code>http://127.0.0.1:8000/</code> — the console (this guide's subject)</li>
+      <li><code>http://127.0.0.1:8000/docs</code> — Swagger</li>
+      <li><code>http://127.0.0.1:8000/healthz</code> — what is missing</li>
     </ul>
     <p>The first start takes about eleven seconds. That is deliberate: the local AI models
     are loaded <em>before</em> the server accepts any traffic. A guardrail that is slow to

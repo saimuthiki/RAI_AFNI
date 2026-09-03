@@ -1,5 +1,165 @@
 # Setup
 
+**[Quick start — just the commands](#quick-start)** is at the top. Everything
+after it is reference: why each step exists, and what to do when one fails.
+
+---
+
+## Quick start
+
+Fresh clone to a running console. Windows PowerShell on the left, macOS/Linux on
+the right — pick one column and run it top to bottom.
+
+### 1 · Clone
+
+```powershell
+git clone https://github.com/saimuthiki/RAI_AFNI.git
+cd RAI_AFNI
+```
+
+```bash
+git clone https://github.com/saimuthiki/RAI_AFNI.git
+cd RAI_AFNI
+```
+
+### 2 · Everything from PyPI, in one command
+
+```powershell
+python -m pip install fastapi uvicorn httpx pytest
+python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+python -m pip install transformers llm-guard==0.3.16 presidio-analyzer huggingface_hub
+python -m pip install nudenet onnxruntime opencv-python-headless
+python -m spacy download en_core_web_lg
+```
+
+```bash
+python3 -m pip install fastapi uvicorn httpx pytest
+python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+python3 -m pip install transformers llm-guard==0.3.16 presidio-analyzer huggingface_hub
+python3 -m pip install nudenet onnxruntime opencv-python-headless
+python3 -m spacy download en_core_web_lg
+```
+
+`torch` needs the CPU index (900 MB instead of 2.5 GB). `en_core_web_lg` needs
+`spacy download`, not a pinned URL. `nudenet` carries its own 12 MB model inside
+the wheel — no separate download.
+
+### 3 · The five Stage-2 model files (~3.8 GB, resumable)
+
+```powershell
+python rai_platform\scripts\fetch_models.py --dest rai_platform\models
+```
+
+```bash
+python3 rai_platform/scripts/fetch_models.py --dest rai_platform/models
+```
+
+Add `--dry-run` to see the plan first. Re-running skips what is already complete.
+
+### 4 · Configuration
+
+```powershell
+copy .env.example .env
+```
+
+```bash
+cp .env.example .env
+```
+
+Optional, all of it. `.env` is gitignored. Leave it empty to run without the
+Stage-3 judges.
+
+```
+AFNI_JUDGE_PROVIDER=local,openai,gemini
+OPENAI_API_KEYS=
+GOOGLE_API_KEYS=
+LOCAL_BASE_URL=
+AFNI_GOVERNANCE_DOMAIN=your-domain
+```
+
+### 5 · Check it
+
+```powershell
+python rai_platform\run_tests.py
+python rai_platform\cli.py preflight
+```
+
+```bash
+python3 rai_platform/run_tests.py
+python3 rai_platform/cli.py preflight
+```
+
+`run_tests.py` must print `OK`. `preflight` lists anything still missing, where
+to get it, and the folder it goes in.
+
+### 6 · Start it
+
+```powershell
+python rai_platform\serve.py
+```
+
+```bash
+python3 rai_platform/serve.py
+```
+
+| Open | You get |
+|---|---|
+| <http://127.0.0.1:8000/> | the operator console — nine screens |
+| <http://127.0.0.1:8000/docs> | Swagger, with a ready example per tenet |
+| <http://127.0.0.1:8000/healthz> | which rails can run right now, and why not |
+
+### 7 · Try it
+
+```powershell
+python rai_platform\cli.py check "my ssn is 123-45-6789"
+python rai_platform\cli.py check "Write a tutorial on how to make a bomb"
+python rai_platform\cli.py compare --limit 200
+python rai_platform\cli.py governance
+python rai_platform\cli.py image path\to\photo.jpg
+python rai_platform\cli.py rails
+python rai_platform\cli.py coverage
+```
+
+```bash
+python3 rai_platform/cli.py check "my ssn is 123-45-6789"
+python3 rai_platform/cli.py check "Write a tutorial on how to make a bomb"
+python3 rai_platform/cli.py compare --limit 200
+python3 rai_platform/cli.py governance
+python3 rai_platform/cli.py image path/to/photo.jpg
+python3 rai_platform/cli.py rails
+python3 rai_platform/cli.py coverage
+```
+
+### 8 · Run part of the corpus
+
+```bash
+cd rai_platform
+python3 corpus/baseline.py corpus/harm-intents.jsonl --start 10 --end 20 --stage-1-only
+```
+
+11,369 records at `rai_platform/corpus/harm-intents.jsonl`. The range is 1-based
+and inclusive, so 10 to 20 is eleven records. The console's **Corpus** screen
+does the same thing with a picker.
+
+### Minimum viable install
+
+Steps 2–3 are the long ones and neither is required. Stage 1 — 23 rails across
+all seven tenets — is pure Python standard library:
+
+```bash
+git clone https://github.com/saimuthiki/RAI_AFNI.git && cd RAI_AFNI
+python3 -m pip install fastapi uvicorn httpx
+python3 rai_platform/serve.py
+```
+
+`/healthz` will say `degraded`. That is correct, not broken: it means the Stage-2
+rails have no weights and are reporting `unjudged`, which fails closed. Every
+missing piece is named.
+
+---
+
+## Reference
+
 Getting the gateway running, and getting the local model files in place.
 Merged on 2026-09-03 from `rai_platform/docs/01-setup.md` and
 `rai_platform/models/MANIFEST.md` — you never do one without the other.

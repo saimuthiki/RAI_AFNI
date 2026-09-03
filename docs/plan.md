@@ -308,8 +308,44 @@ and is it available and permitted for this use?
 
 #### 4 · The pilot application
 
-The baseline red-team scan and the fast CI tier both need one existing AFNI AI
-application to point at. Not yet named. This blocks build-plan items 9, 10 and 16.
+The baseline red-team scan and the fast CI tier both need **one existing AFNI AI
+application to point at** — a real chatbot, assistant or summariser that AFNI already
+runs, that already has real traffic and a person who owns it. Not yet named. This blocks
+build-plan items 9, 10 and 16.
+
+**What "name it" actually means.** Nothing has to be built or moved. It means answering
+three questions about something that already exists:
+
+1. *Which* application. Its name, and what it does for a customer.
+2. *Who* owns it, and will agree to a red-team scan being run against it.
+3. *Can we see a sample of its real traffic* — a few hundred real prompts, with the
+   personal data removed — to calibrate the thresholds against.
+
+Without one, three things stay theoretical: the baseline red-team scan has nothing to
+scan, the CI tier has nothing to gate, and **every threshold in this platform is still
+the number its source project shipped with rather than one tuned on AFNI traffic**. The
+Sensitivity screen is ready for the tuning; there is nothing to tune against.
+
+**Nothing here is the platform's own name.** The platform is the AFNI Responsible AI
+gateway. The pilot is somebody else's application that it will sit in front of.
+
+#### 4b · What to call the platform, if AFNI wants a name
+
+AFNI asked for a suggestion and floated "test board". A recommendation, with the
+reasoning:
+
+| Candidate | Reads as | Verdict |
+|---|---|---|
+| **AFNI Sentry** | a guard that sits in front of something | **recommended** — short, says what it does, no existing product collision in this space |
+| **AFNI Gatekeeper** | the same, more bureaucratic | fine, slightly heavier |
+| **AFNI Testboard** | a place to run tests | **not recommended** — it describes the *console*, not the guardrail, and the guardrail is the product. A name that says "test" invites people to treat a production gateway as a lab. |
+| **AFNI RAI Gateway** | exactly what it is | safest, least memorable |
+
+**Recommendation: `AFNI Sentry` for the platform, and keep "console" for the UI.** The
+console is one surface of it, and naming the whole thing after the demo screen would
+undersell the part that runs on every request. If a name is not needed yet, "the AFNI
+Responsible AI gateway" is what every document already calls it and costs nothing to
+keep.
 
 #### 5 · Detector accuracy is unmeasured
 
@@ -323,11 +359,27 @@ would be a vendor's word repeated.
 ~$0.38 per 1,000 records was noted with an explicit "verify the exact current rate"
 caveat. Still not verified.
 
-#### 7 · Does AFNI need media moderation at all?
+#### 7 · Media moderation — **BUILT**, and one question left
 
-NSFW image/video detection and DICOM PII scanning are conditional "if the business needs
-them". Nobody has said whether it does. They are the only reason to vendor the Infosys
-media modules.
+AFNI asked for it, so image and video moderation is built: `POST /v1/media/image`,
+`POST /v1/media/video`, a **Media** screen in the console, and `cli.py image`. Ported
+from Infosys's NudeNet module, which works because the `nudenet` wheel carries its own
+12 MB model — one `pip install`, no separate download, works air-gapped.
+
+**Not** ported: Infosys's Keras NSFW classifier. Its `.h5` is not in the toolkit
+repository and it drags in TensorFlow — ~600 MB for a check the 12 MB ONNX file already
+covers. Revisit only if AFNI wants the five-way `drawings/hentai/neutral/porn/sexy`
+breakdown rather than body-part boxes; the interface would not change.
+
+**The question that is left: detection accuracy is NudeNet's claim, not AFNI's
+measurement.** Verifying it needs labelled test imagery, and there is deliberately none
+in this repository. If AFNI needs a number rather than "the pipeline works", that is a
+labelled set AFNI has to supply and a run to commission.
+
+**Not built: DICOM PII scanning.** Still conditional on whether AFNI handles medical
+imaging at all. Nobody has said. The Infosys DICOM samples were part of the approved
+large-file trim, so the sample `.dcm` files are gone from `references/` while the source
+code remains readable.
 
 ---
 
