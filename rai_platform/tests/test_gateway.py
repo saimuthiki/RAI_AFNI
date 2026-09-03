@@ -939,8 +939,13 @@ class TestTheFallbackChain(unittest.TestCase):
             (self.openai(429, {}), "openai", 0),
             (self.openai(200, self.ANSWER), "openai", 1)])
         chain.score("p", "t")
-        app_client = TestClient(create_app(warm=False, rails=[], attributions={},
-                                           judge_provider=chain, env={}))
+        # One trivial Stage-1 rail, because a gateway with none now REFUSES TO
+        # START (AFNI's ruling, 2026-09-03) - an empty mount allows everything
+        # silently, so it is fatal rather than a warning. This test is about
+        # the judge chain, not the rail list.
+        app_client = TestClient(create_app(
+            warm=False, rails=[escalating("s1", Stage.STAGE_1)],
+            attributions={}, judge_provider=chain, env={}))
         judge = app_client.get("/healthz").json()["judge_provider"]
         self.assertEqual(judge["chain"], ["openai[0]", "openai[1]"])
         self.assertEqual(judge["attempts"]["openai[1]"]["served"], 1)

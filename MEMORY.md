@@ -2435,3 +2435,121 @@ normal** on a provisioned box — the model rails load real weights. It is 23 s 
 none present.
 
 **1202 tests pass.**
+
+---
+
+## 2026-09-03 — requirements.txt, and three AFNI rulings
+
+### The numpy fight, ended with a measured pin
+
+AFNI spent a round of uninstall/reinstall trying to satisfy numpy and opencv at the same
+time and could not, because **they are genuinely irreconcilable above a specific
+version**. Read off each release's own `requires_dist` rather than guessed:
+
+| opencv-python-headless | declares |
+|---|---|
+| ≤ **4.11.0.86** | `numpy>=1.26.0` (py3.12) |
+| ≥ **4.12.0.88** | `numpy>=2` — **hard** |
+
+So opencv 4.12+ *forces* numpy 2, and numpy 2 breaks every numpy-1-compiled package
+sharing the environment. Their loop was: pin numpy<2 → opencv complains → upgrade opencv
+→ numpy 2 comes back → pandas breaks. There is no version of opencv 4.12+ that ends it.
+
+**`requirements.txt` (new)** pins the pair that works, and the pin is load-bearing rather
+than conservative:
+
+```
+numpy>=1.26,<2
+opencv-python-headless>=4.10,<4.12
+```
+
+Verified end to end in this environment, 1202 tests passing at the time:
+numpy 1.26.4 · opencv-python-headless 4.11.0.86 · onnxruntime 1.29.0 · nudenet 3.4.2 ·
+spacy 3.8.16 · thinc 8.3.13 · presidio-analyzer 2.2.364. Every pin in the file was then
+resolved against what is actually installed — a requirements file nobody resolved is a
+wish.
+
+The file also records the alternative honestly: `numpy>=2` + `opencv>=4.12` **also
+works**, in a clean venv with nothing numpy-1-era in it. It is not the pin because it
+breaks the moment it shares an environment with an older pandas, scipy or streamlit,
+which is the common case on a shared dev machine.
+
+`transformers<5` is capped as **precautionary rather than measured** — llm-guard 0.3.16
+is archived and was written against the 4.x API — and the file says so.
+
+### preflight grew an ENVIRONMENT section
+
+A version list is not an answer. On the broken machine every package was present and
+`find_spec` said fine, while every Stage-2 rail was dead. **Only a real import finds an
+ABI break**, so that is what `_abi_checks()` does:
+
+- the **numpy/opencv pairing**, with the 4.12 boundary computed from the same rule the
+  metadata declares, and the `pip install` fix *in the report* rather than in a doc
+  somebody has to go and find;
+- an actual `from transformers import pipeline`, reporting the real exception and — the
+  part that matters — **what the consequence is**: all four Stage-2 rails report
+  `unjudged` and fail closed, which is correct behaviour rather than a bug.
+
+Verified both ways by installing the bad pair with `--no-deps` and watching it flip to
+`INCOMPATIBLE`, then restoring.
+
+**And the check itself had a bug, caught by its own test.** `importlib.util.find_spec`
+*raises* `ValueError` when a module sits in `sys.modules` with `__spec__ = None` — which
+is what a stubbed or partially-initialised module looks like. So preflight died with
+"transformers.__spec__ is None" instead of reporting the very problem it exists to
+report. A diagnostic command must never be the thing that crashes. Guarded.
+
+### AFNI ruling: zero mounted rails is FATAL
+
+Asked as an explicit question; answered "kill the process". It was a CRITICAL log line for
+exactly one day.
+
+That was the wrong call about the risk, and the reasoning is worth keeping: a log line is
+something you find **after** the incident, and this gap does not degrade — it allows
+**everything**, silently, with a completely healthy-looking `/healthz`. `Gateway.__init__`
+now raises `NoRailsMounted`, a named type so a supervisor can tell "misconfigured,
+restarting will not help" from "the port was busy".
+
+**No escape hatch: no keyword, no environment variable, no request field.** The two tests
+that wanted an empty gateway now mount one trivial Stage-1 rail, which costs them a line
+and keeps the rule absolute. Only two tests broke, which is a fair measure of how
+contained the change was.
+
+`serve.py` turns it into a clean **exit 3** with the message printed plainly — a fatal
+startup check that prints a 30-line traceback over the one sentence explaining the problem
+is a check people learn to bypass.
+
+### AFNI ruling: one real mailbox, not a domain — and DOMAIN was the wrong tool
+
+AFNI offered `one real personal mailbox` where the register asked for a mail domain.
+Setting `AFNI_GOVERNANCE_DOMAIN` to that mailbox's domain would have **generated
+`rai-privacy@…` and six siblings — seven addresses that do not exist** — which is exactly
+the "plausible address that goes nowhere" this module argues is worse than an honest gap.
+
+So `AFNI_GOVERNANCE_CONTACT` is now a first-class option: one address, taken verbatim,
+serving all seven roles. Precedence is `OWNERS` (per tenet) → `CONTACT` (one for all) →
+`DOMAIN` (generated aliases) → unset.
+
+**The weakness is reported, not hidden.** One shared mailbox is weaker governance than
+seven distinct routes: every tenet's incidents land in one inbox with no routing, and the
+address alone does not say which tenet raised it. `GET /v1/governance` puts that in
+`problems`, so it reads as a starting point rather than a tick-box.
+
+Their address is deliberately **not** in `.env.example` — that file is committed, and a
+personal address in a committed file is a personal address in everybody's clone.
+
+A Python scoping bug on the way: the loop body's local `contact = configured[...]`
+shadowed the module-level `contact()` for the whole function scope, so calling it above
+the loop was an `UnboundLocalError`. Renamed to `address`.
+
+### AFNI ruling: DICOM PII scanning — NO
+
+They do not handle medical imaging. Closed rather than parked, in `plan.md` items 7 and
+26 and in `setup.md`'s gap table — the point of writing an answer down is that nobody
+re-opens it in six months and re-does the analysis.
+
+`setup.md`'s gap table also still listed **NSFW image/video detection** as a gap needing
+"a decision on whether AFNI handles media at all". It has been built since this morning.
+Struck through with what was built and what was deliberately not.
+
+**1211 tests pass.**

@@ -146,9 +146,14 @@ asserted:
     configured threshold was actually consulted — which was the only part of the Infosys
     pattern worth copying. The bug it avoids is Safe Zone's: a threshold stored,
     admin-exposed, and never read.
-26. **CONDITIONAL** — Vendor the genuinely unique Infosys modules **only if the business
-    needs them**: multi-format and DICOM PII scanning, NSFW image/video detection, and
-    Faker-based anonymisation with differential privacy.
+26. **PART BUILT, PART DECIDED NO** — The genuinely unique Infosys modules:
+    - **NSFW image/video detection — BUILT.** NudeNet ported; `POST /v1/media/image` and
+      `/v1/media/video`, the console's **Media** screen, `cli.py image`.
+    - **DICOM PII scanning — DECIDED NO** (AFNI, 2026-09-03: no medical imaging).
+    - **Multi-format PII — still conditional.** Office documents and PDFs. Nobody has
+      asked for it.
+    - **Faker-based anonymisation with differential privacy — still conditional.** For
+      generating synthetic test data, not for the request path.
 27. **CONDITIONAL** — Run the OpenAI Evals deception / sandbagging / covert-persuasion
     suite **once** against any AFNI product claiming agent autonomy, before it ships.
 
@@ -274,19 +279,28 @@ Last reviewed **2026-09-03**.
 
 ### Still open — and why each one matters
 
-#### 1 · One mail domain for the governance register · **AFNI** · one environment variable
+#### 1 · The governance register · **ANSWERED** · one environment variable, set it in `.env`
 
 **No longer seven names.** This item asked AFNI for one accountable owner per tenet, and
 AFNI's answer was that the framework should handle it. It now does: the roles are
 generated, and what is outstanding is a single setting.
 
-Set `AFNI_GOVERNANCE_DOMAIN` on the gateway and all seven escalation addresses resolve —
-`rai-privacy@…`, `rai-security@…`, and so on. Until then the register shows aliases with
-no domain and reports the gap; no domain is invented, because a plausible-looking address
-that goes nowhere is worse in a compliance artefact than a visibly unfinished one.
+AFNI offered **one real mailbox** rather than a mail domain, and that distinction turned
+out to matter enough to add an option for. `AFNI_GOVERNANCE_DOMAIN` *generates*
+`rai-privacy@…`, `rai-security@…` and five more — so pointing it at a domain whose group
+aliases do not exist puts **seven bouncing addresses** into a compliance document, which
+is the exact failure this design was built to avoid. So:
 
-If AFNI would rather name individuals, `AFNI_GOVERNANCE_OWNERS` takes a JSON object of
-`{tenet: contact}` per tenet, no code change. That is a choice, not a requirement.
+```
+AFNI_GOVERNANCE_CONTACT=the.one.real@mailbox    # all seven, verbatim
+```
+
+**The trade, stated so it stays a decision:** one shared mailbox is weaker governance
+than seven distinct routes. Every tenet's incidents land in one inbox with no routing,
+and the address alone does not say which tenet raised it. `GET /v1/governance` reports
+that in `problems` rather than treating it as finished. Split them with
+`AFNI_GOVERNANCE_OWNERS` — a JSON object of `{tenet: contact}` — when there is somebody
+to split them to.
 
 #### 2 · Deployment target and latency budget
 
@@ -376,10 +390,10 @@ measurement.** Verifying it needs labelled test imagery, and there is deliberate
 in this repository. If AFNI needs a number rather than "the pipeline works", that is a
 labelled set AFNI has to supply and a run to commission.
 
-**Not built: DICOM PII scanning.** Still conditional on whether AFNI handles medical
-imaging at all. Nobody has said. The Infosys DICOM samples were part of the approved
-large-file trim, so the sample `.dcm` files are gone from `references/` while the source
-code remains readable.
+**DICOM PII scanning: DECIDED NO.** AFNI ruled on 2026-09-03 that they do not handle
+medical imaging, so the Infosys DICOM modules will not be ported. This closes the item
+rather than parking it — the point of writing the answer down is that nobody re-opens it
+in six months and re-does the analysis. Revisit only if AFNI's business changes.
 
 ---
 

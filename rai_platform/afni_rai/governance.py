@@ -51,6 +51,7 @@ from .contract.models import Tenet
 
 ENV_DOMAIN = "AFNI_GOVERNANCE_DOMAIN"
 ENV_OWNERS = "AFNI_GOVERNANCE_OWNERS"
+ENV_CONTACT = "AFNI_GOVERNANCE_CONTACT"
 
 #: The alias local-part per tenet. Short, stable, and derived from the tenet
 #: rather than from anybody's name.
@@ -120,7 +121,7 @@ class Owner:
     @property
     def resolved(self) -> bool:
         """Whether this owner has a reachable escalation address."""
-        return bool(self.domain) or self.source == "configured"
+        return bool(self.domain) or self.source in ("configured", "shared")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -135,6 +136,28 @@ class Owner:
 
 def domain() -> str | None:
     value = os.environ.get(ENV_DOMAIN, "").strip().lstrip("@")
+    return value or None
+
+
+def contact() -> str | None:
+    """One real mailbox for all seven roles.
+
+    ADDED BECAUSE `ENV_DOMAIN` WAS THE WRONG TOOL FOR WHAT AFNI HAD. Asked for
+    a domain, they offered a single real personal mailbox. Setting `ENV_DOMAIN`
+    to that mailbox's domain would have generated `rai-privacy@…`,
+    `rai-security@…` and five more - **seven addresses that do not exist**,
+    which is precisely the "plausible address that goes nowhere" this module
+    argues is worse than an honest gap. So the escape hatch became a first-class
+    option instead.
+
+    THE TRADE, SAID OUT LOUD: one shared mailbox is WEAKER governance than seven
+    distinct routes. Every tenet's incidents land in one inbox with no routing
+    and no way to tell, from the address alone, which tenet raised it. It is
+    reachable, which beats bouncing, and it is a reasonable starting point - but
+    it is a starting point. `register()` says so in `problems` rather than
+    treating it as finished.
+    """
+    value = os.environ.get(ENV_CONTACT, "").strip()
     return value or None
 
 
@@ -160,20 +183,39 @@ def _configured() -> dict[str, str]:
 
 
 def owners() -> list[Owner]:
-    """One owner per tenet. Generated unless explicitly configured."""
+    """One owner per tenet.
+
+    Precedence, narrowest first, so a per-tenet answer always wins:
+
+        AFNI_GOVERNANCE_OWNERS   per tenet, a real person or team
+        AFNI_GOVERNANCE_CONTACT  one real mailbox for all seven
+        AFNI_GOVERNANCE_DOMAIN   generated aliases on that domain
+        (nothing)                aliases with no domain, reported as a gap
+    """
     configured = _configured()
+    shared = contact()
     out: list[Owner] = []
     for tenet in Tenet:
         # "steward", not "owner". An owner sounds like a person; a steward is a
         # role somebody holds, which is what survives them changing team.
         role = f"{tenet.value} steward — AFNI Responsible AI"
         if tenet.value in configured:
-            contact = configured[tenet.value]
-            alias, _, dom = contact.partition("@")
+            # `address`, not `contact` - a local named `contact` shadows the
+            # module-level `contact()` for the whole function scope and turns
+            # the call above into an UnboundLocalError. Python's scoping rule,
+            # found the hard way.
+            address = configured[tenet.value]
+            alias, _, dom = address.partition("@")
             out.append(Owner(tenet=tenet, role=role, alias=alias,
                              domain=dom or None,
                              accountable_for=ACCOUNTABLE_FOR[tenet],
                              source="configured"))
+        elif shared:
+            alias, _, dom = shared.partition("@")
+            out.append(Owner(tenet=tenet, role=role, alias=alias,
+                             domain=dom or None,
+                             accountable_for=ACCOUNTABLE_FOR[tenet],
+                             source="shared"))
         else:
             out.append(Owner(tenet=tenet, role=role, alias=ALIAS[tenet],
                              domain=domain(),
@@ -191,7 +233,15 @@ def _owner_problems() -> list[str]:
             f"the generated roles are in force. Reported rather than fatal: a "
             f"typo in an optional governance setting must not stop a guardrail "
             f"gateway booting.")
-    if not domain() and not _configured():
+    if contact() and not _configured():
+        problems.append(
+            f"All seven roles point at one shared mailbox ({ENV_CONTACT}). "
+            f"That is reachable, which beats bouncing, but it is WEAKER "
+            f"governance than seven distinct routes: every tenet's incidents "
+            f"land in one inbox with no routing, and the address alone does not "
+            f"say which tenet raised it. Split them with {ENV_OWNERS} when "
+            f"there is somebody to split them to.")
+    if not domain() and not _configured() and not contact():
         problems.append(DOMAIN_UNSET_NOTE)
     return problems
 
@@ -273,7 +323,8 @@ def register(rails: list[Any] | None = None,
             "Roles, not people. A person's name in a governance register is "
             "stale the moment they change team, and a register with a wrong "
             "escalation path is worse than one with an honest gap. Set "
-            f"{ENV_DOMAIN} to arm all seven addresses at once, or "
+            f"{ENV_DOMAIN} to arm all seven generated aliases at once, "
+            f"{ENV_CONTACT} to point all seven at one real mailbox, or "
             f"{ENV_OWNERS} to name individuals per tenet."),
         "counts": {
             "tenets": len(rows),
@@ -381,5 +432,5 @@ def render(body: dict[str, Any] | None = None) -> str:
     return "\n".join(lines)
 
 
-__all__ = ["ENV_DOMAIN", "ENV_OWNERS", "ALIAS", "ACCOUNTABLE_FOR", "Owner",
+__all__ = ["ENV_DOMAIN", "ENV_OWNERS", "ENV_CONTACT", "contact", "ALIAS", "ACCOUNTABLE_FOR", "Owner",
            "domain", "owners", "register", "render"]

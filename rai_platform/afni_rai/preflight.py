@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import sys
 from dataclasses import dataclass, field
 
 from .models import folder_name, missing_files, model_dir
@@ -25,7 +26,7 @@ from .models import folder_name, missing_files, model_dir
 
 @dataclass
 class Asset:
-    kind: str                 # model | package | credential | decision
+    kind: str                 # model | package | credential | decision | abi
     name: str
     needed_by: str            # rail or capability
     tenet: str
@@ -94,6 +95,112 @@ def _hf_models() -> list[tuple[str, str, str | None, str, str, str]]:
     except Exception as exc:  # noqa: BLE001
         out.append(("content_safety.*", f"<could not read: {exc}>", None,
                     "Profanity / Content Safety", "", ""))
+    return out
+
+
+def _abi_checks() -> list[Asset]:
+    """Does the installed C-extension stack actually AGREE with itself?
+
+    This section exists because a version list is not an answer. On 2026-09-03
+    a machine had transformers installed, all five model folders downloaded, and
+    every package present - and every Stage-2 rail was dead, because numpy had
+    been upgraded to 2.5.2 while pandas was still compiled against numpy 1.x:
+
+        transformers -> sklearn -> pandas -> ValueError: numpy.dtype size
+        changed ... Expected 96 from C header, got 88 from PyObject
+
+    `find_spec` said everything was fine. Only an ACTUAL IMPORT finds this, so
+    that is what this does: it imports the two chains the rails depend on and
+    reports what happened, with the fix. Four hours were spent on this once; the
+    point of the section is that nobody spends them twice.
+
+    Cost: a real import of transformers on a provisioned box, a few seconds,
+    paid only when the package is present. `preflight` is a diagnostic command
+    that a person runs deliberately - it is the one place that cost is correct.
+    """
+    import importlib.util
+
+    out: list[Asset] = []
+
+    def version_of(module: str) -> str | None:
+        try:
+            import importlib.metadata as md
+            return md.version(module)
+        except Exception:  # noqa: BLE001
+            return None
+
+    # ---- the numpy / opencv pairing, which is the one that fights ----------
+    numpy_v = version_of("numpy")
+    cv_v = (version_of("opencv-python-headless") or version_of("opencv-python"))
+    if numpy_v or cv_v:
+        major = int(numpy_v.split(".")[0]) if numpy_v else None
+        # 4.12.0.88 is where opencv's own metadata switched to numpy>=2. Read
+        # off each release's requires_dist, not guessed.
+        cv_needs_numpy_2 = False
+        if cv_v:
+            try:
+                parts = [int(x) for x in cv_v.split(".")[:2]]
+                cv_needs_numpy_2 = (parts[0] > 4) or (parts[0] == 4 and parts[1] >= 12)
+            except ValueError:
+                cv_needs_numpy_2 = False
+        agree = not (numpy_v and cv_v) or (cv_needs_numpy_2 == (major == 2))
+        out.append(Asset(
+            kind="abi", name="numpy / opencv pairing",
+            needed_by="POST /v1/media/*", tenet="Profanity / Content Safety",
+            where_from="requirements.txt pins the working pair",
+            destination="site-packages",
+            present=agree,
+            detail=(f"numpy {numpy_v or 'absent'}, opencv {cv_v or 'absent'} - "
+                    + ("compatible" if agree else "INCOMPATIBLE")),
+            notes=([] if agree else [
+                "opencv 4.12.0.88 and later REQUIRE numpy>=2; 4.11.0.86 and "
+                "earlier require numpy>=1.26. Pick a matching pair.",
+                'Fix: pip install "numpy>=1.26,<2" '
+                '"opencv-python-headless>=4.10,<4.12"'])))
+
+    # ---- the import chain the Stage-2 rails actually walk -----------------
+    # `find_spec` RAISES ValueError when a module is already in sys.modules
+    # with `__spec__` set to None - which is what a partially-initialised or
+    # stubbed module looks like. A diagnostic command must never be the thing
+    # that crashes, so the probe is guarded. Found by the test that fakes a
+    # broken transformers: preflight died with "transformers.__spec__ is None"
+    # instead of reporting the very problem it exists to report.
+    try:
+        transformers_present = importlib.util.find_spec("transformers") is not None
+    except (ImportError, ValueError):
+        # Present enough to be in sys.modules and broken enough to have no
+        # spec. Either way there is something to import-check.
+        transformers_present = "transformers" in sys.modules
+
+    if transformers_present:
+        broken = None
+        try:
+            from transformers import pipeline  # noqa: F401, PLC0415
+        except Exception as exc:  # noqa: BLE001 - that is the finding
+            broken = f"{exc.__class__.__name__}: {exc}"
+        notes = []
+        if broken and "numpy.dtype size changed" in broken:
+            notes = [
+                "This is a numpy ABI mismatch, not a missing package. A "
+                "package compiled against numpy 1.x is running against numpy "
+                "2.x (numpy 2.0 shrank PyArray_Descr from 96 to 88 bytes).",
+                'Fix: pip install "numpy>=1.26,<2" - then re-run this command.',
+                "While it lasts, all four Stage-2 model rails report `unjudged` "
+                "and fail closed. That is correct behaviour, not a bug - they "
+                "genuinely cannot look."]
+        elif broken:
+            notes = ["transformers is installed but will not import. The "
+                     "Stage-2 model rails will report `unjudged` and fail "
+                     "closed until it does."]
+        out.append(Asset(
+            kind="abi", name="transformers imports",
+            needed_by="all four Stage-2 model rails", tenet="all",
+            where_from="already installed - this is a usability check",
+            destination="site-packages",
+            present=broken is None,
+            detail="imports cleanly" if broken is None else broken.split("\n")[0],
+            notes=notes))
+
     return out
 
 
@@ -234,6 +341,9 @@ def collect() -> list[Asset]:
                "An enabled topic FLAGS by default. Promoting one to BLOCK is a "
                "separate per-topic control, because a keyword hit is evidence "
                "rather than a verdict."]))
+    # ABI checks last: they do real imports, so everything else
+    # is already reported by the time one of them is slow.
+    assets.extend(_abi_checks())
     return assets
 
 
@@ -251,7 +361,8 @@ def render() -> str:
     lines.append(f"  (override with AFNI_MODEL_DIR)")
     lines.append("")
 
-    for kind, title in (("model", "MODELS"), ("package", "PYTHON PACKAGES"),
+    for kind, title in (("abi", "ENVIRONMENT - DOES THE STACK AGREE WITH ITSELF"),
+                        ("model", "MODELS"), ("package", "PYTHON PACKAGES"),
                         ("credential", "CREDENTIALS"),
                         ("decision", "NOT A DOWNLOAD")):
         rows = [a for a in assets if a.kind == kind]

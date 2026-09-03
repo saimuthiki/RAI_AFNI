@@ -853,8 +853,9 @@ for one application and I will wire it and mount the rail.
 
 | Gap | Tenet | What it would actually take |
 |---|---|---|
-| **NSFW image/video detection** | Content Safety | Infosys ships `nsfw.299x299.h5` and `nsfw_mobilenet2.224x224.h5` (`responsible-ai-toxicity/.../nsfw_detector/predict.py:132-133`) plus NudeNet. Both are Keras/TF, which would pull TensorFlow in alongside torch. Needs a decision on whether AFNI handles media at all before it is worth the dependency. |
-| **Multi-format / DICOM PII** | Privacy | The Infosys multi-format and DICOM modules. Conditional on the business needing them. |
+| ~~**NSFW image/video detection**~~ | Content Safety | **BUILT** — NudeNet ported. `pip install nudenet onnxruntime "opencv-python-headless<4.12"`; the 12 MB model ships inside the wheel so there is nothing else to download. Infosys's Keras `nsfw.299x299.h5` was deliberately NOT ported: the `.h5` is not in their repository and it would pull TensorFlow in alongside torch for a check the ONNX file already covers. |
+| ~~**DICOM PII**~~ | Privacy | **DECIDED NO** — AFNI ruled on 2026-09-03 that they do not handle medical imaging. Not a gap; a closed question. |
+| **Multi-format PII** | Privacy | The Infosys Office/PDF modules. Still conditional — nobody has asked. |
 | **Dedicated hallucination models** | Hallucination | No specific model is committed to; `groundedness-nli` covers the entailment case. Genuinely open. |
 | **Fairness at runtime** | Fairness & Bias | Nothing. 7 of 9 capabilities measure a *distribution of decisions* — Fairlearn and AIF360 as scheduled batch jobs over decision logs. Not a download and not a runtime rail. |
 

@@ -84,13 +84,45 @@ class TheOffArm(unittest.TestCase):
         self.assertEqual([r["unjudged"] for r in results], [False] * len(results),
                          "nothing was marked unjudged, which is exactly the gap")
 
-    def test_the_gateway_shouts_when_nothing_is_mounted_at_stage_1(self):
-        import logging
-        from afni_rai.gateway.app import Gateway
-        with self.assertLogs("afni_rai", level=logging.CRITICAL) as caught:
+    def test_the_gateway_REFUSES_TO_START_with_nothing_mounted(self):
+        """AFNI's ruling: kill the process.
+
+        It was a CRITICAL log line for one day. That was the wrong call about
+        the risk - a log line is something you find AFTER the incident, and this
+        gap does not degrade, it allows EVERYTHING silently with a healthy
+        `/healthz`. There is deliberately no escape hatch, so a test that wants
+        a narrow gateway mounts one trivial Stage-1 rail.
+        """
+        from afni_rai.gateway.app import Gateway, NoRailsMounted
+        with self.assertRaises(NoRailsMounted) as caught:
             Gateway(rails=[])
-        self.assertTrue(any("no Stage-1 rail" in line for line in caught.output),
-                        f"expected a CRITICAL naming the gap, got {caught.output}")
+        message = str(caught.exception)
+        self.assertIn("ALLOW every message", message)
+        # The error has to say WHY unjudged does not save you, or the next
+        # person reads it as a spurious startup check and adds a bypass.
+        self.assertIn("unjudged", message)
+        self.assertIn("preflight", message,
+                      "the error must point at the command that diagnoses it")
+
+    def test_a_stage_2_only_gateway_is_also_refused(self):
+        # The check is on STAGE 1 specifically, not on "any rail at all". A
+        # gateway with only model rails mounted has nothing on the free path
+        # and, on a machine without weights, judges nothing whatsoever.
+        from afni_rai.cascade.rail import Stage
+        from afni_rai.contract.models import Tenet
+        from afni_rai.gateway.app import Gateway, NoRailsMounted
+
+        class Stage2Only:
+            name = "test.stage2"
+            stage = Stage.STAGE_2
+            tenet = Tenet.SECURITY
+
+            def check(self, path, text):
+                from afni_rai.cascade.rail import RailResult
+                return RailResult.clean()
+
+        with self.assertRaises(NoRailsMounted):
+            Gateway(rails=[Stage2Only()])
 
 
 class TheLadder(unittest.TestCase):

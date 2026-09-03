@@ -318,6 +318,16 @@ def _attribution_dict(attr: RailAttribution | None) -> dict[str, Any] | None:
             "capability": attr.capability}
 
 
+class NoRailsMounted(RuntimeError):
+    """The gateway has no Stage-1 rail, so it would allow everything.
+
+    A named type rather than a bare RuntimeError because a supervisor should be
+    able to tell "this is a misconfiguration, restarting will not help" from
+    "the port was busy". Raised from `Gateway.__init__`, so it happens at boot
+    and never mid-request.
+    """
+
+
 class Gateway:
     """Everything one gateway process holds, built once at startup.
 
@@ -420,20 +430,32 @@ class Gateway:
         # against a rail that tried and failed; it does not protect against a
         # rail that was never mounted.
         #
-        # A log line rather than a refusal to boot, and that is a deliberate
-        # trade rather than laziness: the tests, the corpus tooling and any
-        # future adapter legitimately construct narrow gateways, and a hard
-        # raise here would make "mount one rail and check it" impossible. So the
-        # gap is made loud at CRITICAL, which is the level a deployment's log
-        # shipper is already paging on, and whether it should be fatal is left
-        # to AFNI as a policy decision.
+        # FATAL. AFNI's ruling on 2026-09-03, asked as an explicit question and
+        # answered "kill the process".
+        #
+        # It was a CRITICAL log line for one day, on the reasoning that tests
+        # and tooling construct narrow gateways. That reasoning was wrong about
+        # the risk: a log line is something you find AFTER the incident, and
+        # this particular gap does not degrade - it allows EVERYTHING, silently,
+        # with a completely healthy-looking `/healthz`. A guardrail that is not
+        # guarding must not be reachable.
+        #
+        # There is deliberately no escape hatch: no keyword, no environment
+        # variable, no request field. The tests that legitimately want a narrow
+        # gateway mount one trivial Stage-1 rail, which costs them a line and
+        # keeps this rule absolute.
         stage_1_mounted = sum(1 for r in self.rails if int(r.stage) == 1)
         if not stage_1_mounted:
-            LOGGER.critical(
-                "no Stage-1 rail is mounted: this gateway will ALLOW every "
-                "message. `unjudged` will not catch this - it only fires for a "
-                "rail that ran and could not judge, so an empty mount is a "
-                "silent allow-all, not a fail-closed block.")
+            raise NoRailsMounted(
+                "no Stage-1 rail is mounted, so this gateway would ALLOW every "
+                "message. Refusing to start.\n\n"
+                "`unjudged` does not catch this: it only fires for a rail that "
+                "RAN and could not judge, so an empty mount is a silent "
+                "allow-all rather than a fail-closed block - which is exactly "
+                "why this is fatal rather than a warning.\n\n"
+                "If this is a fresh clone, Stage 1 needs nothing installed: "
+                "run `python rai_platform/cli.py rails` to see what should be "
+                "mounted, and `preflight` for anything that failed to import.")
         self.cascade = Cascade(self.rails, resolve_threshold=self.thresholds.resolve_value)
         self.policy = FailurePolicy(self.thresholds)
 

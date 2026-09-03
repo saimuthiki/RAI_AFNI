@@ -1,0 +1,106 @@
+# AFNI Responsible AI gateway — pinned dependencies.
+#
+#     pip install -r requirements.txt
+#
+# IN A VIRTUAL ENVIRONMENT. `python -m venv .venv` first — see docs/setup.md
+# step 2 for the afternoon that skipping it cost on 2026-09-03.
+#
+# ---------------------------------------------------------------------------
+# TIER 0 — Stage 1 needs NOTHING from this file
+# ---------------------------------------------------------------------------
+# 23 rails across all seven tenets are pure Python standard library. They run
+# on a machine with nothing installed. Everything below buys the gateway, the
+# console, and the Stage-2/3 tiers.
+#
+# ---------------------------------------------------------------------------
+# THE NUMPY DECISION — read this before "upgrading" anything
+# ---------------------------------------------------------------------------
+# This file pins numpy to the 1.x line ON PURPOSE, and the pin is load-bearing
+# rather than conservative. It is paired with an opencv CEILING, because those
+# two constraints are the ones that fight.
+#
+# Measured on 2026-09-03, from each release's own declared metadata:
+#
+#   opencv-python-headless <= 4.11.0.86   ->  numpy>=1.26.0  (py3.12)
+#   opencv-python-headless >= 4.12.0.88   ->  numpy>=2       HARD
+#
+# So opencv 4.12+ forces numpy 2, and numpy 2 breaks every package in the same
+# environment that was compiled against numpy 1 — which on a real Windows dev
+# box meant pandas 2.1.4, which sklearn imports, which transformers imports.
+# The visible symptom is not a dependency error; it is:
+#
+#   ValueError: numpy.dtype size changed, may indicate binary incompatibility.
+#               Expected 96 from C header, got 88 from PyObject
+#
+# and the practical result is that ALL FOUR Stage-2 model rails report
+# `unjudged` and every check that needs one fails closed. The platform behaves
+# correctly and says so; it simply cannot look.
+#
+# VERIFIED WORKING TOGETHER, end to end, 1202 tests passing:
+#   numpy 1.26.4 · opencv-python-headless 4.11.0.86 · onnxruntime 1.29.0
+#   nudenet 3.4.2 · spacy 3.8.16 · thinc 8.3.13 · presidio-analyzer 2.2.364
+#
+# THE ALTERNATIVE, if you want the numpy-2 world: raise numpy to `>=2,<3` and
+# opencv to `>=4.12`, and do it in a CLEAN venv with nothing numpy-1-era in it.
+# That combination also works — it is not pinned here because it breaks the
+# moment it shares an environment with an older pandas, scipy or streamlit,
+# which is the common case on a shared dev machine.
+#
+# ---------------------------------------------------------------------------
+# TIER 1 — the gateway and the console  (~10 MB)
+# ---------------------------------------------------------------------------
+fastapi>=0.110,<1
+uvicorn>=0.27,<1
+httpx>=0.27,<1
+
+# ---------------------------------------------------------------------------
+# TIER 2 — the Stage-2 local models  (~3.8 GB of weights, fetched separately)
+# ---------------------------------------------------------------------------
+# The weights are NOT pip packages. After installing this file:
+#   python rai_platform/scripts/fetch_models.py --dest rai_platform/models
+numpy>=1.26,<2
+# transformers is capped below 5 deliberately. llm-guard 0.3.16 is archived and
+# was written against the 4.x API, so a major bump is exactly the kind of
+# silent break this platform exists to notice. Precautionary rather than
+# measured: no 5.x run has been made here.
+transformers>=4.44,<5
+# Install torch from the CPU wheel index — 900 MB instead of 2.5 GB. These are
+# all small classifiers and a GPU buys nothing:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch>=2.2,<3
+# PINNED EXACTLY. Protect AI archived the repository, so no upstream fix will
+# arrive and an unpinned install of an abandoned package is a standing
+# supply-chain risk. 0.3.16 is the version the rails were written against and
+# the version vendored under references/.
+llm-guard==0.3.16
+presidio-analyzer>=2.2,<3
+huggingface-hub>=0.23,<1
+# spaCy's PIPELINE is not a pip pin — it must match the installed spaCy, and a
+# 3.7 model against spaCy 3.8 installs cleanly then fails to load. Always:
+#   python -m spacy download en_core_web_lg
+spacy>=3.7,<4
+
+# ---------------------------------------------------------------------------
+# TIER 3 — media moderation  (image and video)
+# ---------------------------------------------------------------------------
+# nudenet carries its own 12 MB 320n.onnx INSIDE the wheel, so there is no
+# separate model download and this works air-gapped.
+nudenet==3.4.2
+onnxruntime>=1.17,<2
+# THE CEILING IS THE POINT. 4.12.0.88 onwards requires numpy>=2. See the numpy
+# note above before raising it.
+opencv-python-headless>=4.10,<4.12
+
+# ---------------------------------------------------------------------------
+# TIER 4 — optional
+# ---------------------------------------------------------------------------
+# Only for re-ingesting the corpus from the source spreadsheet. The shipped
+# corpus/harm-intents.jsonl needs nothing.
+openpyxl>=3.1,<4
+
+# ---------------------------------------------------------------------------
+# DEV
+# ---------------------------------------------------------------------------
+# rai_platform/run_tests.py uses unittest and needs none of this; pytest is for
+# `python -m pytest -q`, which is faster and reports subtests.
+pytest>=8,<10

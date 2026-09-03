@@ -94,10 +94,25 @@ def load_dotenv(path: str = DOTENV_PATH) -> list[str]:
 
 
 def build_app():
-    """The uvicorn app factory. Imported late so `--help` needs no FastAPI."""
-    from afni_rai.gateway.app import create_app
+    """The uvicorn app factory. Imported late so `--help` needs no FastAPI.
 
-    return create_app()
+    `NoRailsMounted` is turned into a clean, actionable exit rather than a
+    traceback. A fatal startup check that prints a 30-line stack over the one
+    sentence explaining the problem is a check people learn to bypass, so the
+    message is printed plainly and the process exits 3 - distinct from the
+    generic 1, so a supervisor can tell "misconfigured, restarting will not
+    help" from "the port was busy".
+    """
+    from afni_rai.gateway.app import NoRailsMounted, create_app
+
+    try:
+        return create_app()
+    except NoRailsMounted as exc:
+        print("\nAFNI Responsible AI gateway - REFUSING TO START\n",
+              file=sys.stderr)
+        print(str(exc), file=sys.stderr)
+        print("", file=sys.stderr)
+        raise SystemExit(3) from None
 
 
 def parse_args(argv=None) -> argparse.Namespace:

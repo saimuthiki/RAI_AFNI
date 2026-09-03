@@ -167,6 +167,60 @@ class TheAvailabilityProbeIsHonest(unittest.TestCase):
                          "multi-second import per call")
 
 
+class PreflightDetectsTheMismatch(unittest.TestCase):
+    """A version LIST is not an answer; only a real import finds an ABI break.
+
+    `preflight` grew an ENVIRONMENT section for this. Four hours went into
+    diagnosing it once by hand; the point of the section is that nobody spends
+    them twice.
+    """
+
+    def test_the_numpy_opencv_boundary_is_the_measured_one(self):
+        from afni_rai import preflight
+
+        # Read off each release's own requires_dist on 2026-09-03:
+        #   <= 4.11.0.86 -> numpy>=1.26   |   >= 4.12.0.88 -> numpy>=2
+        # so the check must split exactly there and nowhere else.
+        cases = {
+            "4.10.0.84": False, "4.11.0.86": False,
+            "4.12.0.88": True, "4.13.0.92": True, "4.14.0.94": True,
+            "5.0.0.93": True,
+        }
+        for version, needs_numpy_2 in cases.items():
+            parts = [int(x) for x in version.split(".")[:2]]
+            computed = (parts[0] > 4) or (parts[0] == 4 and parts[1] >= 12)
+            with self.subTest(opencv=version):
+                self.assertEqual(computed, needs_numpy_2)
+        # And the section exists at all.
+        kinds = {a.kind for a in preflight.collect()}
+        self.assertIn("abi", kinds)
+
+    def test_the_pairing_is_reported_either_way(self):
+        from afni_rai import preflight
+        rows = [a for a in preflight._abi_checks()
+                if a.name == "numpy / opencv pairing"]
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertIn("numpy", row.detail)
+        # When it disagrees the fix has to be IN the report, not in a doc
+        # somebody has to go and find.
+        if not row.present:
+            self.assertTrue(any("pip install" in n for n in row.notes))
+
+    def test_a_broken_transformers_is_reported_as_an_environment_problem(self):
+        from afni_rai import preflight
+        _break(self, "transformers")
+        rows = [a for a in preflight._abi_checks()
+                if a.name == "transformers imports"]
+        if not rows:
+            self.skipTest("transformers is not installed, so there is nothing "
+                          "to import-check")
+        self.assertFalse(rows[0].present)
+        self.assertTrue(any("unjudged" in n for n in rows[0].notes),
+                        "the report must say what the consequence is, not just "
+                        "that an import failed")
+
+
 class AbsentAndBrokenAgree(unittest.TestCase):
     """The two failure modes must produce the same OUTCOME."""
 

@@ -126,6 +126,64 @@ class NoDomainIsInvented(unittest.TestCase):
         self.assertTrue(any(governance.ENV_DOMAIN in p for p in doc["problems"]))
 
 
+class OneSharedMailbox(unittest.TestCase):
+    """`AFNI_GOVERNANCE_CONTACT` — added because DOMAIN was the wrong tool.
+
+    Asked for a domain, AFNI offered one real personal mailbox. Setting
+    `AFNI_GOVERNANCE_DOMAIN` to that mailbox's domain would have generated
+    `rai-privacy@…` and six siblings — **seven addresses that do not exist** —
+    which is exactly the "plausible address that goes nowhere" this module
+    argues is worse than an honest gap.
+    """
+
+    def test_one_address_serves_all_seven(self):
+        _env(self, **{governance.ENV_CONTACT: "ops@afni.example",
+                      governance.ENV_DOMAIN: None,
+                      governance.ENV_OWNERS: None})
+        rows = governance.owners()
+        self.assertEqual({o.contact for o in rows}, {"ops@afni.example"})
+        self.assertTrue(all(o.resolved for o in rows))
+        self.assertTrue(all(o.source == "shared" for o in rows))
+
+    def test_it_does_NOT_invent_seven_aliases_on_that_domain(self):
+        # The whole reason this option exists.
+        _env(self, **{governance.ENV_CONTACT: "ops@afni.example",
+                      governance.ENV_DOMAIN: None,
+                      governance.ENV_OWNERS: None})
+        contacts = {o.contact for o in governance.owners()}
+        for alias in governance.ALIAS.values():
+            with self.subTest(alias=alias):
+                self.assertNotIn(f"{alias}@afni.example", contacts)
+
+    def test_the_weakness_is_reported_rather_than_treated_as_finished(self):
+        # Reachable beats bouncing, but one inbox for seven tenets has no
+        # routing. Saying so is the difference between a starting point and a
+        # tick-box.
+        _env(self, **{governance.ENV_CONTACT: "ops@afni.example",
+                      governance.ENV_DOMAIN: None,
+                      governance.ENV_OWNERS: None})
+        doc = governance.register(rails=[])
+        self.assertEqual(doc["counts"]["resolved"], 7)
+        self.assertTrue(any("WEAKER governance" in p for p in doc["problems"]))
+
+    def test_a_per_tenet_owner_still_wins(self):
+        import json
+        _env(self, **{governance.ENV_CONTACT: "ops@afni.example",
+                      governance.ENV_DOMAIN: None,
+                      governance.ENV_OWNERS: json.dumps(
+                          {"Privacy": "dpo@afni.example"})})
+        rows = {o.tenet: o for o in governance.owners()}
+        self.assertEqual(rows[Tenet.PRIVACY].contact, "dpo@afni.example")
+        self.assertEqual(rows[Tenet.SECURITY].contact, "ops@afni.example")
+
+    def test_the_domain_option_is_still_there_and_loses_to_contact(self):
+        _env(self, **{governance.ENV_CONTACT: "ops@afni.example",
+                      governance.ENV_DOMAIN: "afni.example",
+                      governance.ENV_OWNERS: None})
+        self.assertEqual({o.contact for o in governance.owners()},
+                         {"ops@afni.example"})
+
+
 class ExplicitOwners(unittest.TestCase):
 
     def test_a_configured_owner_replaces_the_generated_one(self):
