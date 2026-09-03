@@ -1436,3 +1436,98 @@ A future date stated in the future tense in front of a client is a credibility p
 `qa_matrix` 0 overflow, `verify_deck` all 23 repos and 7 tenets. Every source citation
 added to the rewrite was opened and read first — the `guard_logs` CREATE TABLE, the eight
 `on_fail` values, and the `Bearer XXXXX` template function.
+
+## 2026-09-03 — The console field guide rebuilt: offline mode, input vs output, removals
+
+AFNI's ask: *"how can I test those offline stages also? … You had mentioned in many of
+the markdown files … It could be tested under offline. What exactly offline means? So you
+First clarify on this part On Artefact that you wanna give."* Plus the guide had to lose
+Tenant, Enforcement and the Roadmap screen.
+
+**Edited surgically rather than rewritten.** AFNI approved the existing design (Newsreader
++ IBM Plex, full light/dark token sets, a hand-authored SVG journey diagram). A rewrite
+would have risked losing it for no benefit.
+
+### The offline answer, which is not what the word suggests
+
+`Stage.OFFLINE = 4` does **not** mean "switched off" or "no internet". It means **never
+runs while someone is waiting**. Stages 1–3 happen inside the few seconds between send
+and answer; offline work happens overnight or on a build server.
+
+**19 capabilities are offline-only**, and the distribution is the interesting part:
+
+| Tenet | Offline | Why |
+|---|---|---|
+| Fairness & Bias | **7** of 9 | fairness is arithmetic over a *population*; one response is not a population |
+| Hallucination | 4 | RAG retrieval quality, regression checks, truthfulness benchmarks, fabrication probes |
+| Explainability | 3 | SHAP, LIME, counterfactuals — minutes, not milliseconds |
+| Accountability | 2 | CI gating, detector-accuracy self-eval |
+| Privacy / Security / Content Safety | 1 each | red-team probing, multi-turn jailbreaks, harmful-content sets |
+
+Three reasons, none of them a shortcoming: some checks need a whole dataset; some checks
+*are* attacks and cannot be aimed at a customer's conversation; some are far too slow.
+
+**The guarantee is enforced by code, not convention.** `Cascade.__init__` **raises** on an
+offline rail — *"rail is OFFLINE and cannot be mounted in the request cascade"*. Verified:
+zero offline rails mounted.
+
+### The honest half of the answer
+
+*"How do I test the offline things?"* — **two you can run today, the rest are not wired**,
+and the guide says so rather than implying a whole offline tier exists:
+
+- **Runs today:** the Corpus screen (the only offline surface with a UI), the same run from
+  the command line, and the 1,014-test suite. All three commands were executed and their
+  real output pasted.
+- **Not wired:** garak, promptfoo, PyRIT, DeepTeam. Their *patterns* are already ported
+  into live checks, but the overnight scanning runs are build-plan items 9–13 and need the
+  one thing nobody has provided — an AFNI application to point them at. The card says
+  **"Do not claim these run. They do not, yet."**
+
+The section ends on the corpus number, because it is the most persuasive artefact the
+project has: a real run of 20 harmful prompts through the free tier returns
+`decisions allow=20`. **Twenty of twenty allowed.**
+
+### Also added: the input-vs-output section
+
+AFNI's other question, answered with the audit from earlier today: 23 checks run on both
+sides, 1 on the message only, 8 on the answer only — so **24 see a question and 31 see an
+answer**. The outgoing side is the *stricter* one. The section states plainly that our own
+note used to say otherwise and why that was wrong.
+
+### Removed
+
+The Roadmap screen (six screens now, not seven), the Tenant dropdown and Client-facing
+toggle rows, the "Phase" glossary entry (replaced by "Verdict"), the phase bracket in the
+legend, "Phase is not stage" (now "A verdict is not a stage"), and `GET /v1/phases` in the
+Swagger table (now `/v1/repositories`, noting the old path 404s).
+
+### Four defects in my own work, caught by looking
+
+1. **A Python script aborted before writing.** Three edits applied, the fourth assertion
+   failed on backslash escaping, and the exception meant `write_text` never ran — so
+   *nothing* was saved. Caught only because the re-render showed no change. The fix was to
+   read the exact bytes with `cat -A` instead of guessing the escaping.
+2. **Cards stretched over dead space.** The 3-card row left its short middle card hanging;
+   the 4-card row put one card alone in a row of three. Fixed with `align-items:start` and
+   a 2-column `.decode--2` variant, so 4 cards make a 2×2 block.
+3. **A command wrapped mid-token.** Shortened to a `cd rai_platform` + relative-path form,
+   and the shortened form was *run* to confirm it works before pasting it.
+4. **Two "seven" references survived** — the contents-rail group heading and "below the
+   seven menu items" — plus an orphaned `<!-- 6 ROADMAP -->` comment left by the article
+   deletion. All three found only by reading the published version line by line.
+
+### The publish took two attempts, and the refusal was right
+
+The first publish was **refused**: the artifact service requires the live version to have
+been *Read* before it will accept a republish. I had proved by programmatic diff that the
+published version was byte-identical to my earlier publish (only the wrapper's closing
+tags differ) — but a diff is not a read, and the guard is about not silently clobbering
+someone else's saved changes. Read all 1,123 lines, confirmed nothing external to merge,
+published. That read is what surfaced defect 4.
+
+Published at the **same URL** — `https://claude.ai/code/artifact/410ec552-62af-46f2-8267-8787c0af76fc`.
+
+**Verified:** renders in both light and dark with zero page errors, no horizontal
+overflow, six screens, 13 sections, and none of `Phase 1/2/3`, `Roadmap`, `days 30–60` or
+`seven screens` anywhere.
