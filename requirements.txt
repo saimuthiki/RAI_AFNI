@@ -75,6 +75,11 @@ torch>=2.2,<3
 llm-guard==0.3.16
 presidio-analyzer>=2.2,<3
 huggingface-hub>=0.23,<1
+# REQUIRED, and it was missing from this file until 2026-09-03 — which cost six
+# test failures on AFNI's machine with a message that named the rail rather than
+# the package. `structured-output-schema` is a Stage-2 rail and jsonschema is
+# pure Python with no build step, so there is no reason for it to be optional.
+jsonschema>=4.17,<5
 # spaCy's PIPELINE is not a pip pin — it must match the installed spaCy, and a
 # 3.7 model against spaCy 3.8 installs cleanly then fails to load. Always:
 #   python -m spacy download en_core_web_lg
@@ -97,6 +102,27 @@ opencv-python-headless>=4.10,<4.12
 # Only for re-ingesting the corpus from the source spreadsheet. The shipped
 # corpus/harm-intents.jsonl needs nothing.
 openpyxl>=3.1,<4
+
+# ---------------------------------------------------------------------------
+# TIER 5 — optional, and genuinely optional
+# ---------------------------------------------------------------------------
+# Every rail below reports `unjudged` without its package, which fails closed.
+# Uncomment what you want; nothing here is needed for a working gateway.
+#
+# The Stage-3 G-Eval rubric judge (explainability). Pulls a large dependency
+# tree of its own, and the rail refuses to run without an explicitly configured
+# judge model anyway — it will not default into somebody's OpenAI bill.
+# deepeval>=1.0,<4
+#
+# OpenTelemetry export of guardrail spans. Wired and OFF by default; the audit
+# store is the record of record either way.
+# opentelemetry-api>=1.20,<2
+# opentelemetry-sdk>=1.20,<2
+#
+# Quietens llm-guard's DEBUG logging, which otherwise writes a 16-dimensional
+# inference about protected characteristics to stdout for every message. Comes
+# in WITH llm-guard, so it is listed for the record rather than to be installed.
+# structlog>=24,<26
 
 # ---------------------------------------------------------------------------
 # DEV

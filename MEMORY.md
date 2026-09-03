@@ -2667,3 +2667,74 @@ client-facing traffic". That switch was removed this morning.
 | `docs/corpus.md`, `plan.md`, `README.md` | documented, with the measured numbers |
 
 **1236 tests pass.**
+
+---
+
+## 2026-09-03 — The manifest omitted `jsonschema`, and preflight said 11/11
+
+AFNI installed into a clean venv and ran the suite: **six failures**, all in
+`tests/test_hallucination.py`, all with messages naming the *rail* rather than the cause:
+
+```
+'invalid JSON Schema' not found in 'jsonschema not installed'
+[] is not true : structured-output-schema
+```
+
+`hallucination.structured-output-schema` is a **Stage-2 rail** and needs `jsonschema`.
+**`requirements.txt` did not list it.** My file, my omission.
+
+And the worse half: `preflight` reported **"PYTHON PACKAGES (11/11 present)"** on that
+machine, because its package list did not include jsonschema either. **A package list
+that omits a required package is worse than no list: it actively reassures.** preflight is
+the command the setup guide tells you to run to find out what is missing, and it said
+nothing was.
+
+### The audit, rather than fixing the one case
+
+Walked every `import` under `afni_rai/` with the AST — **lazy imports inside function
+bodies included, which is where four of the sixteen live and is exactly how one went
+unnoticed.** Sixteen third-party modules; `requirements.txt` listed twelve.
+
+| missing | verdict |
+|---|---|
+| **jsonschema** | **REQUIRED.** Pure Python, no build step, Stage-2 rail. Pinned. |
+| deepeval | genuinely optional — the Stage-3 rubric judge |
+| opentelemetry | genuinely optional — tracing, off by default |
+| pydantic | transitive: arrives with fastapi |
+| structlog | transitive: arrives with llm-guard |
+
+`requirements.txt` gained a **TIER 5 — optional** section with each one commented out and
+its reason, and preflight gained an **OPTIONAL PACKAGES** section. That section reports
+`present=True` even when a package is absent, on purpose: a deliberate omission is not an
+outstanding item, and counting it would mean `preflight`'s exit code never reaches 0 on a
+perfectly good install. The detail line still says which it is.
+
+### `tests/test_dependency_manifest.py` — 9 tests, so this cannot drift again
+
+The manifest is no longer maintained by hand and hoped over. The test parses
+`requirements.txt` (including the commented-out optional tier, so the file stays the
+single source of truth rather than a second list living in a test) and asserts every
+AST-discovered import is **pinned, listed as optional, or declared TRANSITIVE with the
+package that brings it in**. A transitive claim whose parent is not itself pinned fails —
+"it arrives with X" is a claim that needs a subject.
+
+**Verified the guard bites**: removing the `jsonschema` pin fails two tests, one of them
+naming the file that imports it.
+
+It also asserts every import is *reported somewhere by preflight*, so "why is this rail
+unjudged" stays answerable from the one command that is supposed to answer it.
+
+### And their second problem, which preflight DID catch
+
+`numpy 1.26.4, opencv 5.0.0.93 - INCOMPATIBLE`. Their venv had opencv 5 rather than the
+pinned `<4.12`. The ENVIRONMENT section written this morning reported it correctly, with
+the fix in the report. That is the first time that section earned itself.
+
+### `docs/setup.md` now installs from the file
+
+The install block was five hand-written `pip install` lines that had to be kept in step
+with `requirements.txt` by hand — the same class of drift. It is now
+`pip install -r requirements.txt`, with `torch` and `en_core_web_lg` on their own lines
+because one needs the CPU wheel index and the other is not a pip package at all.
+
+**1245 tests pass.**

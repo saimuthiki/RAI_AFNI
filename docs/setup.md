@@ -55,35 +55,43 @@ python -m pip install "numpy<2" "pillow<11" "protobuf<5"
 
 ### 3 · Everything from PyPI, in one command
 
+**Use the requirements file.** It carries the version ceilings that stop the
+numpy fight below, and a test asserts it lists everything the code imports:
+
 ```powershell
-python -m pip install "numpy<2"
-python -m pip install fastapi uvicorn httpx pytest
+python -m pip install -r requirements.txt
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install transformers llm-guard==0.3.16 presidio-analyzer huggingface_hub
-python -m pip install nudenet onnxruntime opencv-python-headless
 python -m spacy download en_core_web_lg
-python -m pip install "numpy<2"
 ```
 
 ```bash
-python3 -m pip install "numpy<2"
-python3 -m pip install fastapi uvicorn httpx pytest
+python3 -m pip install -r requirements.txt
 python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python3 -m pip install transformers llm-guard==0.3.16 presidio-analyzer huggingface_hub
-python3 -m pip install nudenet onnxruntime opencv-python-headless
 python3 -m spacy download en_core_web_lg
-python3 -m pip install "numpy<2"
 ```
 
-`torch` needs the CPU index (900 MB instead of 2.5 GB). `en_core_web_lg` needs
-`spacy download`, not a pinned URL. `nudenet` carries its own 12 MB model inside
-the wheel — no separate download.
+`torch` gets its own line so it comes from the CPU wheel index — 900 MB instead
+of 2.5 GB, and these are all small classifiers so a GPU buys nothing.
+`en_core_web_lg` is not a pip package at all; it must come from `spacy
+download`, because the model version has to match the installed spaCy and a 3.7
+model against spaCy 3.8 installs cleanly then fails to load.
 
-**`numpy<2` twice, first and last, and the repetition is not a mistake.** This
-stack is pinned around `llm-guard==0.3.16`, which is from the numpy-1 era, and
-several packages here do not pin numpy at all — `nudenet` among them — so pip
-will happily pull numpy 2 in the middle of the sequence and leave a
-numpy-1-compiled `pandas` behind it. The last line puts it back.
+`nudenet` carries its own 12 MB model inside the wheel — no separate download.
+
+**The two pins in that file are load-bearing**, not conservative:
+
+```
+numpy>=1.26,<2
+opencv-python-headless>=4.10,<4.12
+```
+
+Read off each release's own metadata on 2026-09-03: opencv-python-headless
+**≤ 4.11.0.86** declares `numpy>=1.26.0`, and **≥ 4.12.0.88** declares
+`numpy>=2`, hard. So opencv 4.12+ *forces* numpy 2, numpy 2 breaks every
+numpy-1-compiled package sharing the environment, and installing them one at a
+time produces an unwinnable loop: pin numpy<2, opencv complains, upgrade opencv,
+numpy 2 comes back, pandas breaks. **There is no version of opencv 4.12+ that
+ends it** — which is why the ceiling is in the file rather than in a note.
 
 What that looks like when it goes wrong, so you recognise it:
 

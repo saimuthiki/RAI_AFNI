@@ -241,6 +241,14 @@ def collect() -> list[Asset]:
         ("fastapi", "the gateway", "all", "~5 MB", "PyPI - reachable"),
         ("uvicorn", "the gateway", "all", "~1 MB", "PyPI - reachable"),
         ("httpx", "the Stage-3 judge chain", "all", "~1 MB", "PyPI - reachable"),
+        # ABSENT FROM THIS LIST UNTIL 2026-09-03, which is why preflight
+        # reported "11/11 present" on a machine whose test suite was failing
+        # six times over a missing package. A package list that does not
+        # include a required package is worse than no list: it actively
+        # reassures. `structured-output-schema` is Stage 2 and jsonschema is
+        # pure Python, so there is no excuse for it to be missing.
+        ("jsonschema", "hallucination.structured-output-schema",
+         "Hallucination / Reliability", "~200 KB", "PyPI - reachable"),
         # Media moderation. `nudenet` is the unusual one in this list: the 12 MB
         # 320n.onnx model ships INSIDE the wheel, so `pip install nudenet` is
         # both the library and the model download and nothing is fetched at
@@ -258,11 +266,49 @@ def collect() -> list[Asset]:
          "pulls in X11."),
     ]
     for module, needed_by, tenet, size, where in packages:
-        present = importlib.util.find_spec(module) is not None
+        try:
+            present = importlib.util.find_spec(module) is not None
+        except (ImportError, ValueError):
+            # Same guard as the ABI section: find_spec raises on a module
+            # sitting in sys.modules with no __spec__.
+            present = module in sys.modules
         assets.append(Asset(
             kind="package", name=module, needed_by=needed_by, tenet=tenet,
             where_from=where, destination="site-packages (pip install)",
             present=present, detail="installed" if present else "not installed",
+            approx_size=size))
+
+    # ---- optional packages, reported separately from the required ones -----
+    # Listed because "why is this rail unjudged" has to be answerable from one
+    # command, and reported as OPTIONAL because a missing one is a choice
+    # rather than a broken install.
+    optional = [
+        ("deepeval", "explainability.afni-rubric-judge (Stage 3)",
+         "Explainability & Transparency", "~50 MB",
+         "PyPI - reachable. The rail also needs a configured judge model; it "
+         "will not default into a paid provider on its own."),
+        ("opentelemetry", "accountability tracing export", "Accountability",
+         "~5 MB",
+         "PyPI as `opentelemetry-api` + `opentelemetry-sdk`. Wired and OFF by "
+         "default - the audit store is the record of record either way."),
+        ("openpyxl", "corpus/ingest.py, .xlsx input only",
+         "Accountability", "~250 KB",
+         "PyPI - reachable. Only needed to RE-INGEST the corpus from the "
+         "source spreadsheet; the shipped harm-intents.jsonl needs nothing."),
+    ]
+    for module, needed_by, tenet, size, where in optional:
+        try:
+            present = importlib.util.find_spec(module) is not None
+        except (ImportError, ValueError):
+            present = module in sys.modules
+        assets.append(Asset(
+            kind="optional", name=module, needed_by=needed_by, tenet=tenet,
+            where_from=where, destination="site-packages (pip install)",
+            # `present=True` when absent, on purpose: this section must not
+            # add to the outstanding count, because a deliberate omission is
+            # not an outstanding item. The detail line says which it is.
+            present=True,
+            detail="installed" if present else "NOT installed - optional",
             approx_size=size))
 
     # ---- spaCy pipeline ----------------------------------------------------
@@ -363,6 +409,7 @@ def render() -> str:
 
     for kind, title in (("abi", "ENVIRONMENT - DOES THE STACK AGREE WITH ITSELF"),
                         ("model", "MODELS"), ("package", "PYTHON PACKAGES"),
+                        ("optional", "OPTIONAL PACKAGES - a missing one is a choice"),
                         ("credential", "CREDENTIALS"),
                         ("decision", "NOT A DOWNLOAD")):
         rows = [a for a in assets if a.kind == kind]
