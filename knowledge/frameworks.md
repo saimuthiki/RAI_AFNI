@@ -1,6 +1,6 @@
 # The 23 Frameworks
 
-Every tool reviewed at source level in Phase 0, with the adoption verdict. Source of
+Every tool reviewed at source level, with the adoption verdict. Source of
 truth: `data/RAI_Synthesis.json` → `feasibility_matrix`, and `helpers/repo_slide_content.py`
 → `REPO_SLIDES`. Each tool's actual code is in `references/<folder>/`, indexed by graft
 (`graft ask "<question>" --in references/<folder>/`).
@@ -40,7 +40,7 @@ Role: **Dev** = runs live in the request path · **Test** = offline red-team/eva
 - **Combine with … (4)** — adopt, but only alongside the named primary; not a
   standalone choice. AIF360 behind Fairlearn; Infosys and Rebuff behind NeMo;
   hai-guardrails behind LLM Guard (port its PHI regexes into Presidio recognisers).
-- **Bench for later (6)** — genuine capability, not Phase 1–3. Deepchecks is a batch
+- **Bench for later (6)** — genuine capability, deliberately not wired yet. Deepchecks is a batch
   library with no per-request API, which is the reason it is benched — **not** its
   licence: AFNI holds licences covering Apache-2.0, MIT and AGPL-3.0 and confirmed
   on 2026-09-02 that no repository in this review is licence-restricted. OpenAI
@@ -70,7 +70,7 @@ Not deployed — specific parts are ported into the AFNI stack:
 - **hai-guardrails** — the only dedicated healthcare PHI regex set found (ICD-10, MRN,
   NPI, DEA) plus entropy-gated secret patterns. Port into Presidio custom recognisers.
 - **Rebuff** — canary-token leak detection and a self-hardening attack-signature store.
-  Reimplement as native NeMo rails, seeded from the Phase-1 baseline findings.
+  Reimplement as native NeMo rails, seeded from the baseline red-team findings.
 - **Infosys toolkit** — the dispatcher shape (see [infosys-vs-nemo.md](infosys-vs-nemo.md)).
   Optionally vendor three genuinely unique modules if the business needs them:
   multi-format/DICOM PII scanning, NSFW image and video detection, and Faker-based

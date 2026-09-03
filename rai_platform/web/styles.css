@@ -19,12 +19,13 @@
    stage 2 is hatched (probabilistic), stage 3 glows (expensive), offline is
    dashed and hollow (not in the request path).
 
-   ROADMAP PHASES get NO HUE AT ALL. A phase is a calendar window; a stage is a
-   cost tier. They were previously drawn in the stage colours, which is exactly
-   the confusion this console keeps having to correct in words. Phases are now a
-   90-day track in ink only (.pbr), with a day range printed. A third hue family
-   would have been the wrong fix: two axes that look different in FORM cannot be
-   swapped by a reader who is colour-blind, tired, or looking at a projector.
+   THE ADOPTION VERDICT gets NO STAGE HUE. A verdict is about one repository;
+   a stage is a cost tier paid per request. The two were once drawn in the same
+   colours, which is exactly the confusion this console kept having to correct in
+   words. The verdict is now a plain word chip (.adopt) in the coverage palette,
+   never the stage palette. (An earlier revision drew a 90-day phase bracket
+   here; phases were removed on 2026-09-03 - the platform is built in one pass -
+   so there is no calendar axis left to disambiguate.)
 
    THE TYPE LAW. Sans sets prose — headlines, ledes, and every sentence written
    for a person to read. Mono sets everything the system named and everything
@@ -875,36 +876,7 @@ textarea:focus, select:focus, input:focus { border-color: var(--accent); }
 .railrow--dead .railrow__name { color: var(--hazard-ink); }
 .railrow__why { font: 400 var(--t-micro)/1.6 var(--mono); color: var(--hazard-ink); margin-top: 2px; }
 
-/* ============================ roadmap =================================== */
-
-.phase { display: grid; gap: var(--sp-4); }
-.phase__head { display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap; }
-.phase__tag {
-  font: 700 var(--t-eyebrow)/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase;
-  padding: 0.32rem 0.5rem; border-radius: var(--r-sm);
-  border: 1px solid currentColor;
-}
-/* Deliberately identical for p1/p2/p3: a phase is not a tier, so nothing here
-   ranks them by colour. The day range and the bracket position carry the order. */
-.phase--p1 .phase__tag,
-.phase--p2 .phase__tag,
-.phase--p3 .phase__tag { color: var(--ink); background: var(--surface-3); border-color: var(--line); }
-.phase--none .phase__tag { color: var(--ink-3); border-style: dashed; background: none; }
-.phase__name { font: 650 var(--t-h3)/1.2 var(--sans); letter-spacing: -0.02em; }
-
-.notes { display: grid; gap: var(--sp-2); }
-.notes__t { font: 600 var(--t-small)/1.3 var(--sans); }
-.notes li {
-  display: grid; grid-template-columns: auto 1fr; gap: var(--sp-3);
-  font-size: var(--t-small); color: var(--ink-2);
-}
-.notes li::before {
-  content: "mentions"; align-self: start;
-  font: 500 var(--t-eyebrow)/1.5 var(--mono); letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--cov-2-ink); background: var(--cov-2-bed);
-  border: 1px solid color-mix(in oklab, var(--cov-2) 40%, transparent);
-  border-radius: var(--r-sm); padding: 0 0.35rem; white-space: nowrap;
-}
+/* ====================== repository inventory ============================= */
 
 .repo { display: grid; gap: var(--sp-3); padding: var(--sp-4); border-top: 1px solid var(--line-soft); }
 .repo:first-of-type { border-top: 0; }
@@ -1317,19 +1289,26 @@ td.t-nowrap { white-space: nowrap; }
 .notcomparable b { color: var(--ink); font-weight: 650; }
 
 /* ==========================================================================
-   PHASE BRACKET  —  the calendar axis. No stage hue, ever.
+   ADOPTION VERDICT  —  the repository axis. No stage hue, ever.
    ========================================================================== */
 
-.pbr { display: inline-grid; gap: 3px; min-width: 7.5rem; }
-.pbr__lab { font: 600 var(--t-micro)/1.2 var(--sans); letter-spacing: -0.005em; color: var(--ink); }
-.pbr__track {
-  position: relative; height: 5px; border-radius: 2px;
-  background: var(--surface-3); border: 1px solid var(--line);
+/* The adoption verdict. Deliberately in the COVERAGE palette, never the stage
+   palette: an adopted repository routinely backs a Stage-3 rail, and if the two
+   axes shared a hue a reader would infer a relationship that does not exist.
+   Skip is dashed and hollow so it reads as absent by FORM as well as colour -
+   form survives a projector and a colour-blind reader; hue does not. */
+.adopt {
+  display: inline-flex; align-items: center;
+  font: 600 var(--t-micro)/1.4 var(--sans); letter-spacing: -0.005em;
+  padding: 0.16rem 0.5rem; border-radius: var(--r-sm);
+  border: 1px solid var(--line); color: var(--ink-2); background: var(--surface-2);
+  white-space: nowrap;
 }
-.pbr__fill { position: absolute; top: 0; bottom: 0; background: var(--ink-2); border-radius: 1px; }
-.pbr__days { font: 500 var(--t-eyebrow)/1.2 var(--mono); letter-spacing: 0.07em; color: var(--ink-3); }
-.pbr--none .pbr__track { border-style: dashed; background: none; }
-.pbr--none .pbr__lab { color: var(--ink-3); }
+.adopt--adopt { color: var(--cov-1-ink); background: var(--cov-1-bed); border-color: color-mix(in oklab, var(--cov-1) 40%, transparent); }
+.adopt--combine { color: var(--s2-ink); background: var(--s2-bed); border-color: color-mix(in oklab, var(--s2) 40%, transparent); }
+.adopt--bench { color: var(--cov-2-ink); background: var(--cov-2-bed); border-color: color-mix(in oklab, var(--cov-2) 40%, transparent); }
+.adopt--skip { color: var(--ink-3); border-style: dashed; background: none; }
+.adopt--unknown { color: var(--ink-3); border-style: dotted; background: none; }
 
 /* The two-axis explainer. Same component both sides so the DIFFERENCE is the
    only thing that varies. */
@@ -1585,8 +1564,8 @@ td.t-nowrap { white-space: nowrap; }
   .tl__win { grid-template-columns: 1fr; }
 }
 
-.navphase { margin-top: var(--sp-3); }
-.navphase .pbr { min-width: 100%; }
+.adoptkey { margin-top: var(--sp-3); display: grid; gap: var(--sp-2); list-style: none; }
+.adoptkey .adopt { justify-self: start; }
 
 /* Six nav items at the collapsed breakpoint no longer fit one row of columns. */
 @media (max-width: 68rem) {

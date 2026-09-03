@@ -52,12 +52,12 @@ def existing_streams() -> dict:
 def build() -> dict:
     from afni_rai.gateway.app import create_app  # noqa: F401  (registry side effects)
     from afni_rai.gateway.app import Gateway
-    from afni_rai.registry import phases
+    from afni_rai.registry import repositories
 
     gateway = Gateway()
     return {
         "coverage": gateway.coverage(),
-        "phases": phases.status(),
+        "repositories": repositories.status(),
         "rails": {"rails": gateway.rail_rows()},
         "streams": existing_streams(),
     }

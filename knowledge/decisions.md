@@ -1,6 +1,6 @@
 # Locked Decisions
 
-Everything here is decided in the Phase-0 analysis and presented to the client.
+Everything here is decided in the source-level analysis and presented to the client.
 Treat as settled unless Kiran overturns it. Source: deck slides 65, 67–69, 78.
 
 ## D1 — One gateway, not per-project checks

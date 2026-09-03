@@ -48,7 +48,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
-    # `afni_rai.registry.phases.status()` imports `afni_rai.tenets.*` by absolute
+    # `afni_rai.registry.repositories.status()` imports `afni_rai.tenets.*` by absolute
     # name, so the package has to be importable as a top-level name whichever
     # directory the process was started from.
     sys.path.insert(0, HERE)

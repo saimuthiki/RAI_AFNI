@@ -145,35 +145,38 @@ until the endpoint's own `/models` listing confirms it at startup.
 
 ---
 
-## 2 · Stage ≠ Phase — the distinction that trips everyone
+## 2 · Stage is the only axis that uses 1, 2, 3
 
-Two different axes share the numbers 1, 2, 3. Conflating them is the single most
-common misreading of this platform, so it is worth thirty seconds.
+An earlier revision of this document spent a section separating **Stage** from
+**Phase**, because both used the numbers 1, 2, 3 and conflating them was the single
+most common misreading of the platform.
+
+**Phases are gone.** AFNI decided on 2026-09-03 to build the platform in one pass
+rather than across a 90-day, three-phase calendar, so there is no second numbered axis
+left to confuse Stage with. `1`, `2` and `3` now mean exactly one thing anywhere in this
+platform: the runtime cost tier a request paid.
 
 ```mermaid
-flowchart TB
-    subgraph STAGE["<b>STAGE</b> — the RUNTIME cascade. Per request, right now."]
-      direction LR
-      S1["Stage 1<br/>free regex<br/>sub-ms"] --> S2["Stage 2<br/>local model<br/>1-3 s on CPU"] --> S3["Stage 3<br/>paid judge<br/>1-5 s"]
-    end
-    subgraph PHASE["<b>PHASE</b> — the 90-day ADOPTION roadmap. A calendar."]
-      direction LR
-      P1["Phase 1<br/>0-30 days<br/>7 repos"] --> P2["Phase 2<br/>30-60 days<br/>5 repos"] --> P3["Phase 3<br/>60-90 days<br/>4 repos"]
-    end
-    STAGE -.->|"unrelated axes"| PHASE
+flowchart LR
+    S1["Stage 1<br/>free regex<br/>sub-ms<br/>100% of traffic"] --> S2["Stage 2<br/>local model<br/>1-3 s on CPU<br/>borderline only"]
+    S2 --> S3["Stage 3<br/>paid judge<br/>1-5 s<br/>last resort"]
+    OFF["Offline<br/>CI and red-team<br/>NEVER in the request path"]
 ```
 
-| | **Stage** 1/2/3 | **Phase** 1/2/3 |
-|---|---|---|
-| What it orders | cost and latency, per request | which repos AFNI adopts, and when |
-| Lives in | `afni_rai/cascade/` | `afni_rai/registry/phases.py` |
-| Changes | every request | once a month |
-| Question | "did this need a paid call?" | "are we on track?" |
+| | **Stage** 1/2/3 |
+|---|---|
+| What it orders | cost and latency, per request |
+| Lives in | `afni_rai/cascade/` |
+| Changes | every request |
+| Question | "did this need a paid call?" |
 
-**Your mental model — "caught in phase one, don't send it to phase two" — is
-exactly right, and it describes Stage, not Phase.** A Phase-1 repo can contribute
-a Stage-3 rail; a Phase-2 repo can contribute a Stage-1 one. From here on this
-document says **Stage** when it means the cascade.
+**Your mental model — "caught in stage one, don't send it to stage two" — is exactly
+right.** That is the whole cascade.
+
+The one remaining repository-level axis is the **adoption verdict** — Adopt now /
+Combine / Bench / Skip — in `afni_rai/registry/repositories.py`. It carries no number
+and deliberately borrows no stage colour, because an adopted repository routinely backs
+a Stage-3 rail. Those two facts are unrelated.
 
 ---
 
@@ -293,52 +296,52 @@ short-circuits immediately.
 **Security is worth a warning.** No Stage-1 rail blocks a prompt injection — by
 design, because PyRIT documents a high false-positive rate for those patterns, so
 a regex hit buys a second opinion rather than a refusal. Without the Stage-2
-classifier installed, a textbook injection produces four HIGH findings and is
-*allowed* on internal traffic. Stage 1 alone is a **detector** for injection, not
-a **control** against it.
+classifier installed, a textbook injection produces four HIGH findings and is still
+*allowed* — none of them carries the block action. Stage 1 alone is a **detector** for
+injection, not a **control** against it.
 
 ---
 
 ## 5 · Every framework, by branch and stage
 
 23 repositories reviewed at source level; **16 contribute** to the running
-platform. Roadmap Phase in the last column — remember it is a calendar, not a
+platform. Adoption verdict in the last column — remember it is about the repository, not
 runtime tier.
 
-| Branch | Stage | Rail | Repository | Phase |
+| Branch | Stage | Rail | Repository | Verdict |
 |---|:---:|---|---|:---:|
-| **Privacy** | 1 | `privacy.credit_card` | agentic_security | — |
-| | 1 | `privacy.healthcare_phi` | hai-guardrails | 2 |
-| | 1 | `privacy.pii_entities` | hai-guardrails + agentic_security | 2 |
-| | 1 | `privacy.region_ids` | Infosys RAI Toolkit + Safe Zone | 3 |
-| | 1 | `privacy.reversible_anonymiser` | llm-guard | 1 |
-| | 1 | `privacy.system_prompt_leakage` | hai-guardrails + garak | 1 |
-| | 2 | `privacy.presidio_ner` | llm-guard → Presidio | 1 |
-| | 3 | `privacy.pii_leakage_judge` | deepteam | 3 |
-| **Security** | 1 | `security.encoding.obfuscation` | garak | 1 |
-| | 1 | `security.indirect_injection` | garak | 1 |
-| | 1 | `security.injection.heuristic` | PyRIT | 1 |
-| | 1 | `security.insecure_output` | NeMo Guardrails | 1 |
-| | 1 | `security.invisible_text` | llm-guard | 1 |
-| | 1 | `security.secrets` | garak *(+ AFNI LLM-provider prefixes)* | 1 |
-| | 2 | `security.injection.deberta_v3_v2` | llm-guard | 1 |
+| **Privacy** | 1 | `privacy.credit_card` | agentic_security | bench |
+| | 1 | `privacy.healthcare_phi` | hai-guardrails | combine |
+| | 1 | `privacy.pii_entities` | hai-guardrails + agentic_security | combine |
+| | 1 | `privacy.region_ids` | Infosys RAI Toolkit + Safe Zone | combine |
+| | 1 | `privacy.reversible_anonymiser` | llm-guard | adopt |
+| | 1 | `privacy.system_prompt_leakage` | hai-guardrails + garak | combine |
+| | 2 | `privacy.presidio_ner` | llm-guard → Presidio | adopt |
+| | 3 | `privacy.pii_leakage_judge` | deepteam | adopt |
+| **Security** | 1 | `security.encoding.obfuscation` | garak | adopt |
+| | 1 | `security.indirect_injection` | garak | adopt |
+| | 1 | `security.injection.heuristic` | PyRIT | adopt |
+| | 1 | `security.insecure_output` | NeMo Guardrails | adopt |
+| | 1 | `security.invisible_text` | llm-guard | adopt |
+| | 1 | `security.secrets` | garak *(+ AFNI LLM-provider prefixes)* | adopt |
+| | 2 | `security.injection.deberta_v3_v2` | llm-guard | adopt |
 | | 3 | `security.prompt_shields` | Azure AI Content Safety | — |
-| **Content Safety** | 1 | `content_safety.banned_substrings` | llm-guard | 1 |
-| | 1 | `content_safety.explicit` | Infosys RAI Toolkit + garak | 3 |
-| | 1 | `content_safety.profanity` | Infosys RAI Toolkit + garak | 3 |
-| | 2 | `content_safety.toxicity_model` | llm-guard | 1 |
-| | 2 | `content_safety.zeroshot_topics` | llm-guard | 1 |
-| | 3 | `content_safety.toxicity_judge` | hai-guardrails | 2 |
-| **Hallucination** | 1 | `package-hallucination` | garak | 1 |
-| | 1 | `refusal-phrases` | promptfoo | 1 |
-| | 1 | `structured-output-wellformed` | Safe Zone | — |
-| | 2 | `groundedness-nli` | llm-guard | 1 |
-| | 2 | `structured-output-schema` | Safe Zone | — |
-| **Fairness** | 1 | `afni.fairness.protected_attribute` | AFNI, from promptfoo + DeepEval BBQ + Infosys | 1 |
-| | 2 | `llm_guard.bias` | llm-guard | 1 |
-| **Explainability** | 1 | `afni-format-validators` | Guardrails AI | — |
-| | 1 | `afni-schema-explain` | Guardrails AI | — |
-| **Accountability** | 1 | `attack-corpus-repeat` | Rebuff *(similarity from JCB)* | 2 |
+| **Content Safety** | 1 | `content_safety.banned_substrings` | llm-guard | adopt |
+| | 1 | `content_safety.explicit` | Infosys RAI Toolkit + garak | combine |
+| | 1 | `content_safety.profanity` | Infosys RAI Toolkit + garak | combine |
+| | 2 | `content_safety.toxicity_model` | llm-guard | adopt |
+| | 2 | `content_safety.zeroshot_topics` | llm-guard | adopt |
+| | 3 | `content_safety.toxicity_judge` | hai-guardrails | combine |
+| **Hallucination** | 1 | `package-hallucination` | garak | adopt |
+| | 1 | `refusal-phrases` | promptfoo | adopt |
+| | 1 | `structured-output-wellformed` | Safe Zone | bench |
+| | 2 | `groundedness-nli` | llm-guard | adopt |
+| | 2 | `structured-output-schema` | Safe Zone | bench |
+| **Fairness** | 1 | `afni.fairness.protected_attribute` | AFNI, from promptfoo + DeepEval BBQ + Infosys | adopt |
+| | 2 | `llm_guard.bias` | llm-guard | adopt |
+| **Explainability** | 1 | `afni-format-validators` | Guardrails AI | skip |
+| | 1 | `afni-schema-explain` | Guardrails AI | skip |
+| **Accountability** | 1 | `attack-corpus-repeat` | Rebuff *(similarity from JCB)* | combine |
 
 A dash means the repo's *patterns* were ported without the repo being adopted —
 Safe Zone's Go service runs nowhere here; its structured-output checks were
@@ -518,7 +521,7 @@ python rai_platform/cli.py coverage      # 65 capabilities, five states
 python rai_platform/cli.py preflight     # what is missing and where it goes
 curl -s localhost:8000/v1/rails    | python -m json.tool
 curl -s localhost:8000/v1/coverage | python -m json.tool
-curl -s localhost:8000/v1/phases   | python -m json.tool
+curl -s localhost:8000/v1/repositories | python -m json.tool
 curl -s localhost:8000/healthz     | python -m json.tool
 ```
 

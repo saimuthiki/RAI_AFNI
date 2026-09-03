@@ -526,12 +526,23 @@ class TestIntrospectionEndpoints(unittest.TestCase):
             for row in tenet["rows"]:
                 self.assertIn(row["status"], allowed)
 
-    def test_phases_cross_references_the_roadmap(self):
-        payload = self.client.get("/v1/phases").json()
-        self.assertIn("Phase 1 (0-30 days)", payload)
-        phase_1 = payload["Phase 1 (0-30 days)"]
-        self.assertTrue(phase_1["repos"])
-        self.assertIn("present_in_platform", phase_1["repos"][0])
+    def test_repositories_cross_references_the_inventory(self):
+        payload = self.client.get("/v1/repositories").json()
+        groups = {g["adoption"]: g for g in payload["groups"]}
+        self.assertIn("Adopt now", groups)
+        self.assertTrue(groups["Adopt now"]["repos"])
+        self.assertIn("present_in_platform", groups["Adopt now"]["repos"][0])
+        # All 23 reviewed repositories are still accounted for, exactly once.
+        slugs = [r["repo"] for g in payload["groups"] for r in g["repos"]]
+        self.assertEqual(len(slugs), 23)
+        self.assertEqual(len(set(slugs)), 23)
+
+    def test_the_phases_endpoint_is_gone(self):
+        """`/v1/phases` grouped these same repositories on a 90-day adoption
+        calendar. AFNI builds in one pass, so the calendar was removed. A 404
+        here is the point: a stale client gets a clear failure rather than a
+        route that quietly returns a different shape."""
+        self.assertEqual(self.client.get("/v1/phases").status_code, 404)
 
     def test_rails_lists_every_rail_with_its_attribution(self):
         payload = self.client.get("/v1/rails").json()
@@ -552,7 +563,7 @@ class TestIntrospectionEndpoints(unittest.TestCase):
     def test_the_openapi_document_is_generated(self):
         paths = self.client.get("/openapi.json").json()["paths"]
         for path in ("/v1/guard", "/v1/guard/stream", "/v1/coverage",
-                     "/v1/phases", "/v1/rails", "/healthz"):
+                     "/v1/repositories", "/v1/rails", "/healthz"):
             self.assertIn(path, paths)
 
 
@@ -1061,7 +1072,7 @@ class TestTheOperatorConsoleIsServed(unittest.TestCase):
                 self.assertIn(expected, response.headers["content-type"])
 
     def test_the_mount_does_not_shadow_the_api(self):
-        for path in ("/healthz", "/v1/rails", "/v1/coverage", "/v1/phases",
+        for path in ("/healthz", "/v1/rails", "/v1/coverage", "/v1/repositories",
                      "/openapi.json"):
             with self.subTest(path=path):
                 self.assertEqual(self.client.get(path).status_code, 200, path)

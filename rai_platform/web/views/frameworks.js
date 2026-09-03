@@ -1,7 +1,7 @@
 // Frameworks — all 23 reviewed repositories, joined to the tenets they serve.
 //
-// The join is client-side and worth stating plainly: /v1/phases gives the repo
-// list and its adoption verdict, /v1/rails gives each rail's attribution. A
+// The join is client-side and worth stating plainly: /v1/repositories gives the
+// repo list and its adoption verdict, /v1/rails gives each rail's attribution. A
 // rail's `repo` can name more than one source ("hai-guardrails-main + garak-main"),
 // so it is split on "+" before matching — otherwise a compound attribution
 // silently credits nothing and a contributing repo reads as unused.
@@ -12,12 +12,10 @@
 // not a framework anybody vendored, and the count of 23 has to stay 23.
 
 import {
-  el, clear, pageHead, rule, table, stageTag, phaseTag, phaseNumber, covChip,
+  el, clear, pageHead, rule, table, stageTag, adoptionTag, adoptionRank, covChip,
   errorBox, pill, field, statRow, plural,
 } from '../ui.js';
-import { phases, railsWithHealth } from '../api.js';
-
-const phaseRank = (name) => phaseNumber(name) ?? 9;
+import { repositories, railsWithHealth } from '../api.js';
 const splitRepos = (s) => String(s || '').split('+').map((x) => x.trim()).filter(Boolean);
 
 /** Mechanism strings are written for a human reading one rail
@@ -37,47 +35,30 @@ const TENET_SHORT = {
 };
 const shortTenet = (t) => TENET_SHORT[t] || t;
 
-const ADOPTION_CLASS = {
-  'Adopt now': 'tag--adopt',
-  'Combine with another': 'tag--combine',
-  'Bench for later': 'tag--bench',
-  Skip: 'tag--skip',
-};
-// The verdict is one of four fixed strings and two of them are long enough to
-// set the column width on their own. Abbreviated in the cell, full in the title.
-const ADOPTION_SHORT = {
-  'Combine with another': 'Combine',
-  'Bench for later': 'Bench',
-};
-function verdictPill(adoption) {
-  const tag = pill(ADOPTION_SHORT[adoption] || adoption, ADOPTION_CLASS[adoption] || '');
-  tag.title = adoption;
-  return tag;
-}
-
 export async function render(root) {
   clear(root);
   root.append(pageHead(
     'Frameworks',
     'Twenty-three repositories read at source level, sixteen still in the build',
-    'One row per repository: which tenets its patterns serve, the cascade stages those '
-    + 'rails sit in, the mechanism, and the adoption verdict. Being present here is '
+    'One row per repository: its adoption verdict, which tenets its patterns serve, the '
+    + 'cascade stages those rails sit in, and the mechanism. Being present here is '
     + 'provenance — it means a rail cites this repo as the source of a pattern, not that '
     + 'the platform depends on it.',
   ));
 
-  const loading = el('p', { class: 'empty', text: 'Reading /v1/phases and /v1/rails…' });
+  const loading = el('p', { class: 'empty',
+    text: 'Reading /v1/repositories and /v1/rails…' });
   root.append(loading);
 
   let ph; let inv;
-  try { [ph, inv] = await Promise.all([phases(), railsWithHealth()]); } catch (err) {
+  try { [ph, inv] = await Promise.all([repositories(), railsWithHealth()]); } catch (err) {
     loading.replaceWith(errorBox('Loading the framework table', err)); return;
   }
   loading.remove();
 
-  // repo slug -> { entry, phase }
+  // repo slug -> entry
   const byRepo = new Map();
-  for (const p of ph.phases) for (const r of p.repos) byRepo.set(r.repo, { ...r, phase: p.phase });
+  for (const g of ph.groups) for (const r of g.repos) byRepo.set(r.repo, r);
 
   // repo slug -> what it contributes
   const contrib = new Map();
@@ -108,8 +89,8 @@ export async function render(root) {
   const present = [...byRepo.values()].filter((r) => r.present_in_platform).length;
   const cited = [...byRepo.keys()].filter((k) => contrib.has(k)).length;
   const adopted = [...byRepo.values()].filter((r) => r.adoption === 'Adopt now').length;
-  const offCalendar = ph.phases.filter((x) => !phaseNumber(x.phase))
-    .reduce((n, x) => n + x.repos.length, 0);
+  const notAdopted = [...byRepo.values()]
+    .filter((r) => r.adoption === 'Skip' || r.adoption === 'Bench for later').length;
 
   root.append(statRow([
     { label: 'Reviewed', value: String(byRepo.size),
@@ -120,14 +101,14 @@ export async function render(root) {
       note: 'the stricter test — a rail in the running cascade names it as its source' },
     { label: 'Adopt now', value: String(adopted),
       note: 'the verdict on the repo, not its implementation status' },
-    { label: 'Not adopted', value: String(offCalendar), tone: 'warn',
-      note: 'licence, supply chain, hard-coded credentials, or simply too thin to keep' },
+    { label: 'Not adopted', value: String(notAdopted), tone: 'warn',
+      note: 'benched or skipped — supply chain, no per-request API, or simply too thin' },
   ]));
 
   // ------------------------------------------------------------- controls ---
   const sel = el('select', {}, [
-    el('option', { value: '', text: 'All phases' }),
-    ...ph.phases.map((p) => el('option', { value: p.phase, text: p.phase })),
+    el('option', { value: '', text: 'All verdicts' }),
+    ...ph.groups.map((g) => el('option', { value: g.adoption, text: g.adoption })),
   ]);
   const tenetSel = el('select', {}, [
     el('option', { value: '', text: 'All tenets' }),
@@ -136,11 +117,11 @@ export async function render(root) {
   const tableSlot = el('div');
 
   const controls = el('div', { class: 'filters' }, [
-    field('Phase', sel),
+    field('Adoption', sel),
     field('Serves tenet', tenetSel),
     el('p', { class: 'micro mute', style: 'max-width:36ch;align-self:center', text:
-      'Filtering never repaints a repo’s other facts — the phase window and the adoption '
-      + 'verdict belong to the repository, not to the current filter.' }),
+      'Filtering never repaints a repo’s other facts — the verdict and what cites it '
+      + 'belong to the repository, not to the current filter.' }),
   ]);
   sel.addEventListener('change', draw);
   tenetSel.addEventListener('change', draw);
@@ -169,14 +150,14 @@ export async function render(root) {
   }
 
   function draw() {
-    const wantPhase = sel.value;
+    const wantAdoption = sel.value;
     const wantTenet = tenetSel.value;
 
     const rows = [...byRepo.values()]
-      .filter((r) => !wantPhase || r.phase === wantPhase)
+      .filter((r) => !wantAdoption || r.adoption === wantAdoption)
       .map((r) => ({ r, c: contrib.get(r.repo) }))
       .filter(({ c }) => !wantTenet || (c && c.tenets.has(wantTenet)))
-      .sort((a, b) => phaseRank(a.r.phase) - phaseRank(b.r.phase)
+      .sort((a, b) => adoptionRank(a.r.adoption) - adoptionRank(b.r.adoption)
         || a.r.display.localeCompare(b.r.display));
 
     clear(tableSlot);
@@ -186,17 +167,16 @@ export async function render(root) {
     }
 
     const tbl = table(
-      [{ label: 'Repository', width: '13rem' }, { label: 'Adopt when', width: '8.5rem' },
-        'Verdict', 'Serves', 'Stages', 'Mechanism', 'In the build'],
+      [{ label: 'Repository', width: '13rem' }, { label: 'Verdict', width: '9rem' },
+        'Serves', 'Stages', 'Mechanism', 'In the build'],
       rows.map(({ r, c }) => el('tr', {}, [
         el('td', {}, [
           el('div', { style: 'font-weight:650', text: r.display }),
           el('div', { class: 'repo__slug', text: r.repo }),
           c ? el('div', { class: 'micro mute', text: plural(c.rails.length, 'rail') }) : null,
         ]),
-        el('td', {}, phaseTag(r.phase)),
         el('td', {}, [
-          verdictPill(r.adoption),
+          adoptionTag(r.adoption),
           r.conditional ? el('div', { style: 'margin-top:.25rem' }, pill('conditional', 'tag--conditional')) : null,
         ]),
         el('td', {}, c
@@ -231,9 +211,9 @@ export async function render(root) {
     tableSlot.append(tbl);
 
     tableSlot.append(el('p', { class: 'micro mute', style: 'margin-top:var(--sp-3);max-width:82ch', text:
-      `${rows.length} of ${byRepo.size} repositories shown. “Adopt when” is a calendar window, `
-      + 'not a cascade stage — a Phase-1 repository routinely backs a Stage-3 rail. '
-      + '“Contributing” means a rail cites the repo as the source of a pattern: provenance, '
-      + 'not adoption, and not a dependency.' }));
+      `${rows.length} of ${byRepo.size} repositories shown. A verdict is about the `
+      + 'repository and carries no cascade stage — an adopted repository routinely backs '
+      + 'a Stage-3 rail. “Contributing” means a rail cites the repo as the source of a '
+      + 'pattern: provenance, not adoption, and not a dependency.' }));
   }
 }
