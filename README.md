@@ -111,7 +111,7 @@ version is three commands and one script.
 
 ```bash
 pip install transformers torch --index-url https://download.pytorch.org/whl/cpu
-pip install llm-guard presidio-analyzer huggingface_hub
+pip install llm-guard==0.3.16 presidio-analyzer huggingface_hub
 python -m spacy download en_core_web_lg
 ```
 

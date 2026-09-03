@@ -123,14 +123,17 @@ INVENTORY: tuple[RepoEntry, ...] = (
               "Offline fuzzer requiring MongoDB; overlaps PyRIT and garak, which "
               "are already adopted."),
 
+    RepoEntry("guardrails-main", "Guardrails AI", Adoption.COMBINE,
+              "Already integrated the way that matters: its format-validator shape, "
+              "its per-field schema explanations, its sqlite call-trace handler and "
+              "its on_fail action vocabulary are all reimplemented in stdlib Python "
+              "here, backing 4 rails. Deliberately WITHOUT the PyPI dependency - the "
+              "package ships base classes only, every real validator is a separate "
+              "PyPI package, and it carries a documented supply-chain compromise. "
+              "Porting the patterns gets the capability; installing the package would "
+              "get the capability and the attack surface."),
+
     # -------------------------------------------------------------------- skip --
-    RepoEntry("guardrails-main", "Guardrails AI", Adoption.SKIP,
-              "Ships base classes only - every real validator is a separate PyPI "
-              "package, and the Hub deprecation affects a share of them. Carries "
-              "a documented historical PyPI supply-chain compromise, so any "
-              "adoption must pin and vendor rather than resolve at install time. "
-              "AFNI has asked for it to be integrated regardless; that verdict "
-              "change is tracked separately from the removal of phases."),
     RepoEntry("JCB-main", "JCB", Adoption.SKIP,
               "A HarmBench fork shipping only its own method and two of the "
               "pipeline's steps. Its 0.6 similarity threshold was read and reused."),

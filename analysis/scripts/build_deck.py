@@ -89,14 +89,14 @@ def slide_why(prs):
     add_bullets(slide, 0.6, 1.65, 6.6, 5.2, [
         "AFNI is moving to AI-native development. Every new AI app should follow one shared safety standard, not a different approach each time.",
         "Two reasons this pays off: (1) it builds AI that AFNI and its people can actually trust, and (2) it helps AFNI pass client security reviews before demoing or shipping AI products.",
-        "Regulators are catching up fast. The EU AI Act's toughest rules apply from August 2026. The US NIST AI framework and ISO 42001 are becoming the standard questions clients ask vendors.",
+        "Regulators have already caught up. The EU AI Act's high-risk obligations took effect in August 2026 - they are live now, not coming. The US NIST AI framework and ISO 42001 are the standard questions clients ask vendors.",
         "AFNI's cloud is Azure-first, but not locked in. The goal is to pick the best tool for each job, whether it's open-source or a paid cloud service.",
         "This deck reviews 23 real, hands-on tools - not just theory - to turn \u201cwe should be responsible\u201d into a concrete, buildable plan.",
     ], size=14.5, line_spacing=1.15, space_after=14)
     card = add_rounded(slide, 7.6, 1.65, 5.2, 5.15, NAVY, radius=0.05)
     add_text(slide, 7.9, 1.95, 4.6, 0.4, "KEY DATES", size=12, color=TEAL, bold=True, font=FONT_HEAD)
     dates = [
-        ("Aug 2026", "EU AI Act high-risk obligations take effect"),
+        ("Aug 2026", "EU AI Act high-risk obligations took effect - now in force"),
         ("Ongoing", "NIST AI RMF used as the de-facto US reference"),
         ("Ongoing", "ISO/IEC 42001 turns AI ethics into a certifiable standard"),
         ("Client asks", "\u201cWhich framework do you follow?\u201d is now a standard question"),

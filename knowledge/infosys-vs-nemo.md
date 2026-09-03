@@ -72,4 +72,4 @@ application code.
 
 **Guardrails AI** (`references/guardrails-main`) — verdict **Skip**. Superseded by
 NeMo for AFNI's shape, and it carries a **documented PyPI supply-chain compromise**
-plus an **Aug 2026 Hub deprecation** affecting a stated percentage of validators.
+plus the **Aug 2026 Hub deprecation**, which has already happened, affecting a stated percentage of validators.
