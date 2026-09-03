@@ -397,13 +397,33 @@ class Gateway:
                 # trade as a keyless judge provider being skipped rather than
                 # fatal.
                 self.target_probe = self.target.probe(probe_timeout_from_env(env))
+                usable = (self.target_probe.reachable
+                          and not self.target_probe.unauthorized)
                 LOGGER.log(
-                    logging.INFO if self.target_probe.reachable else logging.WARNING,
+                    logging.INFO if usable else logging.WARNING,
                     "target probe: %s reachable=%s (%s) - model id %r is %s",
                     self.target.config.base_url, self.target_probe.reachable,
                     self.target_probe.detail, self.target.config.model,
                     "VERIFIED by the endpoint's /models listing"
                     if self.target_probe.model_id_verified else "UNVERIFIED")
+                if self.target_probe.unauthorized:
+                    # `reachable=True` on its own reads as "target is fine", and
+                    # it is not: the endpoint is up and rejecting the credential,
+                    # so every /v1/chat generation will fail the same way with
+                    # `target_error`. Said here because the alternative is
+                    # discovering it one request at a time.
+                    LOGGER.warning(
+                        "target probe: %s REFUSED the credential (HTTP %s). The "
+                        "endpoint is up, so `reachable` is true, but %s is %s - "
+                        "every /v1/chat generation will fail with target_error "
+                        "until a key this endpoint accepts is set. The guardrails "
+                        "are unaffected: /v1/guard judges text it is handed and "
+                        "never calls the target.",
+                        self.target.config.base_url, self.target_probe.status,
+                        target_env.ENV_API_KEY,
+                        "set but empty" if target_env.ENV_API_KEY in env
+                        and not (env.get(target_env.ENV_API_KEY) or "").strip()
+                        else "unset")
 
         self.thresholds = threshold_store if threshold_store is not None else ThresholdStore()
         # THE SAVED OVERRIDES ARE LOADED HERE. Without this the console could

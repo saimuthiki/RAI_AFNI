@@ -115,6 +115,53 @@ class TheConsoleParses(unittest.TestCase):
         finally:
             os.unlink(broken)
 
+    @unittest.skipUnless(_node(), "node is not installed")
+    def test_the_judge_chain_line_says_when_local_was_refused(self):
+        """RUNS the function, rather than parsing it.
+
+        `judgeChain` renders the top bar's `judge provider:` line, and that line
+        is a data-residency claim: a judge call ships the flagged content to
+        whoever serves it. When `AFNI_JUDGE_PREFER_LOCAL` was asked for and the
+        local endpoint refused the key, the chain alone reads `gemini[0]` - true,
+        and misleading, because the operator believes their content is staying on
+        their network. A `honoured === false` typo would silently drop the
+        warning while every parse check stayed green, so the strings are asserted
+        here.
+        """
+        script = r"""
+        const m = await import(process.env.AFNI_UI_JS);
+        const out = {
+          refused: m.judgeChain({chain: ['gemini[0]'],
+            prefer_local: {enabled: true, honoured: false, unauthorized: true}}),
+          unreachable: m.judgeChain({chain: ['openai[0]'],
+            prefer_local: {enabled: true, honoured: false, unauthorized: false}}),
+          honoured: m.judgeChain({chain: ['local[nokey]', 'gemini[0]'],
+            prefer_local: {enabled: true, honoured: true, unauthorized: false}}),
+          flag_off: m.judgeChain({chain: ['openai[0]', 'gemini[0]']}),
+          none: m.judgeChain(null),
+          legacy_string: m.judgeChain('openai'),
+        };
+        process.stdout.write(JSON.stringify(out));
+        """
+        result = subprocess.run(
+            [_node(), "--input-type=module", "-e", script],
+            capture_output=True, text=True, timeout=120,
+            env={**os.environ, "AFNI_UI_JS": (_WEB / "ui.js").as_uri()})
+        self.assertEqual(result.returncode, 0, result.stderr[-800:])
+        out = json.loads(result.stdout)
+        self.assertIn("refused the key", out["refused"])
+        self.assertIn("gemini[0]", out["refused"])
+        self.assertIn("not reachable", out["unreachable"])
+        # An honoured preference gets no suffix: the chain already shows local
+        # first, and a note on the normal case is noise that trains the reader
+        # to skip the line.
+        self.assertEqual(out["honoured"], "local[nokey] → gemini[0]")
+        self.assertEqual(out["flag_off"], "openai[0] → gemini[0]")
+        # The object-vs-string bug this function exists to fix.
+        self.assertNotIn("[object Object]", json.dumps(out))
+        self.assertEqual(out["none"], "none")
+        self.assertEqual(out["legacy_string"], "openai")
+
     def test_every_view_is_reachable_from_app_js(self):
         # A view file nobody imports is a screen nobody can open, and it will
         # not be syntax-checked by a browser either. Cheap to catch here.

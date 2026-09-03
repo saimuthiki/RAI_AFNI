@@ -657,15 +657,27 @@ class LocalPreference:
     enabled: bool
     probed: bool = False
     reachable: bool | None = None
+    unauthorized: bool = False
     base_url: str | None = None
     model: str | None = None
     inherited_from_target: bool = False
     action: str = "disabled"
     detail: str = ""
 
+    @property
+    def honoured(self) -> bool:
+        """Did local actually end up first? The residency question, in one word.
+
+        `enabled` only says the operator ASKED. When the answer is no, flagged
+        content goes to whatever remains in the chain - which is a cloud provider
+        in every configuration where this flag is worth setting.
+        """
+        return self.action in ("moved to the front", "inserted at the front")
+
     def to_dict(self) -> dict[str, Any]:
         return {"enabled": self.enabled, "probed": self.probed,
-                "reachable": self.reachable, "base_url": self.base_url,
+                "reachable": self.reachable, "unauthorized": self.unauthorized,
+                "honoured": self.honoured, "base_url": self.base_url,
                 "model": self.model,
                 "inherited_from_target": self.inherited_from_target,
                 "action": self.action, "detail": self.detail}
@@ -684,6 +696,13 @@ def _prefer_local(env: dict[str, str], names: list[str]
     link on the first request, but it does so per request, paying a connect
     timeout each time before the paid provider answers. One probe at startup
     turns that into one decision.
+
+    A 401 or 403 is NOT an answer for this purpose, even though it proves the
+    server is there. The credential it just refused is the one every judge call
+    would carry, so preferring the endpoint would guarantee a refused round trip
+    followed by a fall-through to the cloud provider the flag exists to avoid -
+    while the log claimed the content was staying on this network. So the chain
+    is left as configured and the refusal is reported.
 
     Why the probe CANNOT block the boot: `probe_endpoint` never raises and takes
     a short timeout of its own (default 2 s, `AFNI_JUDGE_PREFER_LOCAL_TIMEOUT`).
@@ -753,6 +772,41 @@ def _prefer_local(env: dict[str, str], names: list[str]
             enabled=True, probed=True, reachable=False, base_url=base_url,
             model=model or None, inherited_from_target=inherited,
             action="left the chain unchanged", detail=probe.detail)
+
+    if probe.unauthorized:
+        # The endpoint is UP and refuses the credential. Putting it first would
+        # buy a refused round trip on every judge call and then fall through to
+        # exactly the provider this flag exists to avoid - so the chain is left
+        # as configured, and the reason is stated as the residency fact it is.
+        #
+        # Observed on AFNI's machine: AFNI_TARGET_API_KEY was set but empty, the
+        # endpoint answered HTTP 401, `local` went to the front anyway, and the
+        # boot log said in as many words that local "keeps it on this network"
+        # while every judge call was in fact going to fall through to Gemini.
+        #
+        # Deliberately NOT overridable. An endpoint that gates /models but serves
+        # /chat/completions unauthenticated would lose its preference here, which
+        # is the safe direction to be wrong in: the chain stays exactly as the
+        # operator typed it, and the warning names the variable to set.
+        # The destination is NOT named here. Which provider actually serves the
+        # call is not known yet - the links are built below, and a keyless one is
+        # skipped - so naming `names[0]` would put a provider in the message that
+        # the chain never reaches. `from_env` says it once the chain exists.
+        LOGGER.warning(
+            "%s is on and the local endpoint %s answered, but it REFUSED the "
+            "credential it was given (%s), so `local` was NOT put in front of "
+            "the judge chain - every judge call would have paid a refused round "
+            "trip and then fallen through anyway. The chain stays as configured: "
+            "%s. Set %s (or %s, which it inherits) to the key this endpoint "
+            "expects.",
+            ENV_PREFER_LOCAL, base_url, probe.detail,
+            ",".join(names) or "empty", "LOCAL_API_KEY", TARGET_API_KEY)
+        return env, names, LocalPreference(
+            enabled=True, probed=True, reachable=True, unauthorized=True,
+            base_url=base_url, model=model or None,
+            inherited_from_target=inherited,
+            action="left the chain unchanged - the endpoint refused the key",
+            detail=probe.detail)
 
     if not model:
         # The link will be built with DEFAULT_LOCAL_MODEL, which is a guess and
@@ -863,6 +917,19 @@ def from_env(env: dict[str, str] | None = None,
     chain = JudgeChain(links, prefer_local=preference)
     LOGGER.info("judge chain configured: %s (model ids NOT verified against a "
                 "live endpoint)", " -> ".join(chain.links))
+    if preference is not None and preference.enabled and not preference.honoured:
+        # HERE, because here is the first point at which the destination is known:
+        # the links are built and a keyless provider has already been skipped, so
+        # `links[0]` is the provider that will actually serve the judge call. The
+        # operator asked for local and did not get it, and the consequence is a
+        # residency one - a judge call carries the FLAGGED CONTENT to whoever
+        # serves it - so it is stated in terms of where that content goes.
+        LOGGER.warning(
+            "%s was asked for and NOT honoured (%s), so the flagged content in "
+            "every Stage-3 judge call will be sent to %s and will leave this "
+            "network. Stage 1 and Stage 2 never make a judge call and are "
+            "unaffected.",
+            ENV_PREFER_LOCAL, preference.action, chain.links[0])
     return chain
 
 

@@ -2828,3 +2828,63 @@ is a screen nobody can open and a file no browser will ever parse.
 
 **1253 tests pass.** Browser-verified: `judge provider: openai[0]`, no Tenant, no
 Enforcement, no "fails open", no page errors.
+
+---
+
+### 2026-09-04 — A 401 from the local endpoint sent flagged content to Gemini
+**Type:** Bug Fix
+**Ask:** From a pasted boot log on AFNI's machine — "ok ?" — after the console fixes landed.
+The install itself was correct (1249 pass, preflight 24 present / 4 credentials outstanding),
+but the log carried a defect nobody had asked about.
+
+**What was found:** the log said
+
+```
+AFNI_JUDGE_PREFER_LOCAL: the local endpoint http://10.10.10.151:8506/v1 answered
+(GET /models -> HTTP 401), so `local` was inserted at the front of the judge chain ...
+Reason: judge calls send the FLAGGED CONTENT to whichever provider serves them, and
+local is the only one that keeps it on this network.
+```
+
+Every clause of that is true except the consequence. `reachable` is `status < 500` —
+correct in itself, since a server that replies has been reached and not every
+OpenAI-compatible server implements `/models` — but a 401 also means the endpoint refused
+the credential *every judge call would carry*. So `local` went to the front of the chain
+and would refuse every call, the chain would fall through, and the flagged content would
+go to **Gemini** — the exact outcome the flag exists to prevent, while the log claimed the
+opposite. `AFNI_TARGET_API_KEY` was present in `.env` but empty.
+
+**What was done:**
+- `EndpointProbe.unauthorized` (401/403), deliberately *separate* from `reachable`:
+  a 401 proves the server is up **and** that it is unusable, and collapsing the two makes
+  a missing key look like a dead host.
+- `_prefer_local` refuses to reorder on a 401/403 and leaves the chain exactly as
+  configured. Not overridable — an endpoint that gates `/models` but serves completions
+  unauthenticated loses its preference, which is the safe direction to be wrong in.
+- Two warnings, each accurate about a different thing: the first names the variable to set,
+  the second — logged after the links are built, so a keyless provider has already been
+  skipped — names the provider the content will *actually* reach (`gemini[0]`, not the
+  `openai` that was first in the configured list and never gets used).
+- The target's own 401 now logs at WARNING and says `AFNI_TARGET_API_KEY is set but empty`,
+  that every `/v1/chat` will fail with `target_error`, and that the guardrails are
+  unaffected — `/v1/guard` judges text it is handed and never calls the target.
+- The console's top bar carries the residency fact where the chain is claimed:
+  `judge provider: gemini[0] · local preferred, refused the key`.
+- `probe_endpoint` copied a probe by splatting `to_dict()` back into the constructor, which
+  broke the moment the report grew a derived key. It uses `dataclasses.replace` now.
+
+### Files
+
+| File | Change |
+|---|---|
+| `afni_rai/target/client.py` | `EndpointProbe.unauthorized`; `replace` instead of the `to_dict()` round trip |
+| `afni_rai/gateway/providers.py` | the 401/403 refusal branch; `LocalPreference.honoured`; the post-build residency warning |
+| `afni_rai/gateway/app.py` | target probe at WARNING when unauthorized, naming the variable and the blast radius |
+| `web/ui.js` | `judgeChain()` appends a refused/unreachable preference |
+| `tests/test_passthrough.py` | 16 tests; `StubTargetServer(models_status=...)` |
+| `tests/test_console_javascript.py` | runs `judgeChain` in node — a `honoured === false` typo would drop the warning silently |
+| `docs/setup.md` | the 401 case for both the judge chain and the target |
+
+**1273 tests pass.** Verified against a real 401 endpoint: both warnings fire, the chain
+stays `gemini[0]`, and the browser shows `local preferred, refused the key` with no page
+errors. All four provider tests fail without the fix.

@@ -66,7 +66,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Sequence
 
 LOGGER = logging.getLogger("afni_rai.target")
@@ -185,10 +185,28 @@ class EndpointProbe:
     detail: str = "not probed"
     latency_ms: int | None = None
 
+    @property
+    def unauthorized(self) -> bool:
+        """The endpoint answered, and REFUSED the credential it was given.
+
+        Deliberately separate from `reachable` rather than folded into it. A 401
+        proves the server is there, which is exactly what `reachable` reports,
+        and collapsing the two would make a missing key look like a dead host.
+        What a 401 also proves is that the endpoint is UNUSABLE: every real call
+        carries the same header and gets the same refusal. Both facts are true at
+        once, so both have to be askable.
+
+        This was AFNI's machine: `AFNI_TARGET_API_KEY` was present but empty,
+        `GET /models` answered `HTTP 401`, and every reader downstream saw only
+        `reachable=True` and treated the endpoint as good.
+        """
+        return self.status in (401, 403)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "configured": self.configured,
             "reachable": self.reachable,
+            "unauthorized": self.unauthorized,
             "base_url": self.base_url,
             "model": self.model,
             "model_id_verified": self.model_id_verified,
@@ -555,6 +573,11 @@ def probe_endpoint(base_url: str, *, model: str = "", api_key: str | None = None
     if not model:
         # No id was offered, so there was nothing to verify. Reporting False
         # would read as "verified and wrong".
-        probe = EndpointProbe(**{**probe.to_dict(), "model": None,
-                                 "model_id_verified": False})
+        #
+        # `replace`, not `EndpointProbe(**probe.to_dict(), ...)`: `to_dict` is the
+        # REPORTING shape and now carries the derived `unauthorized` key, which is
+        # not a field. Splatting it back into the constructor raised TypeError the
+        # moment that key was added, so the round trip through the report is not a
+        # safe way to copy a probe.
+        probe = replace(probe, model=None, model_id_verified=False)
     return probe

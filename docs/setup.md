@@ -477,6 +477,33 @@ or fail a boot, and `/healthz` reports under `judge_provider.prefer_local` what 
 decided and why. It is opt-in because chain order decides whose network the
 flagged content crosses, which is a decision to type out rather than infer.
 
+**An endpoint that answers `401` does not win the preference.** A 401 or 403 means
+the server is up and rejected the credential it was given — the same credential
+every judge call would carry. Preferring it would buy a refused round trip per
+call and then fall through to the cloud provider the flag exists to avoid, so the
+chain is left exactly as configured and the boot log says so twice: once naming
+the variable to set (`LOCAL_API_KEY`, or `AFNI_TARGET_API_KEY`, which it inherits),
+and once naming the provider the flagged content will actually reach:
+
+```
+WARNING  AFNI_JUDGE_PREFER_LOCAL is on and the local endpoint http://... answered,
+         but it REFUSED the credential it was given (GET /models -> HTTP 401) ...
+WARNING  AFNI_JUDGE_PREFER_LOCAL was asked for and NOT honoured ..., so the flagged
+         content in every Stage-3 judge call will be sent to gemini[0] and will
+         leave this network.
+```
+
+The console's top bar says it too: `judge provider: gemini[0] · local preferred,
+refused the key`. Stage 1 and Stage 2 never make a judge call, so neither is
+affected either way.
+
+**The same 401 on the target is separate, and also reported.** `AFNI_TARGET_API_KEY`
+set but empty against an endpoint that requires a key gives `target probe: ...
+reachable=True (GET /models -> HTTP 401)` — the endpoint really is up, and every
+`/v1/chat` generation will still fail with `target_error` until a key it accepts is
+set. `/v1/guard` judges the text you hand it and never calls the target, so the
+guardrails keep working regardless.
+
 Never commit a real key. A key that reaches a commit is public and permanent, and
 rotation is the only remedy.
 

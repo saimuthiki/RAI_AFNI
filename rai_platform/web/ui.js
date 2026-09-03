@@ -272,15 +272,27 @@ export function claim(score, kind) {
  *  copying `.env.example` is enough to trigger it.
  *
  *  The chain is the useful part: which providers will be tried, in order. The
- *  attempt counters and the prefer-local probe live on the How-it-works screen
- *  where there is room for them.
+ *  attempt counters live on the How-it-works screen where there is room.
+ *
+ *  One thing IS appended here rather than deferred to another screen. When
+ *  `AFNI_JUDGE_PREFER_LOCAL` was asked for and did not win, the chain alone is
+ *  misleading in a way that matters: a judge call ships the FLAGGED CONTENT to
+ *  whoever serves it, so an operator who set that flag and reads `gemini[0]`
+ *  needs to know their content is leaving the network. Observed on AFNI's
+ *  machine, where the local endpoint answered HTTP 401 and the preference was
+ *  refused.
  */
 export function judgeChain(provider) {
   if (!provider) return 'none';
   if (typeof provider === 'string') return provider;
   const chain = Array.isArray(provider.chain) ? provider.chain : [];
-  if (!chain.length) return provider.provider || 'none';
-  return chain.join(' → ');
+  const text = chain.length ? chain.join(' → ') : (provider.provider || 'none');
+  const pref = provider.prefer_local;
+  if (pref && pref.enabled && pref.honoured === false) {
+    return `${text} · local preferred, ${pref.unauthorized
+      ? 'refused the key' : 'not reachable'}`;
+  }
+  return text;
 }
 
 export function pageHead(eyebrow, title, lede) {

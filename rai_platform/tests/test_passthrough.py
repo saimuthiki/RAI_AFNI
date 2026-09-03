@@ -1055,12 +1055,16 @@ class StubTargetServer:
     """
 
     def __init__(self, *, answer=SECRET_ANSWER, status=200, delay=0.0,
-                 models=(MODEL,), body=None):
+                 models=(MODEL,), body=None, models_status=200):
         self.answer = answer
         self.status = status
         self.delay = delay
         self.models = list(models)
         self.body = body
+        # `GET /models` answering 401 is not a hypothetical: it is what AFNI's
+        # endpoint did with an empty AFNI_TARGET_API_KEY, and it is the case the
+        # probe read as "reachable, prefer it".
+        self.models_status = models_status
         self.requests = []          # (method, path, has_auth)
         stub = self
 
@@ -1080,6 +1084,10 @@ class StubTargetServer:
                                       "authorization" in
                                       {k.lower() for k in self.headers}))
                 if self.path.endswith("/models"):
+                    if stub.models_status != 200:
+                        self._send(stub.models_status,
+                                   {"error": {"message": "no api key"}})
+                        return
                     self._send(200, {"data": [{"id": m} for m in stub.models]})
                     return
                 self._send(404, {"error": "not found"})
@@ -1250,6 +1258,126 @@ class TestAgainstARealHttpServer(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
+class TestAnAnsweredProbeIsNotAUsableProbe(unittest.TestCase):
+    """`reachable` and `unauthorized` are two questions, and a 401 answers both.
+
+    `reachable = status < 500` is right: a server that replies has been reached,
+    and not every OpenAI-compatible server implements `/models`. What it does not
+    capture is that a 401 refused the credential every subsequent call will
+    carry - so the endpoint is simultaneously up and unusable. Every reader
+    downstream saw only `reachable=True` and drew the wrong conclusion.
+    """
+
+    def probe(self, status):
+        stub = StubTargetServer(models_status=status)
+        try:
+            return probe_endpoint(stub.base_url, model=MODEL, timeout=2.0)
+        finally:
+            stub.close()
+
+    def test_a_401_is_reachable_and_unauthorized_at_the_same_time(self):
+        probe = self.probe(401)
+        self.assertTrue(probe.reachable)
+        self.assertTrue(probe.unauthorized)
+
+    def test_a_403_is_unauthorized_too(self):
+        self.assertTrue(self.probe(403).unauthorized)
+
+    def test_a_200_and_a_404_are_not_unauthorized(self):
+        # 404 is the boundary: no `/models` endpoint is not a refused key.
+        self.assertFalse(self.probe(200).unauthorized)
+        self.assertFalse(self.probe(404).unauthorized)
+
+    def test_an_unreachable_endpoint_is_not_reported_as_unauthorized(self):
+        """No status at all must not read as a refusal - there is nothing to
+        refuse a credential with."""
+        probe = probe_endpoint(f"http://127.0.0.1:{free_port()}/v1",
+                               model=MODEL, timeout=0.5)
+        self.assertFalse(probe.reachable)
+        self.assertFalse(probe.unauthorized)
+        self.assertIsNone(probe.status)
+
+    def test_the_report_carries_it(self):
+        """`/healthz` renders `to_dict()`, so a fact absent from it is a fact an
+        operator cannot see."""
+        self.assertIn("unauthorized", self.probe(401).to_dict())
+        self.assertTrue(self.probe(401).to_dict()["unauthorized"])
+
+    def test_dropping_an_unverifiable_model_id_keeps_the_rest_of_the_probe(self):
+        """`probe_endpoint` used to rebuild the probe by splatting `to_dict()`
+        back into the constructor, which broke the moment the report grew a
+        derived key that is not a field. It copies with `replace` now."""
+        stub = StubTargetServer(models_status=401)
+        try:
+            probe = probe_endpoint(stub.base_url, timeout=2.0)  # no model id
+        finally:
+            stub.close()
+        self.assertIsNone(probe.model)
+        self.assertFalse(probe.model_id_verified)
+        self.assertTrue(probe.unauthorized)
+        self.assertEqual(probe.status, 401)
+
+
+# --------------------------------------------------------------------------- #
+class TestTheGatewaySaysWhenTheTargetRefusesTheKey(unittest.TestCase):
+    """A target that answers 401 is up, configured, and will fail every call.
+
+    The boot line read `target probe: ... reachable=True (GET /models -> HTTP
+    401)` at INFO, which is how AFNI's console came up looking healthy against
+    an endpoint that would reject every generation. The guardrails genuinely are
+    unaffected - `/v1/guard` judges text it is handed and never calls the target
+    - and that distinction has to be in the message, or the operator reads it as
+    a broken platform.
+    """
+
+    def app(self, models_status):
+        stub = StubTargetServer(models_status=models_status)
+        env = {"AFNI_TARGET_BASE_URL": stub.base_url,
+               "AFNI_TARGET_MODEL": MODEL,
+               "AFNI_TARGET_API_KEY": ""}
+        return stub, env
+
+    def test_a_refused_key_is_logged_at_warning_and_names_the_variable(self):
+        stub, env = self.app(401)
+        try:
+            with self.assertLogs("afni_rai.gateway", "INFO") as caught:
+                create_app(warm=False, rails=[CleanRail()], attributions={},
+                           env=env, probe=True)
+        finally:
+            stub.close()
+        refused = [line for line in caught.output if "REFUSED the credential" in line]
+        self.assertEqual(len(refused), 1, caught.output)
+        self.assertTrue(refused[0].startswith("WARNING"))
+        self.assertIn("AFNI_TARGET_API_KEY", refused[0])
+        self.assertIn("set but empty", refused[0])
+        # The line that stops this reading as "the guardrails are broken".
+        self.assertIn("guardrails are unaffected", refused[0])
+
+    def test_a_healthy_target_logs_no_such_warning(self):
+        stub, env = self.app(200)
+        try:
+            with self.assertLogs("afni_rai.gateway", "INFO") as caught:
+                create_app(warm=False, rails=[CleanRail()], attributions={},
+                           env=env, probe=True)
+        finally:
+            stub.close()
+        self.assertEqual(
+            [line for line in caught.output if "REFUSED" in line], [])
+
+    def test_healthz_carries_the_refusal(self):
+        stub, env = self.app(401)
+        try:
+            app = TestClient(create_app(warm=False, rails=[CleanRail()],
+                                        attributions={}, env=env, probe=True))
+            probe = app.get("/healthz").json()["target"]["probe"]
+        finally:
+            stub.close()
+        self.assertTrue(probe["reachable"])
+        self.assertTrue(probe["unauthorized"])
+        self.assertEqual(probe["status"], 401)
+
+
+# --------------------------------------------------------------------------- #
 class TestPreferLocalReordersTheJudgeChain(unittest.TestCase):
     """`AFNI_JUDGE_PREFER_LOCAL`: use the local model for Stage-3 judging
     whenever it is up, and fall back to the paid keys when it is not.
@@ -1337,6 +1465,114 @@ class TestPreferLocalReordersTheJudgeChain(unittest.TestCase):
         self.assertEqual(app.get("/healthz").status_code, 200)
         self.assertEqual(app.get("/healthz").json()["judge_provider"]["chain"],
                          ["openai[0]"])
+
+    def test_an_endpoint_that_refuses_the_key_is_not_preferred(self):
+        """FROM AFNI'S MACHINE. `AFNI_TARGET_API_KEY` was set but empty, the
+        endpoint answered `GET /models -> HTTP 401`, and `local` went to the
+        front of the chain regardless - because `reachable` is `status < 500`
+        and a 401 is an answer.
+
+        The consequence was not a slow judge call. Every judge call would spend
+        a refused round trip on local and then fall through to Gemini, carrying
+        the flagged content to Google - while the boot log said, in as many
+        words, that local "keeps it on this network".
+        """
+        refusing = StubTargetServer(models_status=401)
+        try:
+            chain, _ = self.chain(AFNI_JUDGE_PROVIDER="gemini",
+                                  GOOGLE_API_KEYS="k2",
+                                  LOCAL_BASE_URL=refusing.base_url,
+                                  LOCAL_MODEL=MODEL,
+                                  AFNI_JUDGE_PREFER_LOCAL="true")
+            self.assertEqual(chain.links, ["gemini[0]"])
+            preference = chain.describe()["prefer_local"]
+            # Both facts, separately: the box IS up, and it is unusable.
+            self.assertTrue(preference["reachable"])
+            self.assertTrue(preference["unauthorized"])
+            self.assertFalse(preference["honoured"])
+            self.assertIn("refused the key", preference["action"])
+        finally:
+            refusing.close()
+
+    def test_a_403_is_treated_the_same_as_a_401(self):
+        """Some servers answer a bad key with 403. The credential is equally
+        unusable, so the decision cannot differ."""
+        refusing = StubTargetServer(models_status=403)
+        try:
+            chain, _ = self.chain(AFNI_JUDGE_PROVIDER="openai",
+                                  OPENAI_API_KEYS="k1",
+                                  LOCAL_BASE_URL=refusing.base_url,
+                                  AFNI_JUDGE_PREFER_LOCAL="true")
+            self.assertEqual(chain.links, ["openai[0]"])
+            self.assertTrue(chain.describe()["prefer_local"]["unauthorized"])
+        finally:
+            refusing.close()
+
+    def test_a_404_from_models_is_still_preferred(self):
+        """The boundary. A 404 means this server does not implement `/models`,
+        which says nothing about whether it will judge - and refusing to prefer
+        it would break every minimal OpenAI-compatible server."""
+        no_listing = StubTargetServer(models_status=404)
+        try:
+            chain, _ = self.chain(AFNI_JUDGE_PROVIDER="openai",
+                                  OPENAI_API_KEYS="k1",
+                                  LOCAL_BASE_URL=no_listing.base_url,
+                                  AFNI_JUDGE_PREFER_LOCAL="true")
+            self.assertEqual(chain.links[0], "local[nokey]")
+            self.assertTrue(chain.describe()["prefer_local"]["honoured"])
+        finally:
+            no_listing.close()
+
+    def test_healthz_reports_the_refusal_rather_than_only_the_boot_log(self):
+        """The residency question has to be answerable from the running gateway.
+        An operator who set the flag and reads `chain: [gemini[0]]` with nothing
+        else would conclude they had configured it wrong, not that their key was
+        rejected."""
+        refusing = StubTargetServer(models_status=401)
+        try:
+            env = {"AFNI_JUDGE_PROVIDER": "gemini", "GOOGLE_API_KEYS": "k2",
+                   "LOCAL_BASE_URL": refusing.base_url,
+                   "AFNI_JUDGE_PREFER_LOCAL": "true"}
+            app = TestClient(create_app(warm=False, rails=[CleanRail()],
+                                        attributions={}, env=env))
+            judge = app.get("/healthz").json()["judge_provider"]
+            self.assertEqual(judge["chain"], ["gemini[0]"])
+            self.assertTrue(judge["prefer_local"]["unauthorized"])
+            self.assertFalse(judge["prefer_local"]["honoured"])
+        finally:
+            refusing.close()
+
+    def test_the_log_names_the_provider_that_will_actually_serve(self):
+        """The residency warning is worthless if it names the wrong destination.
+
+        AFNI's chain was `openai,gemini` with `OPENAI_API_KEYS` empty, so openai
+        is skipped and gemini serves. A message built before the links exist
+        would have named openai - a provider the content never reaches. So the
+        destination is logged after the chain is built, from `links[0]`.
+        """
+        refusing = StubTargetServer(models_status=401)
+        try:
+            with self.assertLogs("afni_rai.gateway.providers", "WARNING") as caught:
+                chain, _ = self.chain(AFNI_JUDGE_PROVIDER="openai,gemini",
+                                      GOOGLE_API_KEYS="k2",
+                                      LOCAL_BASE_URL=refusing.base_url,
+                                      AFNI_JUDGE_PREFER_LOCAL="true")
+        finally:
+            refusing.close()
+        self.assertEqual(chain.links, ["gemini[0]"])
+        residency = [line for line in caught.output if "leave this network" in line]
+        self.assertEqual(len(residency), 1, caught.output)
+        self.assertIn("gemini[0]", residency[0])
+        self.assertNotIn("sent to openai", residency[0])
+
+    def test_an_honoured_preference_logs_no_residency_warning(self):
+        """The warning must fire on the exception, not on the normal case - a
+        warning present on every boot is a warning nobody reads."""
+        with self.assertLogs("afni_rai.gateway.providers", "INFO") as caught:
+            self.chain(AFNI_JUDGE_PROVIDER="gemini", GOOGLE_API_KEYS="k2",
+                       LOCAL_BASE_URL=self.stub.base_url,
+                       AFNI_JUDGE_PREFER_LOCAL="true")
+        self.assertEqual([l for l in caught.output if "leave this network" in l], [])
 
     def test_it_inherits_the_target_endpoint_when_local_base_url_is_unset(self):
         """The user configures one machine, not two. When only the target is
