@@ -5,7 +5,7 @@ Security rails: prompt injection, jailbreak, secrets, smuggling, insecure output
 Security is the largest tenet in the assessment (37 checklist items, 16
 contributing tools, 9 capabilities) and the one where the most genuinely free
 detection exists. Five of its sixteen contributing tools earn Stage 1 in
-`knowledge/methodology.md`, so six of the nine capabilities here are covered by
+`docs/frameworks.md`, so six of the nine capabilities here are covered by
 pure-stdlib rails that run on 100% of traffic with no model, no service and no
 third-party import.
 
@@ -1291,7 +1291,7 @@ ATTRIBUTIONS: dict[str, RailAttribution] = {
         mechanism="Cloud API",
         stage=int(Stage.STAGE_3),
         confidence_kind="judge",
-        evidence="knowledge/tenets.md:29-33 - the tenet's cloud pick, 'the most "
+        evidence="docs/tenets.md:29-33 - the tenet's cloud pick, 'the most "
                  "mature named capability for direct and indirect (document-borne) "
                  "prompt injection'; REST surface text:shieldPrompt, api-version "
                  "2024-09-01",
@@ -1306,7 +1306,7 @@ ATTRIBUTIONS: dict[str, RailAttribution] = {
         mechanism="Attack generator",
         stage=int(Stage.OFFLINE),
         confidence_kind="judge",
-        evidence="knowledge/methodology.md Security row for PyRIT - '657 jailbreak "
+        evidence="docs/frameworks.md Security row for PyRIT - '657 jailbreak "
                  "templates + 90 converters + Crescendo/TAP/PAIR/SkeletonKey'; batch "
                  "latency, many model turns per attempt",
         capability="Multi-turn jailbreak attacks",

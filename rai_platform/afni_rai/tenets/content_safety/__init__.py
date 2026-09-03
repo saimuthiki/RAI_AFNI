@@ -2,7 +2,7 @@
 """
 Profanity / Content Safety rails.
 
-The tenet principle from `knowledge/tenets.md` is "don't overpay for commodity
+The tenet principle from `docs/tenets.md` is "don't overpay for commodity
 checks - profanity filtering is free in five or more of the reviewed tools". So
 the honest Stage-1 win here is a *good* banned-word filter plus the canonical
 harm taxonomy, and the money goes on the harder problems. Everything in this

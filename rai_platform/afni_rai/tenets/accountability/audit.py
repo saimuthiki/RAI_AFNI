@@ -3,7 +3,7 @@
 The verdict store: every decision, live or offline, in one schema.
 
 The deck's request-flow slide ends every branch - including delivery - at a
-single box (`knowledge/request-flow.md` §"The flow", the AUDIT STORE box):
+single box (`docs/request-flow.md` §"The flow", the AUDIT STORE box):
 
     AUDIT STORE - every verdict, one schema
     findings . severity . score . redaction spans . OpenTelemetry trace

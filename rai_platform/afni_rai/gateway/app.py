@@ -281,7 +281,7 @@ def withhold_subjects(verdict: dict[str, Any]) -> dict[str, Any]:
     """Strip `Finding.subject` - the matched SSN, the matched API key - from a
     verdict on its way to the wire, leaving `fp` behind.
 
-    The platform's own doctrine, from `docs/02-cascade.md`: "the value withheld -
+    The platform's own doctrine, from `docs/architecture.md`: "the value withheld -
     with a fingerprint instead. The subject is the actual SSN. A guardrail that
     echoes it into a log has defeated itself. `fp` is what a false-positive
     exception keys on." `VerdictStore` already has no column it could go into.

@@ -221,7 +221,7 @@ and HTML are the evidence base for that platform, not the product.
   the Infosys-vs-NeMo call, the request flow, the dev/test loop, the 90-day roadmap, and an honest
   open-questions list. Factual tables were generated from `data/*.json` and `REPO_SLIDES` rather
   than typed by hand. Reading one node costs ~600–1,500 tokens against ~35,000 to extract the deck.
-- Recorded in `knowledge/open-questions.md` that the deck's "August 2026" framing for the EU AI Act
+- Recorded in `docs/plan.md` that the deck's "August 2026" framing for the EU AI Act
   and the Guardrails AI Hub deprecation is now past-tense and needs correcting before reuse with
   the client.
 **Files created / changed:**
@@ -231,7 +231,7 @@ and HTML are the evidence base for that platform, not the product.
 - `.mcp.json` — new, registers the graft MCP server
 - `.gitignore` — rewritten to commit the wiring and ignore the caches
 - `.graphifyignore`, `.ignore` — new
-- `knowledge/INDEX.md`, `decisions.md`, `frameworks.md`, `tenets.md`, `infosys-vs-nemo.md`,
+- `docs/README.md`, `decisions.md`, `frameworks.md`, `tenets.md`, `infosys-vs-nemo.md`,
   `request-flow.md`, `dev-vs-test-loop.md`, `roadmap.md`, `open-questions.md` — new
 - `MEMORY.md` — this entry
 - Not committed (regenerable caches, gitignored): `graft/` (722 MB), `graphify-out/`
@@ -267,7 +267,7 @@ since this session cannot push.
   was ranked Stage 1 for Privacy while its own description said "NO in-repo PII code". Tools that
   supply a contract or taxonomy but no detector of their own cannot occupy a cascade stage.
 - Recorded ten corrections to the existing deck's claims that the source read turned up — see
-  `knowledge/methodology.md`. The most consequential: hai-guardrails' toxicity/profanity/bias guards
+  `docs/frameworks.md`. The most consequential: hai-guardrails' toxicity/profanity/bias guards
   are LLM-judge prompts needing a paid API (not wordlists, so Stage 3 not Stage 1); Giskard v3 is
   LLM/agent-only with its tabular-ML support gone since v2; garak's shields.Up/Down detectors ship
   with no matching probe, so the Phase-3 "point shields at AFNI's gateway" action needs AFNI to
@@ -287,8 +287,8 @@ since this session cannot push.
 - `helpers/build_deck_methodology.py` — new: renders the 7 slides, sized against the `qa_matrix.py` estimator
 - `helpers/build_deck_synthesis.py` — +6 lines: divider + call, after the capability matrices
 - `AFNI_Responsible_AI_Framework.pptx` — grew to 87 slides (new slides 61-68)
-- `knowledge/methodology.md` — new: the same tables in markdown, generated from the data so it cannot drift
-- `knowledge/INDEX.md`, `knowledge/tenets.md` — +links to the new node
+- `docs/frameworks.md` — new: the same tables in markdown, generated from the data so it cannot drift
+- `docs/README.md`, `docs/tenets.md` — +links to the new node
 - `.gitignore` — note added about the reference repos' tracked `.claude/` folders
 
 ### 2026-08-25 (cont'd) — Merged the two conflicting per-tenet recommendation sets
@@ -342,7 +342,7 @@ the updated PPTX in the repo, update this tracker, push, and merge to `main`.
   merged set; unused imports cleaned
 - `helpers/patch_repo_slides.py`, `helpers/patch_repo_slides_2.py` — deleted (spent migrations)
 - `AFNI_Responsible_AI_Framework.pptx` — 87 → 80 slides, merged tenet section at slides 39-45
-- `knowledge/tenets.md` — new section documenting the reconciliation and the two settled conflicts
+- `docs/tenets.md` — new section documenting the reconciliation and the two settled conflicts
 
 ---
 
@@ -540,7 +540,7 @@ and 3?
   rail author forgets is "run it", not "skip it".
 - `InsecureOutputRail` declared `Direction.OUTPUT` — it was previously
   inspecting user prompts, where it means nothing.
-- Wrote `rai_platform/docs/00-architecture.md` (431 lines, 4 Mermaid diagrams):
+- Wrote `docs/architecture.md` (431 lines, 4 Mermaid diagrams):
   the two guardrails, Stage-vs-Phase, the seven branches, Privacy traced end to
   end, every framework by branch/stage/phase, and sample outputs.
 - Answered the short-circuit question in the doc with the real semantics: yes,
@@ -609,7 +609,7 @@ ALLOWED at Stage 1.**
 Stage 1 matches **patterns**: PII shapes, credential formats, injection
 phrasings, a profanity lexicon. Harmful **intent** written in ordinary English has
 no pattern to match, so the entire free tier is blind to it. Recorded in
-`corpus/SCHEMA.md` with the consequence spelled out: **do not present Stage 1 as
+`docs/corpus.md` with the consequence spelled out: **do not present Stage 1 as
 harm protection.** It is data-loss and attack-pattern protection. Harm detection
 is a paid tier, and this corpus is how we will prove the paid tier earns its cost.
 
@@ -731,10 +731,10 @@ lines and they test it with the VPN connected. Consequences for the design:
 - `rai_platform/corpus/ingest.py` — 37 rules, AdvBench split, output derivation, inference
 - `rai_platform/corpus/baseline.py` — **new**, `--limit` / `--per-tenet` / `--seed` / `--check`
 - `rai_platform/corpus/harm-intents.jsonl` — **new**, 11,369 records with a 280-record baseline
-- `rai_platform/corpus/SCHEMA.md` — **new**, incl. the Stage-1 finding
+- `docs/corpus.md` — **new**, incl. the Stage-1 finding
 - `rai_platform/corpus/WARNING.md` — **new**, handling rules for 11,369 harmful prompts
-- `rai_platform/docs/00-architecture.md` — **new**, the two guardrails, drawn
-- `rai_platform/docs/01-setup.md` — **new**, three install levels with Windows paths
+- `docs/architecture.md` — **new**, the two guardrails, drawn
+- `docs/setup.md` — **new**, three install levels with Windows paths
 - `rai_platform/tests/test_corpus_api.py` — **new**, 56 tests
 - `rai_platform/tests/test_corpus_ingest.py` — extended
 - `rai_platform/tests/test_direction.py` — **new**
@@ -796,7 +796,7 @@ both positive and negative test case scenarios, including each and every panel �
 simple English with real examples … so that I will explain the same thing to my
 manager."
 
-**What was done:** `rai_platform/docs/ui-walkthrough.html` — all seven screens,
+**What was done:** `docs/ui-walkthrough.html` — all seven screens,
 every control, a ten-prompt test script with measured expected results, a
 ten-minute demo running order, a Swagger reference and a troubleshooting table.
 
@@ -973,7 +973,7 @@ with no page errors and a correct BLOCK verdict rendered.
 
 ### Still outstanding from this change
 
-`docs/00-architecture.md` and `docs/01-setup.md` contain **captured CLI runs using
+`docs/architecture.md` and `docs/setup.md` contain **captured CLI runs using
 `--internal`**. Those same commands now BLOCK instead of allowing with findings, so the
 outputs must be re-captured by running them, not edited by hand. Tracked separately.
 
@@ -999,7 +999,7 @@ There was also a *third* use of the word, entirely unrelated to either:
 guardrail a `stage` frame came from. **That survives verbatim** — it was checked
 explicitly before and after the bulk edits.
 
-A pleasant side effect: `docs/00-architecture.md` used to spend a whole section
+A pleasant side effect: `docs/architecture.md` used to spend a whole section
 ("Stage ≠ Phase — the distinction that trips everyone") separating two axes that both
 used the numerals 1, 2, 3. With phases gone there is no second numbered axis, so **1/2/3
 now means exactly one thing anywhere in this platform**. The section was rewritten to
@@ -1031,13 +1031,13 @@ cross-reference, grouped by **adoption verdict** instead of by calendar window.
 | the left-nav "Roadmap phases — a calendar" legend | "Adoption verdict — per repository" |
 | Frameworks' **Phase** column and "All phases" filter | **Verdict** column, "All verdicts" filter |
 | architecture's "Phase is not stage" section | "A verdict is not a stage" — same lesson, live axis |
-| `knowledge/roadmap.md` | `knowledge/build-plan.md` |
+| `knowledge/roadmap.md` | `docs/plan.md` |
 
 All 23 repositories are still accounted for exactly once — asserted in
 `test_gateway.test_repositories_cross_references_the_inventory`, which checks both the
 count and that there are no duplicates.
 
-### `knowledge/build-plan.md` — all 26 actions kept, arrangement dropped
+### `docs/plan.md` — all 26 actions kept, arrangement dropped
 
 The old roadmap's 26 numbered actions were not the problem; the calendar was. They are
 regrouped by **kind of work** (runtime gateway / testing and CI / measurement / fairness
@@ -1063,7 +1063,7 @@ there is `Authorization: Bearer XXXXX` at `config.py:99`, inside a function that
 repo's own test suite. It even ships a redactor at `core/security.py:173` that scrubs
 bearer values from its logs.
 
-That claim appeared in `phases.py`, `README.md` and `knowledge/open-questions.md` and was
+That claim appeared in `phases.py`, `README.md` and `docs/plan.md` and was
 one of the stated reasons the repo sat at "Bench for later". It is corrected in all
 three. The repo stays benched — it is a red-team fuzzer overlapping garak and PyRIT,
 which is a real reason — but not for a credential that was never there. **Leaving a
@@ -1085,12 +1085,12 @@ contains any of `Phase 1`, `Phase 2`, `Phase 3`, `Roadmap`, `90-day`, `days 0–
 Frameworks table renders 27 adoption chips grouped adopt → combine → bench → skip.
 
 The doc tables were **derived from the registry, not hand-edited**: 32 verdict cells in
-`docs/00-architecture.md` and 32 in `README.md` were rewritten by looking each repo up in
+`docs/architecture.md` and 32 in `README.md` were rewritten by looking each repo up in
 `repositories.py`, so the columns cannot drift from the code.
 
 ### Deliberately not done in this commit
 
-* `rai_platform/docs/ui-walkthrough.html` still describes the Roadmap screen, the phase
+* `docs/ui-walkthrough.html` still describes the Roadmap screen, the phase
   bracket and "Phase is not stage". It is being rebuilt in full for AFNI's separate
   offline-mode request, so it is corrected there rather than twice.
 * `analysis/` — the 87-slide deck and `guardrail_atlas.html` still carry the "Adoption
@@ -1210,7 +1210,7 @@ sets as **exact sets**, so neither silent narrowing nor silent widening can pass
 
 ### So this was a DOCUMENTATION defect, not a code defect
 
-`knowledge/request-flow.md` listed **five example checks on the input side and five
+`docs/request-flow.md` listed **five example checks on the input side and five
 different ones on the output side**. It had been transcribed from a deck slide — a
 conceptual diagram — and never reconciled with the built platform. It was not merely
 sparse, it was **wrong in a way that inverted the meaning**:
@@ -1270,8 +1270,8 @@ ignores `modifications.spans` **leaks the value the gateway just caught**.
 
 ## 2026-09-03 — CLI examples in the docs re-captured, not just edited
 
-Removing `--internal` left captured CLI output in `docs/00-architecture.md`,
-`docs/01-setup.md` and `README.md` that the commands no longer produce. Deleting the
+Removing `--internal` left captured CLI output in `docs/architecture.md`,
+`docs/setup.md` and `README.md` that the commands no longer produce. Deleting the
 flag and keeping the old output would have been fabrication, so every example was
 **re-run** and the real output pasted.
 
@@ -1305,7 +1305,7 @@ different things.
 
 ### The setup doc's proof-of-installation test was BROKEN, not just stale
 
-`docs/01-setup.md` and `README.md` both told the reader: run the injection prompt,
+`docs/setup.md` and `README.md` both told the reader: run the injection prompt,
 **`ALLOWED` before the model, `BLOCKED` after** — "that single line is the clearest
 evidence the drop-in is live".
 
@@ -1366,7 +1366,7 @@ convention before opening the file.
 AFNI's call: fork into an AFNI-owned repo. That needs their infrastructure, so it is
 recorded as ruled-but-not-yet-done. **The step that could be taken here was taken:**
 
-`pip install llm-guard` was **unpinned** in `README.md`, `docs/01-setup.md` and
+`pip install llm-guard` was **unpinned** in `README.md`, `docs/setup.md` and
 `.env.example`. For an *abandoned* package that is a standing supply-chain risk — nobody
 is shipping fixes, and an unpinned install takes whatever is published. Now
 `llm-guard==0.3.16`, which is the exact version the rails were written against and the
@@ -1531,3 +1531,117 @@ Published at the **same URL** — `https://claude.ai/code/artifact/410ec552-62af
 **Verified:** renders in both light and dark with zero page errors, no horizontal
 overflow, six screens, 13 sections, and none of `Phase 1/2/3`, `Roadmap`, `days 30–60` or
 `seven screens` anywhere.
+
+## 2026-09-03 — Documentation consolidated into one folder; corpus range added
+
+AFNI: *"I dont want all these messy folder structure. You can store all Required
+Necessary files in one of the folder And try to reduce the Number of markdown files and
+try to embed the information one after the other. If it is mergeable And you can have some
+hyperlinks."* Plus: run an exact range of corpus records from the UI, and tell them where
+the corpus is.
+
+### The corpus, and the range
+
+**`rai_platform/corpus/harm-intents.jsonl`** — 11,369 records (AFNI guessed 8,000), one
+JSON object per line, 6.35 MB.
+
+The UI already had a **number** (the size slider) and **filters**. It had no way to name
+**positions**. Added on all three surfaces — `Selection.start/end`, `start`/`end` on
+`POST /v1/corpus/run` and `/run/stream`, `--start`/`--end` on `corpus/baseline.py`.
+
+Two decisions that had to be made explicitly:
+
+**1-based and INCLUSIVE.** 10 to 20 is **eleven** records. That is how a person counts, and
+a range quietly returning ten would be read as a corpus bug rather than an indexing one.
+The console prints the count live — *"11 records — the range is inclusive, so 10 to 20 is
+11, not 10"* — and a test pins it.
+
+**A range ignores the seed and indexes the ID-SORTED pool.** This is the property the
+feature rests on: *"the 10th record"* must be the same record on every machine and at every
+seed. Verified across seeds 0/1/42/random and with the corpus rows shuffled — the same
+eleven ids every time. Because the seed is irrelevant, the console **hides the Draw
+control** in range mode; leaving it visible would say it does something.
+
+A range and per-tenet sampling are **rejected together** rather than resolved, and a bad
+range gets its own code `range_out_of_bounds` — a typo'd range is a mistake, an empty
+filter is an answer.
+
+`corpus/baseline.py` now **delegates to `regression.select`** rather than reimplementing
+sampling. That duplication was live: the range would have been written twice and could
+disagree, so the same range from the CLI and the console would have judged different
+records. Verified identical ids from both paths.
+
+### Two bugs of my own in that work
+
+1. The range inputs used `total` for their `max`, but `total` is declared **inside** the run
+   function — a temporal-dead-zone `ReferenceError` before the first run. The corpus size
+   is `sum.records`.
+2. `start=99999` reported *"a range runs forwards"*, because `end` defaults to the pool
+   size so the inversion check fired first and gave the **wrong diagnosis**. Bounds now
+   checked before inversion, with a test asserting the message does not say "forwards".
+
+### references/ — 1.6 GB removed, every citation intact
+
+`references/` was 99.8% of the tracked repository. But it is not dead weight in principle:
+**49 citations** resolve into it, and those are what make a ported pattern auditable.
+
+So the split was made on what the citations actually point at. All 49 resolve to exactly
+**eight extensions**: `.py .ts .mdx .go .md .json .sql .rst`. Everything else was removed —
+**2,526 files, 1,643 MB**: `.pkl` 378 MB, `.png` 211 MB, `.ipynb` 198 MB, `.pth` 188 MB,
+`.pptx` 130 MB, `.gif` 99 MB, `.joblib` 93 MB, plus a 13 MB screencast and sample DICOMs.
+
+**The safety check ran before the deletion**: zero cited paths in the delete set. Verified
+after, too, by opening three cited files at their cited lines — `config.py:99` still reads
+`Authorization: Bearer XXXXX`, `on_fail.py:24` still reads `REASK = "reask"`. Two
+apparently-missing paths turned out to be prose ellipses (`.../fairness/service/...`).
+
+1.9 GB → 294 MB on disk. `.gitignore` now keeps these extensions out, with the reasoning
+recorded there.
+
+**NOT done, needs a decision: `.git` is still 855 MB.** Deleting files does not remove
+their blobs from history. Reclaiming it needs `git filter-repo`/BFG, which rewrites every
+commit SHA and needs a force-push that invalidates every clone.
+
+### Documentation: 19 files across 6 directories → 9 files in one
+
+| Was | Now |
+|---|---|
+| `rai_platform/docs/00-architecture.md` + `02-cascade.md` + `knowledge/dev-vs-test-loop.md` | `docs/architecture.md` |
+| `knowledge/frameworks.md` + `methodology.md` + `infosys-vs-nemo.md` | `docs/frameworks.md` |
+| `knowledge/build-plan.md` + `decisions.md` + `open-questions.md` | `docs/plan.md` |
+| `rai_platform/docs/01-setup.md` + `rai_platform/models/MANIFEST.md` | `docs/setup.md` |
+| `knowledge/tenets.md` | `docs/tenets.md` |
+| `knowledge/request-flow.md` | `docs/request-flow.md` (still generated) |
+| `rai_platform/corpus/SCHEMA.md` | `docs/corpus.md` (+ the range docs) |
+| `rai_platform/docs/ui-walkthrough.html` | `docs/ui-walkthrough.html` |
+| `knowledge/INDEX.md` | `docs/README.md` — the map, with the five things worth knowing first |
+
+Merged by **demoting headings**, not re-authoring: content is preserved exactly, each
+section carries a *"Was `<old path>`"* provenance line, and the merge reason is stated at
+the top of each file.
+
+**Two files deliberately stayed put:**
+
+- `rai_platform/corpus/WARNING.md` — it governs 11,369 harmful prompts, and anyone opening
+  that folder must meet it **there** rather than be trusted to have read a docs index.
+- `deliverables/Responsible_AI_Framework_Brief_for_PPT.md` — a client *deliverable*
+  alongside the deck, not documentation. Folding it into `docs/` would blur the two.
+
+`.claude/` (22 files) was left alone: agent and skill definitions must live at those exact
+paths for the harness to load them. They are configuration, not project documentation.
+
+### Three link-rot bugs, all the same shape
+
+Paths built from **segments** rather than string literals survived the bulk rewrite:
+
+1. `build_request_flow.py` — `_ROOT / "knowledge" / "request-flow.md"`
+2. `test_direction.py` — `parents[2] / "knowledge" / "request-flow.md"`
+3. `test_passthrough.py` — `os.path.join(os.path.dirname(_HERE), "docs", "00-architecture.md")`
+
+The third one is the one that **failed a test**, which is how the class of bug got found;
+the other two would have silently written and read the wrong location. A string-replace
+sweep cannot see a path that is assembled, and that is worth remembering.
+
+**All 35 internal markdown links were then machine-checked: 6 broken, all fixed, 0 left.**
+
+**1029 tests OK** bare and provisioned. Deck rebuilt, 83 slides, `qa_deck` 0 issues.

@@ -356,7 +356,7 @@ class TestTheRailsEndpointExposesDirection(unittest.TestCase):
 
 # --------------------------------------------------- the generated doc ------ #
 class TestTheRequestFlowDocMatchesTheCode(unittest.TestCase):
-    """`knowledge/request-flow.md` is generated from the rail registry.
+    """`docs/request-flow.md` is generated from the rail registry.
 
     It exists because the hand-written version drifted badly: it had been copied
     from a deck slide and listed five example checks on the input side and five
@@ -366,7 +366,7 @@ class TestTheRequestFlowDocMatchesTheCode(unittest.TestCase):
     """
 
     DOC = (pathlib.Path(__file__).resolve().parents[2]
-           / "knowledge" / "request-flow.md")
+           / "docs" / "request-flow.md")
 
     @classmethod
     def setUpClass(cls):

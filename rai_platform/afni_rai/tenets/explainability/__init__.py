@@ -3,7 +3,7 @@
 Explainability & Transparency rails.
 
 This tenet is the one where an honest answer looks thin. Of the 13 reviewed
-tools that contribute to it (knowledge/methodology.md, "Explainability &
+tools that contribute to it (docs/frameworks.md, "Explainability &
 Transparency"), six are Batch/Offline and two are LLM judges. SHAP, LIME and
 AIF360's FACTS are classical-ML tooling whose cost scales with samples x
 features; putting any of them in a request path would be a latency incident, and

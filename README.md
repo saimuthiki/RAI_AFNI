@@ -80,8 +80,8 @@ python3 rai_platform/cli.py preflight
 `preflight` is the one to remember. It reads every model id and pinned revision
 off the rail that loads it, so it cannot drift from what the platform actually
 asks for, and it names the destination path for each missing asset.
-**`rai_platform/docs/01-setup.md` is the step-by-step version**, in three levels
-you can stop after any of. **`rai_platform/docs/00-architecture.md` answers "a
+**`docs/setup.md` is the step-by-step version**, in three levels
+you can stop after any of. **`docs/architecture.md` answers "a
 prompt arrives — what actually happens to it?"** — the input/output guardrail
 split, the seven branches, one branch traced end to end, every framework by
 stage, and sample outputs for jailbroken vs clean.
@@ -104,7 +104,7 @@ python3 rai_platform/serve.py
 
 Without these, the seven Stage-2 rails report `unjudged`, which fails closed on
 client-facing traffic. Full walk-through in
-[`rai_platform/docs/01-setup.md`](rai_platform/docs/01-setup.md); the short
+[`docs/setup.md`](docs/setup.md); the short
 version is three commands and one script.
 
 **Libraries** — all from PyPI, none blocked anywhere:
@@ -246,7 +246,7 @@ The three things worth noticing:
 ```
 RAI_AFNI/
 ├── rai_platform/            THE TOOL
-├── knowledge/               distilled findings the tool was built from
+├── docs/                    ALL documentation — one folder, start at docs/README.md
 ├── analysis/                the source-level review pipeline (deck + HTML)
 ├── deliverables/            client-facing outputs of that review
 ├── references/              the 23 third-party repos, read at source level
@@ -261,27 +261,26 @@ RAI_AFNI/
 |---|---|
 | `afni_rai/contract/models.py` | The **fixed boundary**: `GuardEvent`, `Verdict`, `Finding`, pinned to OpenGuardrails protocol `0.8`. Also `GuardEvent.texts()`, which walks an arbitrary payload for judgeable text and skips transport metadata keys. |
 | `afni_rai/contract/explanation.py` | The **attribution layer** — `RailAttribution`, `FindingExplanation`, `explain()`. Separate from the verdict because upstream sets `additionalProperties: false` on both `verdict` and `findings[]`, so AFNI's extra fields cannot live inside them. |
-| `afni_rai/cascade/rail.py` | The `Rail` protocol, `RailResult`, `Stage`, and `CheckContext` — the per-request object that carries the tenant, the client-facing flag, and the threshold resolver. |
+| `afni_rai/cascade/rail.py` | The `Rail` protocol, `RailResult`, `Stage`, `Direction`, and `CheckContext` — the per-request object carrying the threshold resolver and the log of every threshold actually read. |
 | `afni_rai/cascade/engine.py` | The **one** place staging, short-circuiting, deduplication, fail-closed and fail-loud are decided. Dozens of rails, one engine — so the rules that never bend live here and not in rail code. |
 | `afni_rai/registry/capabilities.py` | The 65 capabilities from the capability matrix, and the five honest coverage states: `implemented`, `dependency-missing`, `cloud-not-configured`, `offline-only`, `gap`. |
 | `afni_rai/registry/repositories.py` | The 23 reviewed repos and their adoption verdicts, cross-referenced against what is actually wired. Answers "we said adopt garak — is garak really here, and how?" |
 | `afni_rai/tenets/<tenet>/` | One package per tenet. Each exports `RAILS`, `ATTRIBUTIONS` and `register(registry)`. This is where ported detector logic lives. |
-| `afni_rai/tenets/accountability/` | The infrastructure tenet: `thresholds.py` (per-tenant threshold store), `audit.py` (sqlite verdict trail), `policy.py` (fail modes), `frameworks.py` (compliance mapping), `remediation.py`, `tracing.py`, `gating.py`, `corpus.py`. |
+| `afni_rai/tenets/accountability/` | The infrastructure tenet: `thresholds.py` (the global threshold store plus an operator override layer, with a read log), `audit.py` (sqlite verdict trail), `policy.py` (per-category fail modes), `frameworks.py` (compliance mapping), `remediation.py`, `tracing.py`, `gating.py`, `corpus.py`. |
 | `afni_rai/gateway/` | The FastAPI app, request/response models, and the judge-provider fallback chain. The only place an outbound vendor call is made. |
 | `afni_rai/cli.py` | `check`, `coverage`, `rails`. The fastest way to see the gateway decide something. |
 | `web/` | The operator UI — vanilla ES modules, no build step, no CDN. `views/live.js` consumes the SSE stream. |
 | `tests/` | 747 tests, standard-library `unittest` only. |
-| `docs/` | `02-cascade.md` — the cascade in depth, with the source evidence behind each rule. |
 | `samples/` | Sample payloads per tenet, wired into Swagger as examples. |
 
 ### The other folders
 
 | Path | Responsible for |
 |---|---|
-| `knowledge/` | Ten markdown nodes distilling the source-level review — `methodology.md` carries the mechanism, cost, latency and stage for all 108 repo-tenet pairs, each with `file:line` evidence. Reading one node costs ~600–1,500 tokens; extracting the same conclusion from the deck costs ~35,000. |
+| `docs/` | **All documentation, in one folder.** Seven markdown files plus the console walkthrough. Consolidated 2026-09-03 from 19 files across 6 directories — `knowledge/`, `rai_platform/docs/`, `rai_platform/corpus/`, `rai_platform/models/` and the root. Start at [`docs/README.md`](docs/README.md), which says which file answers which question. |
 | `analysis/` | The pipeline that renders the 80-slide deck and the HTML atlas from `analysis/data/*.json`. **Not part of the runtime.** The tool reads two of its data files — `capability_matrix_data.json` and `tenet_methodology_data.json` — as the source of truth for capability names and stage assignment. |
 | `deliverables/` | `AFNI_Responsible_AI_Framework.pptx`, `guardrail_atlas.html`, and the executive brief. Rendered outputs, not sources of truth. |
-| `references/` | The 23 reviewed repositories, vendored so every ported pattern can cite the line it came from. Large; to be removed once the build is signed off. |
+| `references/` | The 23 reviewed repositories, vendored so every ported pattern can cite the line it came from — 49 such citations resolve into here, which is what makes a ported pattern auditable rather than asserted. **Trimmed 2026-09-03**: 1,643 MB of non-source payload (model weights, slide decks, notebooks, images, a screencast) removed, since not one citation pointed at any of it. 294 MB of source remains and `.gitignore` keeps the rest out. |
 | `graft/`, `graphify-out/` | Generated indexes — a code graph and a whole-project knowledge graph. Both are gitignored. |
 
 ---
@@ -496,7 +495,7 @@ put on a request path at all.
 Guardrails AI ships base classes only — every real validator is a separate PyPI
 package — and carries a documented historical PyPI supply-chain compromise, so any
 adoption must pin and vendor rather than resolve at install time. AFNI has asked for it
-to be integrated regardless; that is tracked in `knowledge/open-questions.md`.
+to be integrated regardless; that is tracked in `docs/plan.md`.
 
 Four repos with a `bench` or `skip` verdict still show up as `implemented`, and that is
 not a contradiction: **their patterns were ported, the repos were not adopted.** Safe
@@ -1171,14 +1170,17 @@ shape:
 
 ## Where to read next
 
+**[`docs/README.md`](docs/README.md) is the map** — it says which file answers which
+question, and opens with the five things worth knowing before anything else.
+
 | Document | For |
 |---|---|
-| `rai_platform/docs/00-architecture.md` | **how it works** — input/output guardrails, the 7 branches, one branch in full, every framework by stage, and sample outputs |
-| `rai_platform/docs/01-setup.md` | **step-by-step setup in three levels** — bare, gateway, Stage-2 models |
-| `rai_platform/models/MANIFEST.md` | every downloadable asset, with fetch commands |
-| `rai_platform/docs/02-cascade.md` | the cascade in depth, with the source evidence behind every rule |
-| `knowledge/methodology.md` | mechanism, cost, latency and stage for all 108 repo-tenet pairs |
-| `knowledge/decisions.md` | the locked architecture calls |
-| `knowledge/tenets.md` | the single recommendation per tenet |
-| `knowledge/open-questions.md` | what is genuinely unresolved |
+| [`docs/ui-walkthrough.html`](docs/ui-walkthrough.html) | **open in a browser** — every console screen in plain English, assuming nothing |
+| [`docs/architecture.md`](docs/architecture.md) | how it works: the two guardrails, the cascade, the seven branches, sample outputs |
+| [`docs/request-flow.md`](docs/request-flow.md) | **generated from the code** — which checks run on the prompt, the answer, or both |
+| [`docs/setup.md`](docs/setup.md) | step-by-step setup in three levels, and every model file with its fetch command |
+| [`docs/corpus.md`](docs/corpus.md) | the 11,369-prompt corpus, and how to run a sample or an exact range |
+| [`docs/frameworks.md`](docs/frameworks.md) | all 23 projects: verdict, mechanism, cost and stage per repo-tenet pair |
+| [`docs/tenets.md`](docs/tenets.md) | the seven tenets and the recommendation per tenet |
+| [`docs/plan.md`](docs/plan.md) | what to build, what is decided, what is still open |
 | `.env.example` | every configuration knob, with the reasoning inline |

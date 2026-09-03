@@ -236,7 +236,7 @@ class TestTheTargetIsNeverCalledWhenTheInputGuardBlocks(unittest.TestCase):
     A prompt refused at the input guardrail costs nothing because the model is
     never asked. If the target is called anyway - to "have the answer ready", or
     because the order got refactored - then the input guardrail costs money and
-    prevents nothing, and the claim in `docs/00-architecture.md` section 1 is
+    prevents nothing, and the claim in `docs/architecture.md` section 1 is
     false. So this asserts the request COUNT, not merely the response.
     """
 
@@ -1521,11 +1521,14 @@ class TestTheDocumentedContract(unittest.TestCase):
                          f"the response shape varies by decision: {shapes}")
 
     def test_the_docs_describe_the_endpoint(self):
-        """`docs/00-architecture.md` section 1 draws this topology, so the
+        """`docs/architecture.md` section 1 draws this topology, so the
         passthrough has to be findable from it - a topology diagram with no
         endpoint next to it is where the "does it actually sit in front of the
         model" question comes from."""
-        path = os.path.join(os.path.dirname(_HERE), "docs", "00-architecture.md")
+        # Repo root, not rai_platform/: all documentation moved into one
+        # top-level docs/ folder on 2026-09-03.
+        path = os.path.join(os.path.dirname(os.path.dirname(_HERE)),
+                            "docs", "architecture.md")
         with open(path, encoding="utf-8") as handle:
             text = handle.read()
         self.assertIn("/v1/chat", text)

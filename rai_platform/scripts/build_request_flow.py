@@ -1,4 +1,4 @@
-"""Regenerate knowledge/request-flow.md from the live rail registry."""
+"""Regenerate docs/request-flow.md from the live rail registry."""
 import importlib, pathlib, sys
 
 # __file__-relative, not cwd-relative: this script is run from the repo root, from
@@ -7,7 +7,7 @@ import importlib, pathlib, sys
 _HERE = pathlib.Path(__file__).resolve().parent      # rai_platform/scripts
 _PLATFORM = _HERE.parent                             # rai_platform
 _ROOT = _PLATFORM.parent                             # repo root
-OUT = _ROOT / "knowledge" / "request-flow.md"
+OUT = _ROOT / "docs" / "request-flow.md"
 sys.path.insert(0, str(_PLATFORM))
 from afni_rai.cascade.rail import Stage
 

@@ -17,7 +17,7 @@ and `filter` (drop the invalid value) is not the same thing as masking a span an
 continuing, because filtering loses the surrounding text.
 
 AFNI is an enforcement point, so the vocabulary comes from the deck's
-request-flow slide instead (`knowledge/request-flow.md` §"Four things that are easy to get wrong"), which names four
+request-flow slide instead (`docs/request-flow.md` §"Four things that are easy to get wrong"), which names four
 and only four branches for a response that is not safe:
 
     Toxic         -> Block / Refuse

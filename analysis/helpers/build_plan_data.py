@@ -19,7 +19,7 @@ the moment somebody reworded it, and a plan that quietly moves an item into the
 wrong group is worse than one that fails loudly - so a missing or extra index
 raises instead.
 
-Group order and wording match `knowledge/build-plan.md`.
+Group order and wording match `docs/plan.md`.
 """
 
 #: Colour is chosen by the RENDERER, not here - the deck and the HTML have

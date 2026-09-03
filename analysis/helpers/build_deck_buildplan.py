@@ -21,7 +21,7 @@ the wrong group is worse than one that fails loudly - so a missing or extra inde
 raises instead.
 
 The grouping itself lives in `helpers/build_plan_data.py`, which the Atlas HTML
-also reads, so the deck, the HTML and `knowledge/build-plan.md` cannot disagree
+also reads, so the deck, the HTML and `docs/plan.md` cannot disagree
 about what the plan is. This module only decides how it LOOKS on a slide.
 """
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
