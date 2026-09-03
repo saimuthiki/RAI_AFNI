@@ -55,6 +55,8 @@ class RunRequest(BaseModel):
             {"limit": 60, "owasp": "LLM01", "direction": "input", "seed": 0,
              "max_stage": 2},
             {"limit": 40, "direction": "output", "seed": -1, "max_stage": 2},
+            {"start": 10, "end": 20, "max_stage": 1},
+            {"start": 1, "end": 50, "tenet": "Privacy", "max_stage": 1},
         ]})
 
     limit: int = Field(default=100, ge=1, le=100_000, description=(
@@ -79,6 +81,21 @@ class RunRequest(BaseModel):
         "Deterministic sample (default 0), so two runs of the same size are "
         "comparable. `-1` draws a genuinely random sample - useful for exploring, "
         "useless for regression testing."))
+    start: int | None = Field(default=None, ge=1, description=(
+        "POSITIONAL RANGE, 1-based and INCLUSIVE. `start: 10, end: 20` runs the "
+        "10th to the 20th record - eleven records, not ten. Use this instead of "
+        "`limit` when you want SPECIFIC records rather than a sample.\n\n"
+        "The range indexes the pool in **id order** and deliberately ignores "
+        "`seed`: the 10th record has to be the same record on every machine and "
+        "at every seed, or the position means nothing. Any `tenet`/`owasp`/"
+        "`direction` filter is applied FIRST, so the range is over the filtered "
+        "pool - `GET /v1/corpus` gives you each pool's size.\n\n"
+        "Cannot be combined with `per_tenet`: one asks for specific records, the "
+        "other for a representative spread."))
+    end: int | None = Field(default=None, ge=1, description=(
+        "The last record of the range, INCLUSIVE. Omit to run from `start` to "
+        "the end of the pool - subject to the run cap, which is likely to reject "
+        "it on a pool this size."))
     max_stage: int = Field(default=2, ge=1, le=3, description=(
         "Cascade ceiling. `1` is free and sub-millisecond. `2` adds the local "
         "models and costs 1-3 s per record. `3` would call a paid third-party "
@@ -306,12 +323,18 @@ def corpus_router(gateway: Any) -> APIRouter:
         selection = regression.Selection(
             limit=body.limit, per_tenet=body.per_tenet, tenet=body.tenet,
             owasp=body.owasp, direction=body.direction, seed=body.seed,
-            max_stage=ceiling)
+            max_stage=ceiling, start=body.start, end=body.end)
         try:
             chosen = regression.select(records, selection)
         except regression.SampleTooLarge as exc:
             return _error("sample_too_large", str(exc), 422,
                           {"cap": regression.max_sample()})
+        except regression.RangeOutOfBounds as exc:
+            # A separate code from empty_selection on purpose: a bad range is a
+            # typo to fix, an empty filter is an answer.
+            return _error("range_out_of_bounds", str(exc), 422,
+                          {"start": body.start, "end": body.end,
+                           "corpus_records": len(records)})
         if not chosen:
             return _error(
                 "empty_selection",
@@ -353,12 +376,18 @@ def corpus_router(gateway: Any) -> APIRouter:
         selection = regression.Selection(
             limit=body.limit, per_tenet=body.per_tenet, tenet=body.tenet,
             owasp=body.owasp, direction=body.direction, seed=body.seed,
-            max_stage=ceiling)
+            max_stage=ceiling, start=body.start, end=body.end)
         try:
             chosen = regression.select(records, selection)
         except regression.SampleTooLarge as exc:
             return _error("sample_too_large", str(exc), 422,
                           {"cap": regression.max_sample()})
+        except regression.RangeOutOfBounds as exc:
+            # A separate code from empty_selection on purpose: a bad range is a
+            # typo to fix, an empty filter is an answer.
+            return _error("range_out_of_bounds", str(exc), 422,
+                          {"start": body.start, "end": body.end,
+                           "corpus_records": len(records)})
         if not chosen:
             return _error(
                 "empty_selection",

@@ -633,5 +633,137 @@ class TestStreamRoute(unittest.TestCase):
                              "sample_too_large")
 
 
+# --------------------------------------------------------- positional range -- #
+class TestPositionalRange(unittest.TestCase):
+    """`start`/`end`: run the Nth to the Mth record, 1-based and INCLUSIVE.
+
+    AFNI's ask: "if the corpus is having 8000 records and the user is wishing to
+    test 10th to 20th, he would be able to configure that in the UI."
+    """
+
+    def setUp(self):
+        self.records = [
+            record(f"afni-corpus-{i:012x}", prompt=f"prompt number {i}",
+                   tenet="Privacy" if i % 2 else "Security")
+            for i in range(60)]
+
+    def test_ten_to_twenty_is_eleven_records_not_ten(self):
+        """The off-by-one that would be read as a corpus bug rather than an
+        indexing one, so it is pinned rather than assumed."""
+        got = regression.select(self.records, regression.Selection(start=10, end=20))
+        self.assertEqual(len(got), 11)
+
+    def test_it_is_one_based(self):
+        first = regression.select(self.records, regression.Selection(start=1, end=1))
+        ordered = sorted(self.records, key=lambda r: r["id"])
+        self.assertEqual(first[0]["id"], ordered[0]["id"])
+
+    def test_the_range_ignores_the_seed_entirely(self):
+        """The property the whole feature rests on. If the seed moved a range,
+        "the 10th record" would name a different record per seed and the number
+        would be meaningless."""
+        ids = [tuple(r["id"] for r in regression.select(
+                   self.records, regression.Selection(start=5, end=15, seed=s)))
+               for s in (0, 1, 42, -1)]
+        self.assertEqual(len(set(ids)), 1, "a range moved when the seed changed")
+
+    def test_the_range_ignores_the_files_line_order(self):
+        """Same reasoning as `_shuffled` sorting by id first: the corpus file's
+        line order is an artefact of the ingest run, so a range over raw line
+        order would move if the corpus were regenerated."""
+        import random as _r
+        shuffled = list(self.records)
+        _r.Random(7).shuffle(shuffled)
+        a = [r["id"] for r in regression.select(
+            self.records, regression.Selection(start=10, end=20))]
+        b = [r["id"] for r in regression.select(
+            shuffled, regression.Selection(start=10, end=20))]
+        self.assertEqual(a, b)
+
+    def test_a_filter_is_applied_before_the_range(self):
+        pool = [r for r in self.records if (r.get("tenet") or "") == "Privacy"]
+        if len(pool) < 3:
+            self.skipTest("fixture holds too few Privacy records")
+        got = regression.select(
+            self.records, regression.Selection(start=1, end=2, tenet="Privacy"))
+        self.assertEqual(len(got), 2)
+        self.assertTrue(all(r.get("tenet") == "Privacy" for r in got))
+
+    def test_end_may_be_omitted(self):
+        got = regression.select(self.records, regression.Selection(start=55),
+                                cap=len(self.records))
+        self.assertEqual(len(got), len(self.records) - 54)
+
+    def test_start_zero_is_rejected_as_a_one_based_mistake(self):
+        with self.assertRaises(regression.RangeOutOfBounds) as cm:
+            regression.select(self.records, regression.Selection(start=0))
+        self.assertIn("1-based", str(cm.exception))
+
+    def test_an_inverted_range_is_rejected(self):
+        with self.assertRaises(regression.RangeOutOfBounds) as cm:
+            regression.select(self.records, regression.Selection(start=20, end=10))
+        self.assertIn("forwards", str(cm.exception))
+
+    def test_a_start_past_the_end_names_the_pool_size(self):
+        """And reports the RIGHT problem. An earlier version checked inversion
+        first, so start=99999 was told its range ran backwards - true of the
+        defaulted end, and the wrong diagnosis."""
+        with self.assertRaises(regression.RangeOutOfBounds) as cm:
+            regression.select(self.records, regression.Selection(start=99_999))
+        msg = str(cm.exception)
+        self.assertIn(f"{len(self.records):,}", msg)
+        self.assertNotIn("forwards", msg)
+
+    def test_a_range_does_not_combine_with_per_tenet(self):
+        with self.assertRaises(regression.RangeOutOfBounds) as cm:
+            regression.select(self.records,
+                              regression.Selection(start=1, end=5, per_tenet=2))
+        self.assertIn("do not combine", str(cm.exception))
+
+    def test_the_cap_still_applies_to_a_range(self):
+        with self.assertRaises(regression.SampleTooLarge):
+            regression.select(self.records, regression.Selection(start=1, end=60),
+                              cap=10)
+
+    def test_describe_names_the_range_and_omits_the_seed(self):
+        text = regression.Selection(start=10, end=20).describe()
+        self.assertIn("records 10-20", text)
+        self.assertNotIn("seed", text,
+                         "a seed printed beside a range implies it changed the sample")
+
+
+class TestRangeOverTheApi(unittest.TestCase):
+
+    def setUp(self):
+        regression._CACHE.clear()
+        write_corpus(self, [
+            record(f"afni-corpus-{i:012x}", prompt=f"prompt number {i}",
+                   tenet="Privacy" if i % 2 else "Security")
+            for i in range(60)])
+        self.client = TestClient(create_app(warm=False, probe=False))
+
+    def test_a_range_runs_and_reports_itself(self):
+        r = self.client.post("/v1/corpus/run",
+                             json={"start": 10, "end": 20, "max_stage": 1})
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertEqual(len(body["rows"]), 11)
+        self.assertIn("records 10-20", body["stats"]["selection"])
+
+    def test_a_bad_range_is_its_own_error_code(self):
+        """Not `empty_selection`: a typo'd range is a mistake to fix, an empty
+        filter is an answer."""
+        r = self.client.post("/v1/corpus/run",
+                             json={"start": 99_999, "max_stage": 1})
+        self.assertEqual(r.status_code, 422)
+        self.assertEqual(r.json()["code"], "range_out_of_bounds")
+
+    def test_the_stream_endpoint_accepts_a_range_too(self):
+        r = self.client.post("/v1/corpus/run/stream",
+                             json={"start": 1, "end": 3, "max_stage": 1})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("records 1-3", r.text)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

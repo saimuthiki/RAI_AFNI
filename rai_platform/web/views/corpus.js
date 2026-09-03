@@ -122,7 +122,33 @@ export async function render(root) {
   const modeSel = el('select', {}, [
     el('option', { value: 'flat', text: 'N records, drawn across the whole corpus' }),
     el('option', { value: 'tenet', text: 'N per tenet — stratified' }),
+    el('option', { value: 'range', text: 'Records N to M — exact positions' }),
   ]);
+
+  // The positional range. 1-based and INCLUSIVE, matching how a person counts:
+  // 10 to 20 is eleven records. Deliberately separate controls from the size
+  // slider, because a range is a different intent - it asks for SPECIFIC
+  // records rather than a representative handful, and it ignores the seed.
+  // `sum.records` is the corpus size. NOT `total` - that is declared inside the
+  // run function and is the size of the current run, so using it here was a
+  // temporal-dead-zone ReferenceError before the first run.
+  const corpusSize = Number(sum.records) || 0;
+  const startNum = el('input', { type: 'number', min: '1', max: String(corpusSize),
+    value: '1', class: 'sizer__num' });
+  const endNum = el('input', { type: 'number', min: '1', max: String(corpusSize),
+    value: String(Math.min(20, corpusSize)), class: 'sizer__num' });
+  const rangeRow = el('div', { class: 'rangerow', hidden: true }, [
+    el('label', { class: 'eyebrow', text: 'From record' }), startNum,
+    el('label', { class: 'eyebrow', text: 'to' }), endNum,
+    el('span', { class: 'micro mute', id: 'rangecount' }),
+  ]);
+  const rangeCount = rangeRow.querySelector('#rangecount');
+
+  function rangeSize() {
+    const a = Math.max(1, Number(startNum.value) || 1);
+    const b = Math.max(a, Number(endNum.value) || a);
+    return b - a + 1;   // inclusive
+  }
   const sizeRange = el('input', { type: 'range', min: '1', max: String(cap),
     value: String(Math.min(50, cap)), class: 'sizer__range' });
   const sizeNum = el('input', { type: 'number', min: '1', max: String(cap),
@@ -175,6 +201,8 @@ export async function render(root) {
   stageSel.addEventListener('change', paintProjection);
   modeSel.addEventListener('change', () => { paintMode(); paintProjection(); });
   tenetSel.addEventListener('change', paintProjection);
+  startNum.addEventListener('input', paintRange);
+  endNum.addEventListener('input', paintRange);
 
   function tenetBuckets() {
     const chosen = tenetSel.value;
@@ -183,11 +211,20 @@ export async function render(root) {
   }
 
   function plannedSize() {
+    if (modeSel.value === 'range') return rangeSize();
     const n = clampSize(sizeNum.value);
     return modeSel.value === 'tenet' ? n * tenetBuckets() : n;
   }
 
   function paintMode() {
+    const ranged = modeSel.value === 'range';
+    // The slider and the range boxes are the same decision expressed two ways,
+    // so exactly one of them is on screen. Showing both invites someone to set
+    // a size AND a range and wonder which won.
+    sizer.hidden = ranged;
+    rangeRow.hidden = !ranged;
+    drawField.hidden = ranged;
+    if (ranged) { paintRange(); return; }
     const stratified = modeSel.value === 'tenet';
     // Per-tenet multiplies, so the same number means a much larger run. Cap the
     // per-bucket box accordingly rather than letting the server reject it.
@@ -196,6 +233,24 @@ export async function render(root) {
     sizeNum.max = String(perCap);
     if (clampSize(sizeNum.value) > perCap) setSize(perCap);
     sizeLabel.textContent = stratified ? 'Records per tenet' : 'Records';
+  }
+
+  function paintRange() {
+    const n = rangeSize();
+    const over = n > cap;
+    clear(rangeCount).append(frag([
+      el('strong', { class: over ? 'eta--warn' : null, text: plural(n, 'record') }),
+      el('span', { text: ' — the range is inclusive, so ' }),
+      el('span', { class: 't-mono', text:
+        `${Math.max(1, Number(startNum.value) || 1)} to `
+        + `${Math.max(1, Number(endNum.value) || 1)}` }),
+      el('span', { text: ` is ${n}, not ${Math.max(0, n - 1)}.` }),
+      over ? el('span', { class: 'eta--warn', text:
+        ` One run is capped at ${cap.toLocaleString()} — narrow the range or use `
+        + 'corpus/baseline.py offline.' }) : null,
+    ]));
+    runBtn.disabled = over;
+    paintProjection();
   }
 
   function paintProjection() {
@@ -228,15 +283,20 @@ export async function render(root) {
     el('div', { class: 'sizer__row' }, [sizeRange, sizeNum]),
   ]);
 
+  // Held in a variable so range mode can hide it: a range ignores the seed, and
+  // leaving the Draw control on screen tells the reader it does not.
+  const drawField = field('Draw', seedSel);
+
   root.append(el('div', { class: 'panel' }, [
     sizer,
+    rangeRow,
     el('div', { class: 'filters filters--corpus' }, [
       field('Sampling', modeSel),
       field('Cascade ceiling', stageSel),
       field('Tenet', tenetSel),
       field('OWASP category', owaspSel),
       field('Direction', dirSel),
-      field('Draw', seedSel),
+      drawField,
     ]),
     el('div', { class: 'panel__actions' }, [
       runBtn, stopBtn,
@@ -269,10 +329,16 @@ export async function render(root) {
 
     const stage = Number(stageSel.value);
     const n = clampSize(sizeNum.value);
+    const ranged = modeSel.value === 'range';
     const request = {
-      seed: Number(seedSel.value),
       max_stage: stage,
-      ...(modeSel.value === 'tenet' ? { per_tenet: n } : { limit: n }),
+      // A range is not sampled, so no seed is sent: the server ignores it for a
+      // range, and sending one would suggest it changed which records ran.
+      ...(ranged ? {} : { seed: Number(seedSel.value) }),
+      ...(ranged
+        ? { start: Math.max(1, Number(startNum.value) || 1),
+            end: Math.max(1, Number(endNum.value) || 1) }
+        : modeSel.value === 'tenet' ? { per_tenet: n } : { limit: n }),
       ...(tenetSel.value ? { tenet: tenetSel.value } : {}),
       ...(owaspSel.value ? { owasp: owaspSel.value } : {}),
       ...(dirSel.value ? { direction: dirSel.value } : {}),
