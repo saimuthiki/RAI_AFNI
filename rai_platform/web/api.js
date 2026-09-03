@@ -247,33 +247,30 @@ export async function railsWithHealth() {
   return { rails: out, byStage, live, deadCount: out.filter((r) => r.available === false).length };
 }
 
-/** -> [{ phase, repos: [...], notes: [...], unlinkable: [...] }] in roadmap order */
-export async function phases() {
-  const { data, live } = await fetchOrFixture('/v1/phases', 'phases');
-  const block = unwrap(data, ['phases', 'roadmap']);
-  const order = (name) => {
-    const m = /phase\s*([123])/i.exec(name);
-    return m ? Number(m[1]) : 9;
-  };
-  const out = Object.entries(block)
-    .filter(([, v]) => v && typeof v === 'object')
-    .map(([phase, v]) => ({
-      phase,
-      repos: (v.repos || v.entries || []).map((r) => ({
-        repo: r.repo ?? '',
-        display: r.display ?? r.repo ?? '(unnamed)',
-        adoption: r.adoption ?? 'unknown',
-        conditional: Boolean(r.conditional),
-        why: r.why ?? '',
-        implemented_as: [].concat(r.implemented_as ?? []),
-        present_in_platform: Boolean(r.present_in_platform),
-      })),
-      notes: [].concat(v.notes ?? []),
-      unlinkable: [].concat(v.unlinkable ?? []),
-    }))
-    .sort((a, b) => order(a.phase) - order(b.phase));
-  if (!out.length) throw new Error('/v1/phases carried no phases this console could read');
-  return { phases: out, live };
+/** -> { groups: [{ adoption, repos: [...] }], unlinkable: [...] }
+ *
+ *  Replaced `phases()`, which read `/v1/phases` and grouped the same
+ *  repositories by 90-day adoption window. The window is gone; the adoption
+ *  verdict is the grouping. */
+export async function repositories() {
+  const { data, live } = await fetchOrFixture('/v1/repositories', 'repositories');
+  const block = unwrap(data, ['repositories', 'inventory']) ?? data;
+  const groups = [].concat(block.groups ?? []).map((g) => ({
+    adoption: g.adoption ?? 'unknown',
+    repos: [].concat(g.repos ?? []).map((r) => ({
+      repo: r.repo ?? '',
+      display: r.display ?? r.repo ?? '(unnamed)',
+      adoption: r.adoption ?? g.adoption ?? 'unknown',
+      conditional: Boolean(r.conditional),
+      why: r.why ?? '',
+      implemented_as: [].concat(r.implemented_as ?? []),
+      present_in_platform: Boolean(r.present_in_platform),
+    })),
+  })).filter((g) => g.repos.length);
+  if (!groups.length) {
+    throw new Error('/v1/repositories carried no repositories this console could read');
+  }
+  return { groups, unlinkable: [].concat(block.unlinkable ?? []), live };
 }
 
 // ---------------------------------------------------------------- streaming --

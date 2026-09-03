@@ -976,3 +976,124 @@ with no page errors and a correct BLOCK verdict rendered.
 `docs/00-architecture.md` and `docs/01-setup.md` contain **captured CLI runs using
 `--internal`**. Those same commands now BLOCK instead of allowing with findings, so the
 outputs must be re-captured by running them, not edited by hand. Tracked separately.
+
+## 2026-09-03 — Phases removed; the platform is built in one pass
+
+AFNI's instruction: *"I dont want these phase wise Implementation of this unified
+platform for responsible AI. To include each and everything in the In this phase only
+Not this individual phases … remove all the stuff which Related to this phase execution,
+or the phase implementation."*
+
+### The distinction that made this removal easy
+
+Two unrelated things were both called "phase-shaped":
+
+* **The 90-day adoption calendar** — Phase 1 (0–30 days) / Phase 2 / Phase 3 / Not
+  adopted, one per repository. **This is what was removed.**
+* **The runtime cost cascade** — Stage 1 (free, deterministic) → Stage 2 (local model) →
+  Stage 3 (paid judge) → Offline. **This is untouched.** It is a per-request cost
+  decision, not a date, and it is the mechanism the whole platform is built on.
+
+There was also a *third* use of the word, entirely unrelated to either:
+`/v1/chat/stream` frames carry `phase: input` / `phase: output` to tell a console which
+guardrail a `stage` frame came from. **That survives verbatim** — it was checked
+explicitly before and after the bulk edits.
+
+A pleasant side effect: `docs/00-architecture.md` used to spend a whole section
+("Stage ≠ Phase — the distinction that trips everyone") separating two axes that both
+used the numerals 1, 2, 3. With phases gone there is no second numbered axis, so **1/2/3
+now means exactly one thing anywhere in this platform**. The section was rewritten to
+say that rather than deleted.
+
+### What replaced it, and why not simply delete
+
+`registry/phases.py` was not only a calendar. It also held, per repository: the adoption
+verdict (adopt / combine / bench / skip), the reason for it, whether it was conditional,
+and — the genuinely load-bearing part — `status()`, which cross-references the plan
+against the platform's own capability registry so the list is a **status board** rather
+than a document: *"we said adopt garak; is garak actually wired here, and how?"*
+
+Deleting the file outright would have taken `/v1/phases` with it, and that endpoint is
+the **only** source of the repo inventory the Frameworks console screen renders. So the
+file became `registry/repositories.py`: same 23 repositories, same verdicts, same
+cross-reference, grouped by **adoption verdict** instead of by calendar window.
+
+| Gone | Replaced by |
+|---|---|
+| `registry/phases.py` | `registry/repositories.py` |
+| `Phase` enum, `PHASE_NOTES`, `for_phase()` | `ADOPTION_ORDER`, `for_adoption()` |
+| `PhaseEntry` | `RepoEntry` (no `phase` field) |
+| `GET /v1/phases` | `GET /v1/repositories` — **the old path now 404s, deliberately** |
+| `web/views/roadmap.js` + its nav item | deleted; `#/roadmap` falls back to Live check |
+| `ui.js` `phaseTag` / `phaseNumber` / `phaseWindow` / `PHASE_WINDOWS` | `adoptionTag` / `adoptionRank` |
+| `.pbr*` CSS (the 90-day bracket), `.navphase` | `.adopt*` chips, `.adoptkey` |
+| `.phase*` and `.notes*` CSS | removed — orphaned once roadmap.js went |
+| the left-nav "Roadmap phases — a calendar" legend | "Adoption verdict — per repository" |
+| Frameworks' **Phase** column and "All phases" filter | **Verdict** column, "All verdicts" filter |
+| architecture's "Phase is not stage" section | "A verdict is not a stage" — same lesson, live axis |
+| `knowledge/roadmap.md` | `knowledge/build-plan.md` |
+
+All 23 repositories are still accounted for exactly once — asserted in
+`test_gateway.test_repositories_cross_references_the_inventory`, which checks both the
+count and that there are no duplicates.
+
+### `knowledge/build-plan.md` — all 26 actions kept, arrangement dropped
+
+The old roadmap's 26 numbered actions were not the problem; the calendar was. They are
+regrouped by **kind of work** (runtime gateway / testing and CI / measurement / fairness
+and explainability / governance / conditional) and each now carries an honest status
+mark — BUILT, PARTIAL, NEEDS A HOST, NOT STARTED, DROPPED — rather than a date.
+
+Two items needed correcting rather than moving:
+
+1. **Old Phase-3 action 4 — "build the per-tenant / per-project threshold configuration
+   service"** — is now marked **DROPPED (superseded)**, because the tenant dimension was
+   removed earlier the same day. What survives, and is built, is the global store with an
+   operator override layer and the read log.
+2. **Old Phase-1 action 8** asked to log two vendor-risk items. **One of them was
+   false** (see below), and is withdrawn on the record rather than silently dropped.
+
+### A false security finding, withdrawn
+
+The analysis claimed `agentic_security-main` contains "a hard-coded third-party bearer
+token". **It does not.** Checked at source: a scan for real credential shapes (`sk-`,
+`hf_`, `ghp_`, `AIza`, `xox*`, long bearer values) returns **nothing**. What is actually
+there is `Authorization: Bearer XXXXX` at `config.py:99`, inside a function that writes a
+**default config template for the user to fill in**, plus `Bearer test_api_key` in the
+repo's own test suite. It even ships a redactor at `core/security.py:173` that scrubs
+bearer values from its logs.
+
+That claim appeared in `phases.py`, `README.md` and `knowledge/open-questions.md` and was
+one of the stated reasons the repo sat at "Bench for later". It is corrected in all
+three. The repo stays benched — it is a red-team fuzzer overlapping garak and PyRIT,
+which is a real reason — but not for a credential that was never there. **Leaving a
+false security finding on the record is worse than having no finding.**
+
+### One scope leak, caught and reverted
+
+While rewriting the inventory I moved Guardrails AI from `Skip` to `Bench`, reasoning
+from AFNI's separate instruction to integrate it anyway. That is a *verdict change*,
+which belongs to the open-questions work, not to the removal of phases. Reverted to
+`Skip` with the ask recorded on the entry, so one commit does one thing.
+
+### Verification
+
+**1010 tests, `OK (skipped=4)` bare and `0 failures / 0 errors` provisioned.** Driven in
+a headless browser: all six remaining views render with no page errors, none of them
+contains any of `Phase 1`, `Phase 2`, `Phase 3`, `Roadmap`, `90-day`, `days 0–30`,
+`days 30–60`, `days 60–90`, and `#/roadmap` correctly falls back to Live check. The
+Frameworks table renders 27 adoption chips grouped adopt → combine → bench → skip.
+
+The doc tables were **derived from the registry, not hand-edited**: 32 verdict cells in
+`docs/00-architecture.md` and 32 in `README.md` were rewritten by looking each repo up in
+`repositories.py`, so the columns cannot drift from the code.
+
+### Deliberately not done in this commit
+
+* `rai_platform/docs/ui-walkthrough.html` still describes the Roadmap screen, the phase
+  bracket and "Phase is not stage". It is being rebuilt in full for AFNI's separate
+  offline-mode request, so it is corrected there rather than twice.
+* `analysis/` — the 87-slide deck and `guardrail_atlas.html` still carry the "Adoption
+  Plan — A 90-Day Phased Roadmap" section. That is a **separate delivered artefact**
+  about repository research, not the UI or the backend, and stripping it means
+  regenerating the deck. Flagged to AFNI rather than done unasked.

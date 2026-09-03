@@ -41,7 +41,7 @@ keys on.
 - [How the whole tool works](#how-the-whole-tool-works)
 - [Folder structure — what each folder is responsible for](#folder-structure--what-each-folder-is-responsible-for)
 - [Methodology](#methodology)
-- [Tenet ↔ framework ↔ phase mapping](#tenet--framework--phase-mapping)
+- [Tenet ↔ framework ↔ stage mapping](#tenet--framework--stage-mapping)
 - [Per-tenet flowcharts](#per-tenet-flowcharts)
 - [Usage guide for a fresh user](#usage-guide-for-a-fresh-user)
 - [Reading a block](#reading-a-block)
@@ -240,7 +240,7 @@ The three things worth noticing:
 RAI_AFNI/
 ├── rai_platform/            THE TOOL
 ├── knowledge/               distilled findings the tool was built from
-├── analysis/                the Phase-0 review pipeline (deck + HTML)
+├── analysis/                the source-level review pipeline (deck + HTML)
 ├── deliverables/            client-facing outputs of that review
 ├── references/              the 23 third-party repos, read at source level
 ├── graft/ graphify-out/     code-graph and knowledge-graph indexes
@@ -256,8 +256,8 @@ RAI_AFNI/
 | `afni_rai/contract/explanation.py` | The **attribution layer** — `RailAttribution`, `FindingExplanation`, `explain()`. Separate from the verdict because upstream sets `additionalProperties: false` on both `verdict` and `findings[]`, so AFNI's extra fields cannot live inside them. |
 | `afni_rai/cascade/rail.py` | The `Rail` protocol, `RailResult`, `Stage`, and `CheckContext` — the per-request object that carries the tenant, the client-facing flag, and the threshold resolver. |
 | `afni_rai/cascade/engine.py` | The **one** place staging, short-circuiting, deduplication, fail-closed and fail-loud are decided. Dozens of rails, one engine — so the rules that never bend live here and not in rail code. |
-| `afni_rai/registry/capabilities.py` | The 65 capabilities from the Phase-0 matrix, and the five honest coverage states: `implemented`, `dependency-missing`, `cloud-not-configured`, `offline-only`, `gap`. |
-| `afni_rai/registry/phases.py` | The 23-repo roadmap, cross-referenced against what is actually wired. Answers "Phase 1 says adopt garak — is garak really here, and how?" |
+| `afni_rai/registry/capabilities.py` | The 65 capabilities from the capability matrix, and the five honest coverage states: `implemented`, `dependency-missing`, `cloud-not-configured`, `offline-only`, `gap`. |
+| `afni_rai/registry/repositories.py` | The 23 reviewed repos and their adoption verdicts, cross-referenced against what is actually wired. Answers "we said adopt garak — is garak really here, and how?" |
 | `afni_rai/tenets/<tenet>/` | One package per tenet. Each exports `RAILS`, `ATTRIBUTIONS` and `register(registry)`. This is where ported detector logic lives. |
 | `afni_rai/tenets/accountability/` | The infrastructure tenet: `thresholds.py` (per-tenant threshold store), `audit.py` (sqlite verdict trail), `policy.py` (fail modes), `frameworks.py` (compliance mapping), `remediation.py`, `tracing.py`, `gating.py`, `corpus.py`. |
 | `afni_rai/gateway/` | The FastAPI app, request/response models, and the judge-provider fallback chain. The only place an outbound vendor call is made. |
@@ -271,7 +271,7 @@ RAI_AFNI/
 
 | Path | Responsible for |
 |---|---|
-| `knowledge/` | Ten markdown nodes distilling the Phase-0 review — `methodology.md` carries the mechanism, cost, latency and stage for all 108 repo-tenet pairs, each with `file:line` evidence. Reading one node costs ~600–1,500 tokens; extracting the same conclusion from the deck costs ~35,000. |
+| `knowledge/` | Ten markdown nodes distilling the source-level review — `methodology.md` carries the mechanism, cost, latency and stage for all 108 repo-tenet pairs, each with `file:line` evidence. Reading one node costs ~600–1,500 tokens; extracting the same conclusion from the deck costs ~35,000. |
 | `analysis/` | The pipeline that renders the 80-slide deck and the HTML atlas from `analysis/data/*.json`. **Not part of the runtime.** The tool reads two of its data files — `capability_matrix_data.json` and `tenet_methodology_data.json` — as the source of truth for capability names and stage assignment. |
 | `deliverables/` | `AFNI_Responsible_AI_Framework.pptx`, `guardrail_atlas.html`, and the executive brief. Rendered outputs, not sources of truth. |
 | `references/` | The 23 reviewed repositories, vendored so every ported pattern can cite the line it came from. Large; to be removed once the build is signed off. |
@@ -389,99 +389,118 @@ reasoning inside a prompt, which is a different and much narrower thing.
 
 ---
 
-## Tenet ↔ framework ↔ phase mapping
+## Tenet ↔ framework ↔ stage mapping
 
 ### Which repos each tenet uses, and at which stage
 
-| Tenet | Rail | Stage | Mechanism | Ported from | Phase |
+| Tenet | Rail | Stage | Mechanism | Ported from | Verdict |
 |---|---|:---:|---|---|:---:|
-| **Privacy** | `privacy.credit_card` | 1 | regex + Luhn checksum | `agentic_security-main` | — |
-| | `privacy.healthcare_phi` | 1 | regex + checksum — ICD-10, MRN, NPI, DEA | `hai-guardrails-main` | 2 |
-| | `privacy.pii_entities` | 1 | regex | `hai-guardrails-main` + `agentic_security-main` | 2 |
-| | `privacy.region_ids` | 1 | regex + checksum | `Infosys-…-Toolkit` + `safe-zone-main` | 3 |
-| | `privacy.reversible_anonymiser` | 1 | module + regex | `llm-guard-main` | 1 |
-| | `privacy.system_prompt_leakage` | 1 | regex + n-gram containment | `hai-guardrails-main` + `garak-main` | 1 |
-| | `privacy.presidio_ner` | 2 | Presidio + NER classifier | `llm-guard-main` | 1 |
-| | `privacy.pii_leakage_judge` | 3 | LLM-judge | `deepteam-main` | 3 |
-| **Security** | `security.encoding.obfuscation` | 1 | regex | `garak-main` | 1 |
-| | `security.indirect_injection` | 1 | regex | `garak-main` | 1 |
-| | `security.injection.heuristic` | 1 | regex | `PyRIT-main` | 1 |
-| | `security.insecure_output` | 1 | regex | `Guardrails-develop` | 1 |
-| | `security.invisible_text` | 1 | unicode range strip | `llm-guard-main` | 1 |
-| | `security.secrets` | 1 | regex + entropy gate | `garak-main` | 1 |
-| | `security.injection.deberta_v3_v2` | 2 | classifier | `llm-guard-main` | 1 |
+| **Privacy** | `privacy.credit_card` | 1 | regex + Luhn checksum | `agentic_security-main` | bench |
+| | `privacy.healthcare_phi` | 1 | regex + checksum — ICD-10, MRN, NPI, DEA | `hai-guardrails-main` | combine |
+| | `privacy.pii_entities` | 1 | regex | `hai-guardrails-main` + `agentic_security-main` | combine |
+| | `privacy.region_ids` | 1 | regex + checksum | `Infosys-…-Toolkit` + `safe-zone-main` | bench |
+| | `privacy.reversible_anonymiser` | 1 | module + regex | `llm-guard-main` | adopt |
+| | `privacy.system_prompt_leakage` | 1 | regex + n-gram containment | `hai-guardrails-main` + `garak-main` | combine |
+| | `privacy.presidio_ner` | 2 | Presidio + NER classifier | `llm-guard-main` | adopt |
+| | `privacy.pii_leakage_judge` | 3 | LLM-judge | `deepteam-main` | adopt |
+| **Security** | `security.encoding.obfuscation` | 1 | regex | `garak-main` | adopt |
+| | `security.indirect_injection` | 1 | regex | `garak-main` | adopt |
+| | `security.injection.heuristic` | 1 | regex | `PyRIT-main` | adopt |
+| | `security.insecure_output` | 1 | regex | `Guardrails-develop` | adopt |
+| | `security.invisible_text` | 1 | unicode range strip | `llm-guard-main` | adopt |
+| | `security.secrets` | 1 | regex + entropy gate | `garak-main` | adopt |
+| | `security.injection.deberta_v3_v2` | 2 | classifier | `llm-guard-main` | adopt |
 | | `security.prompt_shields` | 3 | cloud API | Azure AI Content Safety | — |
-| **Fairness & Bias** | `afni.fairness.protected_attribute` | 1 | regex — protected-attribute term co-occurring with a decision term | AFNI, composed from `promptfoo` + DeepEval BBQ + Infosys vocabularies | 1 |
-| | `llm_guard.bias` | 2 | classifier | `llm-guard-main` | 1 |
-| **Explainability** | `afni-format-validators` | 1 | 10 deterministic validators | `guardrails-main` | — |
-| | `afni-schema-explain` | 1 | Draft-2020-12 subset, per-field failure explanation | `guardrails-main` | — |
-| **Content Safety** | `content_safety.banned_substrings` | 1 | substring / word match | `llm-guard-main` | 1 |
-| | `content_safety.profanity` | 1 | graded lexicon + leetspeak normalisation | `Infosys-…-Toolkit` + `garak-main` | 3 |
-| | `content_safety.explicit` | 1 | whole-token match, `safety.sexual` tier | `Infosys-…-Toolkit` + `garak-main` | 3 |
-| | `content_safety.toxicity_model` | 2 | 7-head multilabel transformer | `llm-guard-main` | 1 |
-| | `content_safety.zeroshot_topics` | 2 | NLI cross-encoder | `llm-guard-main` | 1 |
-| | `content_safety.toxicity_judge` | 3 | LLM-judge | `hai-guardrails-main` | 2 |
-| **Hallucination** | `package-hallucination` | 1 | import extraction + allow-list | `garak-main` | 1 |
-| | `refusal-phrases` | 1 | prefix + word-boundary phrase lists | `promptfoo-main` | 1 |
-| | `structured-output-wellformed` | 1 | stdlib JSON/XML well-formedness | `safe-zone-main` | — |
-| | `groundedness-nli` | 2 | entailment against retrieved source | `llm-guard-main` | 1 |
-| | `structured-output-schema` | 2 | JSON Schema validation | `safe-zone-main` | — |
-| **Accountability** | `attack-corpus-repeat` | 1 | sha256 fingerprint + exact Jaccard over hashed tokens | `rebuff-main`, similarity from `JCB-main` | 2 |
+| **Fairness & Bias** | `afni.fairness.protected_attribute` | 1 | regex — protected-attribute term co-occurring with a decision term | AFNI, composed from `promptfoo` + DeepEval BBQ + Infosys vocabularies | — |
+| | `llm_guard.bias` | 2 | classifier | `llm-guard-main` | adopt |
+| **Explainability** | `afni-format-validators` | 1 | 10 deterministic validators | `guardrails-main` | skip |
+| | `afni-schema-explain` | 1 | Draft-2020-12 subset, per-field failure explanation | `guardrails-main` | skip |
+| **Content Safety** | `content_safety.banned_substrings` | 1 | substring / word match | `llm-guard-main` | adopt |
+| | `content_safety.profanity` | 1 | graded lexicon + leetspeak normalisation | `Infosys-…-Toolkit` + `garak-main` | adopt |
+| | `content_safety.explicit` | 1 | whole-token match, `safety.sexual` tier | `Infosys-…-Toolkit` + `garak-main` | adopt |
+| | `content_safety.toxicity_model` | 2 | 7-head multilabel transformer | `llm-guard-main` | adopt |
+| | `content_safety.zeroshot_topics` | 2 | NLI cross-encoder | `llm-guard-main` | adopt |
+| | `content_safety.toxicity_judge` | 3 | LLM-judge | `hai-guardrails-main` | combine |
+| **Hallucination** | `package-hallucination` | 1 | import extraction + allow-list | `garak-main` | adopt |
+| | `refusal-phrases` | 1 | prefix + word-boundary phrase lists | `promptfoo-main` | adopt |
+| | `structured-output-wellformed` | 1 | stdlib JSON/XML well-formedness | `safe-zone-main` | bench |
+| | `groundedness-nli` | 2 | entailment against retrieved source | `llm-guard-main` | adopt |
+| | `structured-output-schema` | 2 | JSON Schema validation | `safe-zone-main` | bench |
+| **Accountability** | `attack-corpus-repeat` | 1 | sha256 fingerprint + exact Jaccard over hashed tokens | `rebuff-main`, similarity from `JCB-main` | combine |
 
-Phase column is the roadmap phase in which the source repo is first genuinely
-**used**. A dash means the repo's patterns were ported without the repo being
-adopted — see the note under the roadmap table.
+Verdict column is the source repo's adoption verdict. A dash means the source is
+not one of the 23 reviewed repositories — a hosted cloud service, or a rail AFNI
+composed itself. A `bench` or `skip` verdict on a rail that runs today is not a
+contradiction: **the pattern was ported, the repo was not adopted.**
 
-### The roadmap, against what is actually built
+### Every reviewed repository, against what is actually built
 
-Run `python3 rai_platform/cli.py` equivalents or `GET /v1/phases` for this live.
+Run `GET /v1/repositories` for this live. There is no phase column and no calendar:
+AFNI builds the platform in one pass, so the grouping is the adoption verdict.
 
-**Phase 1 — 0–30 days · 7 repos · all 7 present**
+**Adopt now — 10 repos**
 
-| Repo | Verdict | Present in platform as |
-|---|---|---|
-| NVIDIA NeMo Guardrails | Adopt now | implemented, dependency-missing |
-| OpenGuardrails | Adopt now | implemented — the `GuardEvent`/`Verdict` contract itself |
-| LLM Guard | Adopt now | implemented, dependency-missing |
-| NVIDIA garak | Adopt now | implemented |
-| Promptfoo | Adopt now | implemented, offline-only |
-| PyRIT | Adopt now | implemented, offline-only |
-| DeepEval | Adopt now | cloud-not-configured, offline-only |
+| Repo | Present in platform as |
+|---|---|
+| NVIDIA NeMo Guardrails | implemented, dependency-missing |
+| OpenGuardrails | implemented — the `GuardEvent`/`Verdict` contract itself |
+| LLM Guard | implemented, dependency-missing |
+| NVIDIA garak | implemented |
+| Promptfoo | implemented, offline-only |
+| PyRIT | implemented, offline-only |
+| DeepEval | cloud-not-configured, offline-only |
+| Fairlearn | offline-only |
+| DeepTeam | cloud-not-configured |
+| SHAP | *registered but unattributed* — see below |
 
-**Phase 2 — 30–60 days · 5 repos · 4 present**
+**Combine with another — 4 repos**
 
-| Repo | Verdict | Present in platform as |
-|---|---|---|
-| hai-guardrails | Combine | implemented, dependency-missing, cloud-not-configured |
-| Rebuff | Combine | implemented — the self-hardening corpus, local half |
-| Fairlearn | Adopt now | offline-only |
-| AIF360 | Combine | offline-only |
-| SHAP | Adopt now | *registered but unattributed* — see below |
+| Repo | Present in platform as |
+|---|---|
+| hai-guardrails | implemented, dependency-missing, cloud-not-configured |
+| Rebuff | implemented — the self-hardening corpus, local half |
+| AIF360 | offline-only |
+| Infosys RAI Toolkit *(conditional)* | implemented, cloud-not-configured |
 
-**Phase 3 — 60–90 days · 4 repos · 2 present**
+**Bench for later — 6 repos**
 
-| Repo | Verdict | Present in platform as |
-|---|---|---|
-| DeepTeam | Adopt now | cloud-not-configured |
-| Infosys RAI Toolkit | Combine, conditional | implemented, cloud-not-configured |
-| OpenAI Evals | Bench | not wired |
-| Deepchecks | Bench (AGPL cleared by AFNI, 2026-09-02) | not wired |
+| Repo | Present in platform as |
+|---|---|
+| Agentic Security | implemented, offline-only |
+| Safe Zone (TSZ) | implemented |
+| OpenAI Evals | not wired |
+| Deepchecks | not wired |
+| Giskard v3 | not wired |
+| FuzzyAI | not wired |
 
-**Not adopted — 7 repos.** Guardrails AI (ships base classes only; documented
-PyPI supply-chain compromise), Agentic Security (hard-coded third-party bearer
-token), Safe Zone, Giskard v3, FuzzyAI, JCB, LLMFuzzer.
+Deepchecks is benched on a **technical** ground, not a licence one — AFNI cleared
+AGPL-3.0 on 2026-09-02. Every Deepchecks check is a batch
+`SingleDatasetCheck`/`TrainTestCheck` over a `Dataset`, so it has no per-request API to
+put on a request path at all.
 
-Three of those seven still show up as `implemented`, and that is not a
-contradiction: **their patterns were ported, the repos were not adopted.** Safe
-Zone's Go service is not running anywhere here; its structured-output checks
-were reimplemented in stdlib Python. `phases.py` calls this field
+**Skip — 3 repos**
+
+| Repo | Present in platform as |
+|---|---|
+| Guardrails AI | implemented |
+| JCB | not wired |
+| LLMFuzzer | not wired |
+
+Guardrails AI ships base classes only — every real validator is a separate PyPI
+package — and carries a documented historical PyPI supply-chain compromise, so any
+adoption must pin and vendor rather than resolve at install time. AFNI has asked for it
+to be integrated regardless; that is tracked in `knowledge/open-questions.md`.
+
+Four repos with a `bench` or `skip` verdict still show up as `implemented`, and that is
+not a contradiction: **their patterns were ported, the repos were not adopted.** Safe
+Zone's Go service is not running anywhere here; its structured-output checks were
+reimplemented in stdlib Python. `repositories.py` calls this field
 `present_in_platform` rather than `adopted` for exactly this reason.
 
 **SHAP** is the honest edge case. It is registered under Explainability as
-`offline-only` with no `RailAttribution`, because nothing joins an offline
-capability back to a repo — so it reads as missing from Phase 2 when the truth
-is "registered, unattributed". `GET /v1/phases` surfaces this in an `unlinkable`
-list rather than hiding it.
+`offline-only` with no `RailAttribution`, because nothing joins an offline capability
+back to a repo — so it reads as missing when the truth is "registered, unattributed".
+`GET /v1/repositories` surfaces this in an `unlinkable` list rather than hiding it.
 
 ---
 
@@ -762,7 +781,7 @@ python3 -c "import json;print(json.dumps(json.load(open('rai_platform/samples/te
 | `/v1/chat` | POST | **guarded passthrough** — guard the prompt, call your model, guard the answer |
 | `/v1/chat/stream` | POST | the same four steps, as Server-Sent Events |
 | `/v1/coverage` | GET | the 65-capability report in five states |
-| `/v1/phases` | GET | the roadmap cross-referenced against what is built |
+| `/v1/repositories` | GET | every reviewed repo and its verdict, cross-referenced against what is built |
 | `/v1/rails` | GET | every rail with stage, mechanism, source repo, evidence |
 | `/healthz` | GET | liveness, rail count, configured judge providers, target reachability |
 
@@ -828,7 +847,7 @@ well as a true positive. All values are synthetic.
 |---|---|
 | **Live** | type or paste text, watch the cascade stream stage by stage, expand any finding to see its repo, mechanism, confidence kind and evidence |
 | **Tenets** | all seven tenets with their rails, stages, mechanisms and coverage states |
-| **Roadmap** | Phase 1/2/3 against what is actually wired, including the unlinkable list |
+
 | **Frameworks** | the 23 reviewed repos, their verdicts, and where each one landed |
 
 ### Step 8b · Let the gateway call your model — `/v1/chat`

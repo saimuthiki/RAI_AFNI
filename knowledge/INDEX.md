@@ -1,6 +1,6 @@
 # AFNI Responsible AI — Knowledge Layer
 
-Hand-authored, greppable distillation of the Phase-0 analysis. **Read from here, not
+Hand-authored, greppable distillation of the source-level analysis. **Read from here, not
 from the PPTX.**
 
 ## Why this exists
@@ -32,8 +32,8 @@ files; nothing indexes a PowerPoint.
 | [infosys-vs-nemo.md](infosys-vs-nemo.md) | why NeMo is the backbone and what to carry over from Infosys |
 | [request-flow.md](request-flow.md) | the live request path and the four mitigation branches |
 | [dev-vs-test-loop.md](dev-vs-test-loop.md) | the offline red-team/CI loop and its four hand-offs |
-| [roadmap.md](roadmap.md) | the 90-day phase plan, 26 concrete actions |
-| [open-questions.md](open-questions.md) | legal, vendor-risk and unresolved items blocking Phase 1 |
+| [build-plan.md](build-plan.md) | every work item, unphased, with honest build status |
+| [open-questions.md](open-questions.md) | vendor-risk and unresolved items still blocking the build |
 
 ## Authoritative sources (go here only when a node is not enough)
 
@@ -50,6 +50,6 @@ files; nothing indexes a PowerPoint.
 
 ## Status
 
-Phase 0 (analysis) is complete. The unified platform is **not built yet** — nothing
-in this repo implements a gateway. `roadmap.md` is the plan of record; design
+The source-level analysis is complete. The unified platform is **partly built** — see
+in this repo implements a gateway. `build-plan.md` is the plan of record; design
 decisions still open are in `open-questions.md`.

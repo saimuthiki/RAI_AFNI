@@ -2,15 +2,15 @@
 
 Things that are genuinely unresolved. Anything settled lives in
 [decisions.md](decisions.md). Keep this file honest — it is the list that stops the
-platform stalling in Phase 1.
+platform stalling before it ships.
 
-## Blocking Phase 1
+## Blocking the build
 
 | # | Item | Owner | Why it blocks |
 |---|---|---|---|
 | ~~1~~ | ~~**Deepchecks AGPL-3.0 ruling**~~ — **CLOSED 2026-09-02** | Legal | AFNI confirmed it holds licences covering Apache-2.0, MIT and AGPL-3.0 and that no repository in this review is licence-restricted. Deepchecks stays at "Bench for later" for a technical reason instead: every check is a batch `SingleDatasetCheck`/`TrainTestCheck` over a `Dataset`, so it has no per-request API to put on a request path at all. |
-| ~~2~~ | ~~**promptfoo remote-only plugin data residency**~~ — **CLOSED 2026-09-02** | Legal | AFNI confirmed that sending data to an external service is acceptable, and that external plugins may be used. So this no longer blocks Phase 1. Two consequences worth keeping on the record rather than losing with the question: (a) it is a *per-dataset* clearance in practice — the harm corpus is the one asset still held back, and not on residency grounds (see below); (b) an external plugin is a **reliability** dependency as well as a data one, so a remote-only redteam plugin cannot be the sole evidence for a capability the platform claims. Pair each one with a local check. |
-| 3 | **One accountable owner per tenet** | Kiran / AFNI | Seven names. Phase 1 action 4. Without them there is no governance register and no escalation path — the framework is a document, not a standard. |
+| ~~2~~ | ~~**promptfoo remote-only plugin data residency**~~ — **CLOSED 2026-09-02** | Legal | AFNI confirmed that sending data to an external service is acceptable, and that external plugins may be used. So this no longer blocks the build. Two consequences worth keeping on the record rather than losing with the question: (a) it is a *per-dataset* clearance in practice — the harm corpus is the one asset still held back, and not on residency grounds (see below); (b) an external plugin is a **reliability** dependency as well as a data one, so a remote-only redteam plugin cannot be the sole evidence for a capability the platform claims. Pair each one with a local check. |
+| 3 | **One accountable owner per tenet** | Kiran / AFNI | Seven names. Build-plan item 21. Without them there is no governance register and no escalation path — the framework is a document, not a standard. |
 
 ### The one dataset still held back, and why it is not a residency question
 
@@ -38,25 +38,25 @@ a deployment decision and not a checkbox in the console.
 | Risk | Detail | Handling |
 |---|---|---|
 | **LLM Guard is archived** | Protect AI archived the repo; no upstream fixes will arrive. It is nonetheless the runtime primary for four of seven tenets. | Fork into an AFNI-owned repo, pin every model revision, own maintenance. Maintenance burden assessed as **High**. |
-| **Guardrails AI PyPI compromise** | Documented supply-chain compromise, plus an Aug 2026 Hub deprecation affecting a percentage of validators. | Contributes to the **Skip** verdict. Log for the record (Phase 1 action 8). |
+| **Guardrails AI PyPI compromise** | Documented supply-chain compromise, plus an Aug 2026 Hub deprecation affecting a percentage of validators. | Contributes to the **Skip** verdict. Kept on the record; AFNI has since asked for integration regardless. |
 | **`agentic_security-main` hard-coded bearer token** | A third-party bearer token committed in the source. | Log for the record. Do not run as-is; it is "Bench for later" anyway. |
 | **OpenGuardrails is pre-1.0** | The schema AFNI is adopting as its permanent internal contract is not yet stable. | Pin the protocol version. Accept that a migration may be needed. |
 | **NeMo HA gap** | No high-availability story published for the rail engine that sits in every request path. | Design the gateway's own HA around it; unresolved. |
-| **NeMo jailbreak rail fails open** | Default behaviour passes traffic when the rail errors. | Explicitly flipped to fail-closed (Phase 1 action 1) — but verify it stays flipped across upgrades. |
+| **NeMo jailbreak rail fails open** | Default behaviour passes traffic when the rail errors. | Explicitly flipped to fail-closed — but verify it stays flipped across upgrades. |
 | **No accuracy figures for Infosys in-house models** | Nothing published for any of its fine-tuned models. | Contributes to "copy the shape, not the build". |
 
 ## Design questions not yet answered
 
 1. **Where does the gateway physically run?** Azure-first is agreed; the deployment
    target (App Service / AKS / Container Apps), scaling model, and the latency budget
-   for the input-rail chain are not specified anywhere in Phase 0.
+   for the input-rail chain are not specified anywhere in the analysis.
 2. **What is the latency budget?** The whole cost doctrine rests on "cheap checks on
    every request", but no per-rail millisecond target was set. This determines how
    many local models can sit in the input path.
-3. **Threshold calibration data.** Phase 2 says "calibrate on real AFNI traffic, do
+3. **Threshold calibration data.** The build plan says "calibrate on real AFNI traffic, do
    not ship defaults" — but which application's traffic, and is it available and
    permitted for this use?
-4. **The pilot application.** Phase 1 needs one existing AFNI AI app for the baseline
+4. **The pilot application.** The baseline red-team scan needs one existing AFNI AI app
    scan and the fast CI tier. Not yet named.
 5. **Azure PII pricing.** ~$0.38 per 1,000 records was noted with an explicit
    "verify the exact current rate" caveat. Not verified.
@@ -64,7 +64,7 @@ a deployment decision and not a checkbox in the console.
    Infosys's shape. Whether AFNI's unit is client, project, or application is undecided
    and changes the config schema.
 7. **Does AFNI need media moderation at all?** NSFW image/video and DICOM PII scanning
-   are Phase 3 "if the business needs them". Nobody has said whether it does.
+   are conditional "if the business needs them". Nobody has said whether it does.
 
 ## Found while building the platform (new)
 

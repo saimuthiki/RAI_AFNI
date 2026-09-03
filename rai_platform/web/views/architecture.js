@@ -12,7 +12,7 @@
 // one cannot, because it has no numbers of its own.
 
 import {
-  el, svg, clear, pageHead, rule, stageMeta, stageTag, phaseTag, errorBox,
+  el, svg, clear, pageHead, rule, stageMeta, stageTag, adoptionTag, errorBox,
   statRow, plural, STAGES,
 } from '../ui.js';
 import { railsWithHealth, coverage, health } from '../api.js';
@@ -52,7 +52,7 @@ export async function render(root) {
     el('a', { href: '#arch-directions', text: 'the two directions' }),
     el('a', { href: '#arch-cascade', text: 'the cascade engine' }),
     el('a', { href: '#arch-rules', text: 'the two rules that never bend' }),
-    el('a', { href: '#arch-axes', text: 'phase is not stage' }),
+    el('a', { href: '#arch-axes', text: 'a verdict is not a stage' }),
   ]));
 
   root.append(statRow([
@@ -155,8 +155,8 @@ export async function render(root) {
       + 'direction. That is why the live view puts the coverage gap above the verdict.' }),
   ]));
 
-  // ------------------------------------------------------ phase vs stage ---
-  root.append(rule('Phase is not stage', 'two axes, no relationship'));
+  // --------------------------------------------------- verdict vs stage ---
+  root.append(rule('A verdict is not a stage', 'two axes, no relationship'));
   root.append(el('div', { id: 'arch-axes' }, axesFigure()));
 
   if (h) {
@@ -166,7 +166,7 @@ export async function render(root) {
         ? `${plural(inv.deadCount, 'mounted rail')} cannot run here. They stay mounted on `
           + 'purpose: a rail that vanished when its weights were missing would let the '
           + 'gateway read as fully armed. Instead they run, return “could not judge”, and '
-          + 'fail closed on client-facing traffic — visibly.'
+          + 'fail closed — visibly.'
         : 'Every mounted rail can run on this host. The cascade is at full strength.' }),
       el('div', { class: 'ledger' }, [1, 2, 3].map((n) => {
         const p = perStage(n);
@@ -454,17 +454,21 @@ function axesFigure() {
       ]),
     ]),
     el('div', { class: 'axis' }, [
-      el('p', { class: 'axis__q', text: 'Asked of the programme' }),
-      el('p', { class: 'axis__t', text: 'Roadmap phase' }),
-      el('div', { class: 'axis__ex' }, ['Phase 1', 'Phase 2', 'Phase 3'].map((p) => phaseTag(p))),
+      el('p', { class: 'axis__q', text: 'Asked of one repository' }),
+      el('p', { class: 'axis__t', text: 'Adoption verdict' }),
+      el('div', { class: 'axis__ex' },
+        ['Adopt now', 'Combine with another', 'Bench for later', 'Skip']
+          .map((a) => adoptionTag(a))),
       el('p', { class: 'axis__say', text:
-        'When a repository gets adopted, across a 90-day plan. It says nothing about what '
-        + 'any request pays, and a Phase-1 repo can back a Stage-3 rail.' }),
+        'Whether a reviewed repository is in the build, and on what terms. It says nothing '
+        + 'about what any request pays, and an adopted repo can back a Stage-3 rail. There '
+        + 'is deliberately no calendar on this axis: the platform is built in one pass, not '
+        + 'in phases.' }),
       el('dl', {}, [
         el('div', {}, [el('dt', { text: 'unit' }), el('dd', { text: 'a repository' })]),
-        el('div', {}, [el('dt', { text: 'axis' }), el('dd', { text: 'the calendar' })]),
-        el('div', {}, [el('dt', { text: 'changes' }), el('dd', { text: 'when the plan does' })]),
-        el('div', {}, [el('dt', { text: 'drawn as' }), el('dd', { text: 'a 90-day bracket, in ink — no hue at all' })]),
+        el('div', {}, [el('dt', { text: 'axis' }), el('dd', { text: 'is it in the build' })]),
+        el('div', {}, [el('dt', { text: 'changes' }), el('dd', { text: 'when the verdict does' })]),
+        el('div', {}, [el('dt', { text: 'drawn as' }), el('dd', { text: 'a word, in ink — no stage hue at all' })]),
       ]),
     ]),
   ]);

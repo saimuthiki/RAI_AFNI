@@ -73,7 +73,7 @@ from ..contract.explanation import Explanation, RailAttribution, explain
 from ..contract.models import (
     PROTOCOL_VERSION, Decision, EventKind, GuardEvent, LLMProtocol, Verdict,
 )
-from ..registry import phases
+from ..registry import repositories
 from ..registry.capabilities import CapabilityRegistry
 from ..warmup import warm_all
 from ..target import EndpointProbe, TargetClient, probe_timeout_from_env
@@ -934,12 +934,21 @@ def _router(gateway: Gateway) -> APIRouter:
         """
         return JSONResponse(gateway.coverage())
 
-    @router.get("/v1/phases", tags=["introspection"], summary="Roadmap phases against what is built")
-    def phase_status() -> JSONResponse:
-        """`present_in_platform` means a rail cites the repo as the source of a
-        pattern. That is provenance, not adoption - see the note each phase
-        carries."""
-        return JSONResponse(phases.status())
+    @router.get("/v1/repositories", tags=["introspection"],
+                summary="Every reviewed repository against what is built")
+    def repository_status() -> JSONResponse:
+        """The reviewed repositories grouped by adoption verdict, each
+        cross-referenced against what this platform actually implements.
+
+        `present_in_platform` means a rail cites the repo as the source of a
+        pattern. That is provenance, not adoption: Safe Zone and Guardrails AI
+        both appear despite being un-adopted, because their patterns were ported
+        into stdlib rails.
+
+        This replaced `/v1/phases`, which grouped the same repositories on a
+        90-day adoption calendar. AFNI builds in one pass, so the calendar is
+        gone and the adoption verdict is the grouping."""
+        return JSONResponse(repositories.status())
 
     @router.get("/v1/rails", tags=["introspection"], response_model=RailsResponse,
                 summary="Every mounted rail and its provenance")

@@ -1,5 +1,5 @@
 // DOM helpers and the shared vocabulary of the console: coverage chips, stage
-// badges, claim-strength scales, phase brackets, tables. Everything here is
+// badges, claim-strength scales, adoption chips, tables. Everything here is
 // pure — it takes data and returns nodes.
 //
 // TWO VISUAL LANGUAGES ARE KEPT APART ON PURPOSE, because conflating them is
@@ -8,12 +8,17 @@
 //   CASCADE STAGE (1 / 2 / 3 / offline) is a *cost* axis. It answers "what did
 //   this one request pay for". It wears numerals in coloured chips.
 //
-//   ROADMAP PHASE (0-30 / 30-60 / 60-90 days) is a *calendar* axis. It answers
-//   "when do we adopt this repository". It wears a day bracket, in ink only,
-//   with no hue of its own — so a phase marker can never be misread as a stage.
+//   ADOPTION VERDICT (adopt / combine / bench / skip) is a *repository* axis. It
+//   answers "is this project in the build, and on what terms". It wears a word,
+//   in the coverage palette — never a numeral and never a stage hue, so a
+//   verdict can never be misread as a stage.
 //
-// Nothing in this file gives phases a stage colour, and nothing gives stages a
-// day range. See `phaseTag` and `stageTag`.
+// An earlier revision had a third axis here, the 90-day roadmap phase. Phases
+// were removed on 2026-09-03: AFNI builds the platform in one pass, so 1/2/3
+// now means exactly one thing anywhere in this console.
+//
+// Nothing in this file gives a verdict a stage colour, and nothing gives stages
+// a repository-level label. See `adoptionTag` and `stageTag`.
 
 /** Create an element. `a` may hold attributes, `class`, `text`, `data`, `on`.
  *  There is deliberately no `html` escape hatch: every string this console
@@ -162,45 +167,46 @@ export function stageTag(stage, { withKind = false } = {}) {
   ]);
 }
 
-// -------------------------------------------------------- roadmap phases ---
-// A phase is a calendar window, so it is drawn as one: a 90-day track with the
-// phase's own slice filled. No stage hue is used here, and no numeral chip —
-// the two axes must not be able to trade costumes.
+// ------------------------------------------------------ adoption verdict ---
+// A verdict is a judgement about one repository, so it is drawn as a word, not
+// a numeral. No stage hue is used here — the two axes must not be able to trade
+// costumes.
 
-const PHASE_WINDOWS = {
-  1: { from: 0, to: 30, label: 'days 0–30' },
-  2: { from: 30, to: 60, label: 'days 30–60' },
-  3: { from: 60, to: 90, label: 'days 60–90' },
+const ADOPTION = {
+  'adopt now':          { key: 'adopt',    word: 'Adopt now',
+    gloss: 'wired here, or committed to being wired here.' },
+  'combine with another': { key: 'combine', word: 'Combine',
+    gloss: 'its patterns were ported into a rail; the package itself is not a dependency.' },
+  'bench for later':    { key: 'bench',    word: 'Bench',
+    gloss: 'reviewed, useful, and deliberately not wired yet.' },
+  skip:                 { key: 'skip',     word: 'Skip',
+    gloss: 'reviewed and rejected, with the reason on the row.' },
 };
 
-export function phaseNumber(name) {
-  const m = /phase\s*([123])/i.exec(String(name || ''));
-  return m ? Number(m[1]) : null;
-}
-
-export const phaseWindow = (n) => PHASE_WINDOWS[n] ?? null;
-
-/** The phase bracket. `n === null` means "not adopted" — no window at all,
- *  drawn as an empty track so it reads as off-calendar rather than as day 0. */
-export function phaseTag(name, { withDays = true } = {}) {
-  const n = phaseNumber(name);
-  const w = phaseWindow(n);
-  const track = el('span', { class: 'pbr__track', 'aria-hidden': 'true' },
-    w ? el('span', {
-      class: 'pbr__fill',
-      style: `left:${(w.from / 90) * 100}%;width:${((w.to - w.from) / 90) * 100}%`,
-    }) : null);
+/** The adoption verdict for one repository.
+ *
+ *  This replaced `phaseTag`, which drew a bracket on a 90-day calendar. There
+ *  is no calendar any more: the platform is built in one pass, so the only
+ *  honest per-repo label is the verdict itself. Like the phase bracket before
+ *  it, this deliberately borrows NO hue from the cascade-stage palette — an
+ *  adopted repository routinely backs a Stage-3 rail, and the two axes must
+ *  never look related. */
+export function adoptionTag(name) {
+  const a = ADOPTION[String(name || '').toLowerCase()]
+    ?? { key: 'unknown', word: String(name || 'unknown'), gloss: '' };
   return el('span', {
-    class: `pbr${n ? '' : ' pbr--none'}`,
-    title: n
-      ? `Roadmap phase ${n} — ${w.label} of the 90-day adoption plan. A phase is a calendar window, not a cascade stage.`
-      : 'Reviewed and not adopted. Outside the 90-day plan.',
-  }, [
-    el('span', { class: 'pbr__lab', text: n ? `Phase ${n}` : 'Not adopted' }),
-    track,
-    withDays ? el('span', { class: 'pbr__days', text: w ? w.label : 'no window' }) : null,
-  ]);
+    class: `adopt adopt--${a.key}`,
+    title: a.gloss ? `${a.word} — ${a.gloss}` : a.word,
+    text: a.word,
+  });
 }
+
+export const adoptionRank = (name) => {
+  const order = ['adopt', 'combine', 'bench', 'skip'];
+  const a = ADOPTION[String(name || '').toLowerCase()];
+  const i = a ? order.indexOf(a.key) : -1;
+  return i < 0 ? order.length : i;
+};
 
 // ------------------------------------------------------- claim strength ----
 // A confidence number means nothing without its mechanism. These four are an

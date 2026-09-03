@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AFNI Responsible AI — gateway console</title>
-<meta name="description" content="Operator console for the AFNI Responsible AI gateway: cascade escalation, capability coverage, roadmap status and framework provenance.">
+<meta name="description" content="Operator console for the AFNI Responsible AI gateway: cascade escalation, capability coverage, repository adoption and framework provenance.">
 <!-- Inline so the browser's unprompted /favicon.ico request never 404s. A red
      console error in a governance console is worse than cosmetic: an operator
      cannot tell a spurious one from a real one at a glance. Data URI keeps it a
@@ -72,10 +72,6 @@
         <span class="nav__label">Corpus</span>
         <span class="nav__hint">11,369 prompts, sampled to size</span>
       </a></li>
-      <li><a class="nav__item" href="#/roadmap" data-view="roadmap">
-        <span class="nav__label">Roadmap</span>
-        <span class="nav__hint">90 days vs what is wired</span>
-      </a></li>
       <li><a class="nav__item" href="#/frameworks" data-view="frameworks">
         <span class="nav__label">Frameworks</span>
         <span class="nav__hint">23 read, 16 contributing</span>
@@ -91,13 +87,16 @@
         <li><span class="sbadge sbadge--off"><span class="sbadge__n">◇</span></span>offline · never in the request path</li>
       </ul>
 
-      <p class="eyebrow" style="margin-top:var(--sp-5)">Roadmap phases — a calendar</p>
-      <div class="navphase">
-        <span class="pbr"><span class="pbr__lab">Phase 2</span><span class="pbr__track"><span class="pbr__fill" style="left:33.33%;width:33.33%"></span></span><span class="pbr__days">days 30–60</span></span>
-      </div>
+      <p class="eyebrow" style="margin-top:var(--sp-5)">Adoption verdict — per repository</p>
+      <ul class="adoptkey">
+        <li><span class="adopt adopt--adopt">Adopt now</span></li>
+        <li><span class="adopt adopt--combine">Combine</span></li>
+        <li><span class="adopt adopt--bench">Bench</span></li>
+        <li><span class="adopt adopt--skip">Skip</span></li>
+      </ul>
       <p class="micro mute" style="margin-top:var(--sp-2);line-height:1.55;max-width:22ch">
-        A phase is a 90-day adoption window for a repository. It is not a cascade
-        stage, and it carries no stage colour anywhere in this console.
+        A verdict is about one repository, not a date. This platform is built in
+        one pass; there is no phased rollout and no calendar anywhere here.
       </p>
     </div>
 
