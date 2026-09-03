@@ -73,7 +73,7 @@ three Stage-3 judge rails need them, and those are the last thing you need.
 
 ```powershell
 python -m pip install transformers torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install llm-guard presidio-analyzer huggingface_hub
+python -m pip install llm-guard==0.3.16 presidio-analyzer huggingface_hub
 python -m spacy download en_core_web_lg
 ```
 

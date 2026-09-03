@@ -325,7 +325,7 @@ REPO_SLIDES = [{'repo_folder': 'agentic_security-main',
   'tier': 'Tier 2',
   'vendor': 'Guardrails AI, Inc.',
   'build_replicate': 'Easy - the Guard/validator/reask pattern is simple to replicate, but there is little reason '
-                     'to; adopt the free core and track the Aug 2026 Hub migration'},
+                     'to; adopt the free core. The Aug 2026 Hub migration has already happened'},
  {'repo_folder': 'hai-guardrails-main',
   'display_name': 'hai-guardrails',
   'tenets': ['Security', 'Privacy', 'Profanity / Content Safety', 'Fairness & Bias'],

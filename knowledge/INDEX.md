@@ -33,7 +33,7 @@ files; nothing indexes a PowerPoint.
 | [request-flow.md](request-flow.md) | **generated** — which of the 32 rails run on the prompt, the response, or both, and the four outcomes |
 | [dev-vs-test-loop.md](dev-vs-test-loop.md) | the offline red-team/CI loop and its four hand-offs |
 | [build-plan.md](build-plan.md) | every work item, unphased, with honest build status |
-| [open-questions.md](open-questions.md) | vendor-risk and unresolved items still blocking the build |
+| [open-questions.md](open-questions.md) | 8 genuinely open items, then everything AFNI has ruled on with the date — closed items are **out** of the open list, not struck through inside it |
 
 ## Authoritative sources (go here only when a node is not enough)
 

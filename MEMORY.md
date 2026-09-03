@@ -1339,3 +1339,100 @@ Three mentions of `--internal` survive on purpose, all in the past tense, saying
 was removed — a reader holding the old note needs to find that out somewhere.
 
 **1014 tests OK.**
+
+## 2026-09-03 — open-questions.md rewritten; three AFNI rulings acted on
+
+AFNI's asks: rule on the archived LLM Guard, integrate Guardrails AI "even if it is
+compromised", explain the agentic-security bearer token, and *"rewrite this open
+questions markdown file again after resolving many of the things"*.
+
+### The structural fix, which was the real problem
+
+AFNI raised the Deepchecks AGPL item and the promptfoo residency item **twice each**,
+after both had already been closed and pushed. The cause was the file's shape: closed
+items sat **inside the open table with a strikethrough**, which is easy to scroll past and
+reads as open.
+
+Rewritten so closed items are **out of the open list entirely**, in a separate "Settled"
+table carrying the ruling and the date. Open items went from a 3-row table with 2 struck
+through, plus a 7-item design list, to **7 genuinely open items**, each with a short
+paragraph on why it matters.
+
+`INDEX.md`'s one-line description now says this explicitly, so a reader knows the
+convention before opening the file.
+
+### Ruling 1 — LLM Guard is archived · fork it
+
+AFNI's call: fork into an AFNI-owned repo. That needs their infrastructure, so it is
+recorded as ruled-but-not-yet-done. **The step that could be taken here was taken:**
+
+`pip install llm-guard` was **unpinned** in `README.md`, `docs/01-setup.md` and
+`.env.example`. For an *abandoned* package that is a standing supply-chain risk — nobody
+is shipping fixes, and an unpinned install takes whatever is published. Now
+`llm-guard==0.3.16`, which is the exact version the rails were written against and the
+version vendored under `references/`. The two HuggingFace model revisions were already
+pinned in the rail code.
+
+Measured while writing this up: llm-guard backs rails in **5 of the 7 tenets** (Privacy,
+Security, Content Safety, Fairness, Hallucination) — not "four of seven" as the analysis
+recorded. It is the platform's highest-exposure dependency, so the correction matters.
+
+### Ruling 2 — Guardrails AI · "integrate it anyway"
+
+**It already was integrated, and in the form that is strictly better.** Four components
+are built from it — verified against the vendored source, not asserted:
+
+| Component | Kind | Taken from |
+|---|---|---|
+| `afni-format-validators` | rail | the validator shape, 10 format validators |
+| `afni-schema-explain` | rail | per-field schema failure explanations |
+| `audit.VerdictStore` | module | `call_tracing/sqlite_trace_handler.py:63-73`, the `CREATE TABLE guard_logs` shape |
+| `RemediationAction` | module | `types/on_fail.py:24-31`, all 8 values read out and confirmed |
+
+All four are stdlib Python. **The package is not installed and is not a dependency.**
+
+> Porting the patterns gets the capability. Installing the package gets the capability
+> **and** the attack surface.
+
+A supply-chain compromise can only reach code you actually install. So the `Skip` verdict
+was never "this repo has nothing" — it was "do not take this dependency". Verdict moved
+`Skip` → **`Combine with another`**, which is what the platform actually does with it, and
+the group counts are now Adopt 10 / Combine 5 / Bench 6 / Skip 2 = 23.
+
+The genuinely larger request — the actual Hub validators, which are separate PyPI
+packages — is written up with the safe path (pin every version, vendor the wheels into an
+AFNI-controlled index, verify hashes at install, re-review on every bump) and explicitly
+**not** done, because it is not a line in `requirements.txt`.
+
+### Ruling 3 — the bearer token · the finding was false
+
+Already corrected in code earlier today; the full evidence now lives in
+`open-questions.md`. No committed credential exists. `Authorization: Bearer XXXXX` at
+`config.py:99` sits inside `generate_default_settings()`, a function that **writes a
+config template for the user to fill in**; `Bearer test_api_key` is in the repo's own
+tests; and `core/security.py:173` is a redactor that scrubs bearer values from its logs —
+the project is *more* careful than the finding implied.
+
+### Two of my own claims in the rewrite were wrong, and were caught
+
+Written, then checked against the code, then corrected:
+
+1. I wrote "**four rails** are backed by Guardrails AI". Only **two are rails**; the other
+   two are modules (the audit store and the remediation vocabulary). Corrected to "two
+   runtime rails and two pieces of infrastructure", with a Kind column.
+2. I repeated the analysis's "runtime primary for **four** of seven tenets" for LLM Guard.
+   Measured: **five**. Corrected, and the correction called out in the file.
+
+### Also closed: stale dates in the client materials
+
+Open item 8 was "the deck cites August 2026 as a *future* date". Today is 2026-09-03, so
+it is past. Fixed the tense in `build_deck.py` (both the narrative and the timeline
+entry), `repo_slide_content.py` and `infosys-vs-nemo.md`, and rebuilt the deck and Atlas.
+A future date stated in the future tense in front of a client is a credibility problem.
+
+### Verification
+
+**1014 tests OK** bare and provisioned. Deck rebuilt at 83 slides, `qa_deck` 0 issues,
+`qa_matrix` 0 overflow, `verify_deck` all 23 repos and 7 tenets. Every source citation
+added to the rewrite was opened and read first — the `guard_logs` CREATE TABLE, the eight
+`on_fail` values, and the `Bearer XXXXX` template function.
