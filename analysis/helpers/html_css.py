@@ -273,18 +273,34 @@ tbody tr:hover { background: var(--surface-2); }
 .v-skip { background: var(--risk-soft); color: var(--risk); }
 
 /* ---------- roadmap ---------- */
-.roadmap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
-.phase-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
-.phase-head { padding: 16px 20px; color: white; }
-.phase-head .p { font-family: "IBM Plex Mono", monospace; font-size: 11px; opacity: 0.85; letter-spacing: 0.04em; text-transform: uppercase; }
-.phase-head .t { font-family: "Spectral", serif; font-size: 18px; font-weight: 600; margin-top: 3px; }
-.phase-1 .phase-head { background: var(--accent-strong); }
-.phase-2 .phase-head { background: var(--brass); }
-.phase-3 .phase-head { background: var(--good); }
-.phase-body { padding: 18px 20px; }
-.phase-body ol { margin: 0; padding-left: 20px; font-size: 12.9px; line-height: 1.5; }
-.phase-body li { margin-bottom: 11px; }
-@media (max-width: 900px) { .roadmap { grid-template-columns: 1fr; } }
+/* align-items: start so each card sizes to its own content. The old phase
+   cards held 8/9/9 items and looked even by luck; these groups hold
+   7/6/2/2/4/5, so stretching would leave a short card hanging over dead
+   space. */
+.build-plan { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px;
+  align-items: start; }
+.plan-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.plan-head { padding: 16px 20px; color: white; }
+.plan-head .p { font-family: "IBM Plex Mono", monospace; font-size: 11px; opacity: 0.85; letter-spacing: 0.04em; text-transform: uppercase; }
+.plan-head .t { font-family: "Spectral", serif; font-size: 18px; font-weight: 600; margin-top: 3px; }
+/* Group colour is a grouping cue only. It carries NO ordering: these are six
+   kinds of work, all in scope now, not six steps in a sequence. */
+.plan-1 .plan-head { background: var(--accent-strong); }
+.plan-2 .plan-head { background: var(--good); }
+.plan-3 .plan-head { background: var(--brass); }
+.plan-4 .plan-head { background: var(--brass); }
+.plan-5 .plan-head { background: var(--accent-strong); }
+.plan-6 .plan-head { background: var(--ink-muted); }
+.plan-body { padding: 18px 20px; }
+.plan-blurb { margin: 0 0 12px; font-size: 12.4px; font-style: italic; color: var(--ink-muted); line-height: 1.45; }
+.plan-body ol { margin: 0; padding-left: 20px; font-size: 12.9px; line-height: 1.5; }
+.plan-body li { margin-bottom: 11px; }
+/* A status note is a CORRECTION to an action, so it sits under the action it
+   corrects rather than replacing it. */
+.plan-note { margin-top: 5px; padding: 6px 9px; border-left: 3px solid var(--brass);
+  background: color-mix(in srgb, var(--brass) 8%, transparent);
+  font-size: 11.8px; line-height: 1.45; color: var(--ink); }
+@media (max-width: 900px) { .build-plan { grid-template-columns: 1fr; } }
 
 /* ---------- closing ---------- */
 .closing { background: var(--accent-strong); color: #EAF1F8; }

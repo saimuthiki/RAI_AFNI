@@ -276,18 +276,34 @@ tbody tr:hover { background: var(--surface-2); }
 .v-skip { background: var(--risk-soft); color: var(--risk); }
 
 /* ---------- roadmap ---------- */
-.roadmap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
-.phase-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
-.phase-head { padding: 16px 20px; color: white; }
-.phase-head .p { font-family: "IBM Plex Mono", monospace; font-size: 11px; opacity: 0.85; letter-spacing: 0.04em; text-transform: uppercase; }
-.phase-head .t { font-family: "Spectral", serif; font-size: 18px; font-weight: 600; margin-top: 3px; }
-.phase-1 .phase-head { background: var(--accent-strong); }
-.phase-2 .phase-head { background: var(--brass); }
-.phase-3 .phase-head { background: var(--good); }
-.phase-body { padding: 18px 20px; }
-.phase-body ol { margin: 0; padding-left: 20px; font-size: 12.9px; line-height: 1.5; }
-.phase-body li { margin-bottom: 11px; }
-@media (max-width: 900px) { .roadmap { grid-template-columns: 1fr; } }
+/* align-items: start so each card sizes to its own content. The old phase
+   cards held 8/9/9 items and looked even by luck; these groups hold
+   7/6/2/2/4/5, so stretching would leave a short card hanging over dead
+   space. */
+.build-plan { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px;
+  align-items: start; }
+.plan-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.plan-head { padding: 16px 20px; color: white; }
+.plan-head .p { font-family: "IBM Plex Mono", monospace; font-size: 11px; opacity: 0.85; letter-spacing: 0.04em; text-transform: uppercase; }
+.plan-head .t { font-family: "Spectral", serif; font-size: 18px; font-weight: 600; margin-top: 3px; }
+/* Group colour is a grouping cue only. It carries NO ordering: these are six
+   kinds of work, all in scope now, not six steps in a sequence. */
+.plan-1 .plan-head { background: var(--accent-strong); }
+.plan-2 .plan-head { background: var(--good); }
+.plan-3 .plan-head { background: var(--brass); }
+.plan-4 .plan-head { background: var(--brass); }
+.plan-5 .plan-head { background: var(--accent-strong); }
+.plan-6 .plan-head { background: var(--ink-muted); }
+.plan-body { padding: 18px 20px; }
+.plan-blurb { margin: 0 0 12px; font-size: 12.4px; font-style: italic; color: var(--ink-muted); line-height: 1.45; }
+.plan-body ol { margin: 0; padding-left: 20px; font-size: 12.9px; line-height: 1.5; }
+.plan-body li { margin-bottom: 11px; }
+/* A status note is a CORRECTION to an action, so it sits under the action it
+   corrects rather than replacing it. */
+.plan-note { margin-top: 5px; padding: 6px 9px; border-left: 3px solid var(--brass);
+  background: color-mix(in srgb, var(--brass) 8%, transparent);
+  font-size: 11.8px; line-height: 1.45; color: var(--ink); }
+@media (max-width: 900px) { .build-plan { grid-template-columns: 1fr; } }
 
 /* ---------- closing ---------- */
 .closing { background: var(--accent-strong); color: #EAF1F8; }
@@ -313,7 +329,7 @@ footer { padding: 32px 0 60px; text-align: center; color: var(--ink-faint); font
       <a href="#checklist">Checklist</a>
       <a href="#recommendations">Recommendations</a>
       <a href="#feasibility">Feasibility</a>
-      <a href="#roadmap">Roadmap</a>
+      <a href="#build-plan">Build plan</a>
     </div>
   </div>
 </nav>
@@ -323,8 +339,8 @@ footer { padding: 32px 0 60px; text-align: center; color: var(--ink-faint); font
     <div class="hero-kicker"><span class="eyebrow" style="margin:0">AFNI · Responsible AI Governance</span></div>
     <h1>A field guide to building AI you can defend in front of a client.</h1>
     <p class="lede">Twenty-three open-source tools, read down to the actual source code — not the README —
-      then sorted into seven tenets and one buildable, phased plan for AFNI's own Responsible AI toolkit.</p>
-    <div class="stat-row"><div class="stat"><div class="n tabular">23</div><div class="l">open-source tools reviewed, code-level</div></div><div class="stat"><div class="n tabular">142</div><div class="l">concrete checks catalogued</div></div><div class="stat"><div class="n tabular">7</div><div class="l">responsible-AI tenets covered</div></div><div class="stat"><div class="n tabular">3</div><div class="l">phase rollout plan, 90 days</div></div></div>
+      then sorted into seven tenets and one buildable plan for AFNI's own Responsible AI toolkit.</p>
+    <div class="stat-row"><div class="stat"><div class="n tabular">23</div><div class="l">open-source tools reviewed, code-level</div></div><div class="stat"><div class="n tabular">142</div><div class="l">concrete checks catalogued</div></div><div class="stat"><div class="n tabular">7</div><div class="l">responsible-AI tenets covered</div></div><div class="stat"><div class="n tabular">26</div><div class="l">work items, one build, no phases</div></div></div>
   </div>
 </header>
 
@@ -2817,26 +2833,58 @@ footer { padding: 32px 0 60px; text-align: center; color: var(--ink-faint); font
   </div>
 </section>
 
-<section class="section" id="roadmap">
+<section class="section" id="build-plan">
   <div class="wrap">
     <div class="section-head">
-      <p class="eyebrow">Adoption plan</p>
-      <h2>A 90-day phased roadmap</h2>
-      <p class="dek">Free and deterministic first. Model-based and cloud checks once thresholds are calibrated.
-        The heaviest red-teaming once the runtime layer is stable.</p>
+      <p class="eyebrow">Build plan</p>
+      <h2>One build, no phases</h2>
+      <p class="dek">All twenty-six work items are in scope now, grouped by the kind of work each one is.
+        The only ordering that matters is the runtime cost cascade &mdash; free and deterministic checks on
+        every request, local models when a cheap check is unsure, paid calls last &mdash; and that is a
+        per-request decision, not a date.</p>
     </div>
-    <div class="roadmap">
-        <div class="phase-card phase-1">
-          <div class="phase-head"><div class="p">0-30 days</div><div class="t">Phase 1</div></div>
-          <div class="phase-body"><ol><li>Stand up a single internal Responsible AI gateway as a Python FastAPI service running NeMo Guardrails (Guardrails-develop), with the jailbreak rail&#x27;s fail-open default explicitly flipped to fail-closed for client-facing traffic.</li><li>Adopt the OpenGuardrails GuardEvent and Verdict JSON schemas plus its safety/security/privacy taxonomy as AFNI&#x27;s internal contract, and pin the protocol version since it is still pre-1.0.</li><li>Fork llm-guard-main into an AFNI-owned repository, pin every HuggingFace model revision, and enable the free deterministic tier first: Anonymize with the Vault, Secrets, InvisibleText, Regex, plus NeMo&#x27;s YARA injection rules and context-bloat heuristics.</li><li>Name one accountable owner per tenet and record the seven tenets, their owners and their current thresholds in a single governance register.</li><li>Run a baseline red-team scan against one existing AFNI AI application using garak-main (CLI, low effort) and a promptfoo-main OWASP-mapped redteam run, and publish the results as the before picture.</li><li>Wire the fast CI tier on the pilot application: DeepEval and promptfoo deterministic assertions plus PyRIT&#x27;s regex output scorers, running in under five minutes on every pull request.</li><li>Get legal to rule on deepchecks-main&#x27;s AGPL-3.0 licence and on promptfoo&#x27;s remote-only plugin data-residency question before either is embedded in a client deliverable.</li><li>Flag the two vendor-risk items found in the review for the record: Guardrails AI&#x27;s documented PyPI supply-chain compromise, and agentic_security-main&#x27;s hard-coded third-party bearer token.</li></ol></div>
+    <div class="build-plan">
+        <div class="plan-card plan-1">
+          <div class="plan-head">
+            <div class="p">7 items</div>
+            <div class="t">The runtime gateway</div>
+          </div>
+          <div class="plan-body"><p class="plan-blurb">Everything that sits in a live request path. Ordered by cost, not by date.</p><ol><li>Stand up a single internal Responsible AI gateway as a Python FastAPI service running NeMo Guardrails (Guardrails-develop), with the jailbreak rail&#x27;s fail-open default explicitly flipped to fail-closed for client-facing traffic.</li><li>Adopt the OpenGuardrails GuardEvent and Verdict JSON schemas plus its safety/security/privacy taxonomy as AFNI&#x27;s internal contract, and pin the protocol version since it is still pre-1.0.</li><li>Fork llm-guard-main into an AFNI-owned repository, pin every HuggingFace model revision, and enable the free deterministic tier first: Anonymize with the Vault, Secrets, InvisibleText, Regex, plus NeMo&#x27;s YARA injection rules and context-bloat heuristics.</li><li>Turn on the model-based runtime tier: LLM Guard&#x27;s DeBERTa-v3 prompt-injection classifier and local toxicity classifier, plus its cross-encoder NLI FactualConsistency scanner on every RAG response.</li><li>Route Azure AI Content Safety in through NeMo as a second opinion on high-risk content and as the groundedness detector for regulated RAG flows, with an AFNI custom blocklist, explicitly as defence in depth rather than the primary filter.</li><li>Port hai-guardrails-main&#x27;s healthcare PHI regexes (ICD-10, MRN, NPI, DEA) and entropy-gated secret patterns into Presidio custom recognisers inside the Python stack, and calibrate all thresholds on real AFNI traffic rather than shipping defaults.</li><li>Reimplement Rebuff&#x27;s canary-token leak detection and its self-hardening attack-signature store as native NeMo rails, seeding the signature store from the baseline red-team findings.</li></ol></div>
         </div>
-        <div class="phase-card phase-2">
-          <div class="phase-head"><div class="p">30-60 days</div><div class="t">Phase 2</div></div>
-          <div class="phase-body"><ol><li>Turn on the model-based runtime tier: LLM Guard&#x27;s DeBERTa-v3 prompt-injection classifier and local toxicity classifier, plus its cross-encoder NLI FactualConsistency scanner on every RAG response.</li><li>Route Azure AI Content Safety in through NeMo as a second opinion on high-risk content and as the groundedness detector for regulated RAG flows, with an AFNI custom blocklist, explicitly as defence in depth rather than the primary filter.</li><li>Port hai-guardrails-main&#x27;s healthcare PHI regexes (ICD-10, MRN, NPI, DEA) and entropy-gated secret patterns into Presidio custom recognisers inside the Python stack, and calibrate all thresholds on real AFNI traffic rather than shipping defaults.</li><li>Reimplement Rebuff&#x27;s canary-token leak detection and its self-hardening attack-signature store as native NeMo rails, seeding the signature store from the Phase 1 baseline findings.</li><li>Build the medium CI tier: a promptfoo redteam run over the OWASP LLM Top 10 plugin set plus a garak probe subset on every merge to main, gated on a maximum attack-success rate rather than on zero findings.</li><li>Establish the versioned regression corpus in git: export every attack that succeeded in Phase 1, tag it by tenet and OWASP category, and make replay of previously-fixed attacks a hard gate in the fast tier.</li><li>Adopt fairlearn-main plus the AIF360-main MDSS and FACTS scanners for any AFNI application making decisions about people, and run them as a scheduled batch job, not a runtime check.</li><li>Adopt shap-master for tabular and text model explanations and expose an explain endpoint backed by a background job, since SHAP is too slow for synchronous request handling.</li><li>Ship the audit store and dashboard: every verdict from runtime and CI written in the same schema, with OpenTelemetry traces flowing into Azure Monitor.</li></ol></div>
+        <div class="plan-card plan-2">
+          <div class="plan-head">
+            <div class="p">6 items</div>
+            <div class="t">Testing and CI</div>
+          </div>
+          <div class="plan-body"><p class="plan-blurb">Offline work. None of this is in a request path, and none of it can be.</p><ol><li>Run a baseline red-team scan against one existing AFNI AI application using garak-main (CLI, low effort) and a promptfoo-main OWASP-mapped redteam run, and publish the results as the before picture.</li><li>Wire the fast CI tier on the pilot application: DeepEval and promptfoo deterministic assertions plus PyRIT&#x27;s regex output scorers, running in under five minutes on every pull request.</li><li>Build the medium CI tier: a promptfoo redteam run over the OWASP LLM Top 10 plugin set plus a garak probe subset on every merge to main, gated on a maximum attack-success rate rather than on zero findings.</li><li>Establish the versioned regression corpus in git: export every attack that succeeded against the pilot application, tag it by tenet and OWASP category, and make replay of previously-fixed attacks a hard gate in the fast tier.</li><li>Stand up the slow nightly and pre-release tier: PyRIT Crescendo, TAP and PAIR multi-turn attacks, DeepTeam agentic vulnerability probes, and Deepchecks drift suites where licensing allows.</li><li>Point garak&#x27;s shields up and shields down probes at AFNI&#x27;s own gateway to prove the rails actually fire, and add that check to the release gate.</li></ol></div>
         </div>
-        <div class="phase-card phase-3">
-          <div class="phase-head"><div class="p">60-90 days</div><div class="t">Phase 3</div></div>
-          <div class="phase-body"><ol><li>Stand up the slow nightly and pre-release tier: PyRIT Crescendo, TAP and PAIR multi-turn attacks, DeepTeam agentic vulnerability probes, and Deepchecks drift suites where licensing allows.</li><li>Measure the guardrails rather than assuming them: run PyRIT&#x27;s scorer_evaluation tooling with Krippendorff&#x27;s alpha against a human-labelled sample of production traffic, and publish a real precision and recall figure per detector.</li><li>Point garak&#x27;s shields up and shields down probes at AFNI&#x27;s own gateway to prove the rails actually fire, and add that check to the release gate.</li><li>Build the per-tenant and per-project threshold configuration service modelled on the Infosys admin pattern, so each AFNI project can set its own strictness without forking the gateway.</li><li>Produce the standard client approval pack from CI artefacts: OWASP LLM Top 10, NIST AI RMF, MITRE ATLAS and EU AI Act mapped reports from promptfoo, plus the measured detector accuracy table and the audit-trail sample.</li><li>Vendor the specific unique Infosys modules if the business needs them: multi-format and DICOM PII scanning, NSFW image and video detection, and Faker-based anonymisation with differential privacy.</li><li>Run the evals-main deception, sandbagging and covert-persuasion suite once against any AFNI product claiming agent autonomy, before it ships.</li><li>Publish the AFNI Responsible AI Toolkit as an internal versioned package with a mandatory adoption gate: no AI-native application reaches production without routing through the gateway and passing the CI tiers.</li><li>Schedule quarterly re-benchmarking, because garak&#x27;s own published detector metrics and the archived status of llm-guard-main both mean accuracy decays unless someone owns it.</li></ol></div>
+        <div class="plan-card plan-3">
+          <div class="plan-head">
+            <div class="p">2 items</div>
+            <div class="t">Measurement</div>
+          </div>
+          <div class="plan-body"><p class="plan-blurb">The part nobody does. Without it every accuracy claim is a vendor&#x27;s word.</p><ol><li>Measure the guardrails rather than assuming them: run PyRIT&#x27;s scorer_evaluation tooling with Krippendorff&#x27;s alpha against a human-labelled sample of production traffic, and publish a real precision and recall figure per detector.</li><li>Schedule quarterly re-benchmarking, because garak&#x27;s own published detector metrics and the archived status of llm-guard-main both mean accuracy decays unless someone owns it.</li></ol></div>
+        </div>
+        <div class="plan-card plan-4">
+          <div class="plan-head">
+            <div class="p">2 items</div>
+            <div class="t">Fairness and explainability</div>
+          </div>
+          <div class="plan-body"><p class="plan-blurb">Scheduled batch jobs. One response is not a fairness measurement.</p><ol><li>Adopt fairlearn-main plus the AIF360-main MDSS and FACTS scanners for any AFNI application making decisions about people, and run them as a scheduled batch job, not a runtime check.</li><li>Adopt shap-master for tabular and text model explanations and expose an explain endpoint backed by a background job, since SHAP is too slow for synchronous request handling.</li></ol></div>
+        </div>
+        <div class="plan-card plan-5">
+          <div class="plan-head">
+            <div class="p">4 items</div>
+            <div class="t">Governance and accountability</div>
+          </div>
+          <div class="plan-body"><p class="plan-blurb">The half that is not code. One item here is the last real blocker.</p><ol><li>Name one accountable owner per tenet and record the seven tenets, their owners and their current thresholds in a single governance register.</li><li>Ship the audit store and dashboard: every verdict from runtime and CI written in the same schema, with OpenTelemetry traces flowing into Azure Monitor.</li><li>Produce the standard client approval pack from CI artefacts: OWASP LLM Top 10, NIST AI RMF, MITRE ATLAS and EU AI Act mapped reports from promptfoo, plus the measured detector accuracy table and the audit-trail sample.</li><li>Publish the AFNI Responsible AI Toolkit as an internal versioned package with a mandatory adoption gate: no AI-native application reaches production without routing through the gateway and passing the CI tiers.</li></ol></div>
+        </div>
+        <div class="plan-card plan-6">
+          <div class="plan-head">
+            <div class="p">5 items</div>
+            <div class="t">Settled, superseded or conditional</div>
+          </div>
+          <div class="plan-body"><p class="plan-blurb">Kept visible rather than deleted, so a reader can see what changed and why.</p><ol><li>Get legal to rule on deepchecks-main&#x27;s AGPL-3.0 licence and on promptfoo&#x27;s remote-only plugin data-residency question before either is embedded in a client deliverable.<div class="plan-note">SETTLED 2026-09-02 - AFNI holds licences covering Apache-2.0, MIT and AGPL-3.0, and cleared external data transport. Deepchecks stays benched on a technical ground instead: it has no per-request API at all.</div></li><li>Flag the two vendor-risk items found in the review for the record: Guardrails AI&#x27;s documented PyPI supply-chain compromise, and agentic_security-main&#x27;s hard-coded third-party bearer token.<div class="plan-note">PARTLY WITHDRAWN - the Guardrails AI PyPI compromise is real and stands. The &#x27;hard-coded bearer token&#x27; in Agentic Security is NOT real: the string is a Bearer XXXXX placeholder in a config template. Claim withdrawn.</div></li><li>Build the per-tenant and per-project threshold configuration service modelled on the Infosys admin pattern, so each AFNI project can set its own strictness without forking the gateway.<div class="plan-note">SUPERSEDED 2026-09-03 - AFNI removed the tenant dimension. What is built instead is one global threshold store with an operator override layer and a read log that proves a configured threshold was consulted.</div></li><li>Vendor the specific unique Infosys modules if the business needs them: multi-format and DICOM PII scanning, NSFW image and video detection, and Faker-based anonymisation with differential privacy.</li><li>Run the evals-main deception, sandbagging and covert-persuasion suite once against any AFNI product claiming agent autonomy, before it ships.</li></ol></div>
         </div></div>
   </div>
 </section>
@@ -2846,7 +2894,7 @@ footer { padding: 32px 0 60px; text-align: center; color: var(--ink-faint); font
     <p class="eyebrow">The bottom line</p>
     <h2>How AFNI should think about cost, accuracy, and reliability</h2>
     <p class="narrative">AFNI should spend its money where the risk is highest and use free, deterministic checks everywhere else. In practice that means running the cheap local checks on every single request, calling a paid model or cloud service only for the small slice of traffic that looks borderline, and pushing the expensive, slow, thorough work into nightly and pre-release testing rather than the live request path. No single filter should ever be the whole defence, because the independent evidence is clear that cloud content filters weaken on unusual and adversarial input, so the design is layered on purpose and every layer is allowed to be imperfect. The two rules that matter more than any tool choice are: if a check cannot run, say so and block rather than quietly letting the request through; and measure how accurate each check really is against human-reviewed examples instead of trusting a vendor&#x27;s claim. Maintenance is the hidden cost that sinks most governance programmes, so AFNI should standardise on one gateway, one verdict format and one audit trail, and accept a slightly less capable tool when it means one fewer thing to keep alive. Finally, the testing half is not optional polish: the red-team corpus AFNI builds is a durable company asset that outlives any tool, and it is the single most persuasive thing to put in front of a client&#x27;s security reviewer.</p>
-    <div class="steps"><div class="step"><span class="n">01</span><span>Walk through this atlas with Kiran and agree the AFNI Responsible AI standard.</span></div><div class="step"><span class="n">02</span><span>Kick off Phase 1: the gateway, the OpenGuardrails contract, and the LLM Guard fork.</span></div><div class="step"><span class="n">03</span><span>Get legal sign-off on the two flagged licensing/vendor-risk items (Deepchecks AGPL, promptfoo remote plugins).</span></div><div class="step"><span class="n">04</span><span>Yamini to schedule the follow-up session and send Kiran the acceptable-use document.</span></div><div class="step"><span class="n">05</span><span>Sai to complete the Azure AI-103 certification.</span></div></div>
+    <div class="steps"><div class="step"><span class="n">01</span><span>Walk through this atlas with Kiran and agree the AFNI Responsible AI standard.</span></div><div class="step"><span class="n">02</span><span>Start the build: the gateway, the OpenGuardrails contract, and the LLM Guard fork.</span></div><div class="step"><span class="n">03</span><span>Name one accountable owner per tenet - seven names. The last blocker code cannot clear.</span></div><div class="step"><span class="n">04</span><span>Yamini to schedule the follow-up session and send Kiran the acceptable-use document.</span></div><div class="step"><span class="n">05</span><span>Sai to complete the Azure AI-103 certification.</span></div></div>
   </div>
 </section>
 

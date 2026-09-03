@@ -192,48 +192,6 @@ def add_architecture_stack_slides(prs, ua, finish_slide_fn):
         finish_slide_fn(slide, "Per-Tenet Stack")
 
 
-# --------------------------------------------------------------ROADMAP ----
-def add_roadmap_overview_slide(prs, roadmap_phases, finish_slide_fn):
-    slide = blank_slide(prs)
-    add_header(slide, "Adoption Plan", "A 90-Day Phased Roadmap - Overview", accent=TEAL)
-    col_w = 3.85
-    xs = [0.55, 4.55, 8.55]
-    colors = [TEAL, AMBER, GREEN]
-    for x, phase, color in zip(xs, roadmap_phases, colors):
-        add_rounded(slide, x, 1.55, col_w, 0.55, color, radius=0.15)
-        add_text(slide, x, 1.55, col_w, 0.55, phase["phase"], size=13, color=WHITE, bold=True,
-                  align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE, font=FONT_HEAD)
-        headline = _truncate(phase["actions"][0], 140)
-        add_text(slide, x, 2.3, col_w, 1.0, headline, size=10.8, color=TEXT_DARK, italic=True,
-                  font=FONT_BODY, line_spacing=1.15)
-        add_text(slide, x, 3.4, col_w, 0.35, f"{len(phase['actions'])} concrete actions →", size=10.5,
-                  color=color, bold=True, font=FONT_HEAD)
-    add_rect(slide, 0.55, 4.1, 12.1, 0.02, LINE_GREY)
-    add_text(slide, 0.55, 4.3, 12.1, 2.6,
-              "Each phase is detailed on its own slide next. The plan front-loads free, deterministic "
-              "checks and the shared gateway contract, adds model-based and cloud checks once the basics "
-              "are calibrated on real traffic, and only takes on the heaviest red-team and drift-monitoring "
-              "work once the runtime layer is stable - so cost and complexity ramp up only as trust in the "
-              "earlier layers is proven.",
-              size=12.5, color=TEXT_MUTED, font=FONT_BODY, line_spacing=1.25)
-    finish_slide_fn(slide, "Roadmap Overview")
-
-
-def add_roadmap_phase_slides(prs, roadmap_phases, finish_slide_fn):
-    colors = [TEAL, AMBER, GREEN]
-    for phase, color in zip(roadmap_phases, colors):
-        slide = blank_slide(prs)
-        add_header(slide, "Adoption Plan", phase["phase"], accent=color)
-        actions = phase["actions"]
-        mid = -(-len(actions) // 2)
-        col1, col2 = actions[:mid], actions[mid:]
-        add_bullets(slide, 0.55, 1.55, 5.85, 5.5, col1, size=11.5, bullet_color=color, space_after=14,
-                    line_spacing=1.12)
-        add_bullets(slide, 6.55, 1.55, 6.1, 5.5, col2, size=11.5, bullet_color=color, space_after=14,
-                    line_spacing=1.12)
-        finish_slide_fn(slide, phase["phase"])
-
-
 # --------------------------------------------------------------CLOSING ----
 def add_recommendation_slide(prs, narrative, finish_slide_fn):
     slide = blank_slide(prs, NAVY)
@@ -252,8 +210,8 @@ def add_next_steps_slide(prs, finish_slide_fn):
     add_header(slide, "Wrap-Up", "Next Steps")
     items = [
         "Walk through this deck with Kiran and agree the AFNI Responsible AI standard.",
-        "Kick off Phase 1 of the roadmap: the gateway, the OpenGuardrails contract, and the LLM Guard fork.",
-        "Get legal sign-off on the two flagged licensing/vendor-risk items (Deepchecks AGPL, promptfoo remote plugins).",
+        "Start the build: the gateway, the OpenGuardrails contract, and the LLM Guard fork.",
+        "Name one accountable owner per tenet - seven names. This is the last blocker that code cannot clear.",
         "Yamini to schedule the follow-up session and send Kiran the acceptable-use document.",
         "Sai to complete the Azure AI-103 certification.",
     ]
@@ -291,7 +249,7 @@ def add_synthesis_slides(prs, synthesis, slide_divider_fn, finish_slide_fn, next
     add_all_methodology_slides(prs, finish_slide_fn)
 
     slide_divider_fn(prs, "Section", "Feasibility & Unified Architecture",
-                      "Which tools to adopt, how they fit together, and the phased plan to get there.")
+                      "Which tools to adopt, how they fit together, and the plan to get there.")
     add_dev_vs_testing_slide(prs, synthesis["dev_vs_testing_split"], finish_slide_fn)
     add_feasibility_slides(prs, synthesis["feasibility_matrix"], finish_slide_fn)
     add_architecture_narrative_slide(prs, synthesis["unified_architecture"], finish_slide_fn)
@@ -305,7 +263,11 @@ def add_synthesis_slides(prs, synthesis, slide_divider_fn, finish_slide_fn, next
     add_infosys_vs_nemo_diagram_slide(prs, finish_slide_fn)
     add_infosys_vs_nemo_bullets_slide(prs, finish_slide_fn)
     add_architecture_stack_slides(prs, synthesis["unified_architecture"], finish_slide_fn)
-    add_roadmap_overview_slide(prs, synthesis["roadmap_phases"], finish_slide_fn)
-    add_roadmap_phase_slides(prs, synthesis["roadmap_phases"], finish_slide_fn)
+    # The build plan, unphased. AFNI builds in one pass, so the four 90-day
+    # roadmap slides were replaced by six grouped by the kind of work each item
+    # is. `roadmap_phases` in RAI_Synthesis.json is still the source and is left
+    # as the analysis wrote it - see helpers/build_deck_buildplan.py.
+    from build_deck_buildplan import add_all_build_plan_slides
+    add_all_build_plan_slides(prs, synthesis["roadmap_phases"], finish_slide_fn)
     add_recommendation_slide(prs, synthesis["key_tradeoff_narrative"], finish_slide_fn)
     add_next_steps_slide(prs, finish_slide_fn)

@@ -8,6 +8,7 @@ import html as _html
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "helpers"))
 
 from repo_slide_content import REPO_SLIDES
+from build_plan_data import _flatten as _flatten_plan, groups as _plan_groups
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _DATA_DIR = os.path.join(_ROOT, "data")
@@ -80,7 +81,7 @@ def gen_stats():
         (n_repos, "open-source tools reviewed, code-level"),
         (n_checks, "concrete checks catalogued"),
         (n_tenets, "responsible-AI tenets covered"),
-        (3, "phase rollout plan, 90 days"),
+        (26, "work items, one build, no phases"),
     ]
     cells = "".join(
         f'<div class="stat"><div class="n tabular">{n}</div><div class="l">{esc(l)}</div></div>'
@@ -258,17 +259,32 @@ def gen_feasibility_table():
     return "".join(rows)
 
 
-# ============================================================ ROADMAP
-def gen_roadmap():
+# ============================================================ BUILD PLAN
+def gen_build_plan():
+    """The same 26 actions, grouped by the kind of work rather than by a date.
+
+    Grouping comes from `helpers/build_plan_data.py`, which the PowerPoint deck
+    reads too, so the two renderings cannot drift apart.
+    """
+    actions = _flatten_plan(SYN["roadmap_phases"])
     cards = []
-    for i, phase in enumerate(SYN["roadmap_phases"], start=1):
-        actions = "".join(f"<li>{esc(a)}</li>" for a in phase["actions"])
-        title = phase["phase"].split("(")[0].strip()
-        window = phase["phase"].split("(")[1].rstrip(")") if "(" in phase["phase"] else ""
+    for i, (key, title, blurb) in enumerate(_plan_groups(), start=1):
+        items = [a for a in actions if a["group"] == key]
+        if not items:
+            continue
+        lis = []
+        for a in items:
+            note = (f'<div class="plan-note">{esc(a["note"])}</div>'
+                    if a["note"] else "")
+            lis.append(f"<li>{esc(a['text'])}{note}</li>")
+        n = len(items)
         cards.append(f'''
-        <div class="phase-card phase-{i}">
-          <div class="phase-head"><div class="p">{esc(window)}</div><div class="t">{esc(title)}</div></div>
-          <div class="phase-body"><ol>{actions}</ol></div>
+        <div class="plan-card plan-{i}">
+          <div class="plan-head">
+            <div class="p">{n} item{"s" if n != 1 else ""}</div>
+            <div class="t">{esc(title)}</div>
+          </div>
+          <div class="plan-body"><p class="plan-blurb">{esc(blurb)}</p><ol>{"".join(lis)}</ol></div>
         </div>''')
     return "".join(cards)
 
@@ -277,8 +293,8 @@ def gen_roadmap():
 def gen_closing_steps():
     steps = [
         "Walk through this atlas with Kiran and agree the AFNI Responsible AI standard.",
-        "Kick off Phase 1: the gateway, the OpenGuardrails contract, and the LLM Guard fork.",
-        "Get legal sign-off on the two flagged licensing/vendor-risk items (Deepchecks AGPL, promptfoo remote plugins).",
+        "Start the build: the gateway, the OpenGuardrails contract, and the LLM Guard fork.",
+        "Name one accountable owner per tenet - seven names. The last blocker code cannot clear.",
         "Yamini to schedule the follow-up session and send Kiran the acceptable-use document.",
         "Sai to complete the Azure AI-103 certification.",
     ]
@@ -336,7 +352,7 @@ PAGE = f"""<title>Guardrail Atlas</title>
       <a href="#checklist">Checklist</a>
       <a href="#recommendations">Recommendations</a>
       <a href="#feasibility">Feasibility</a>
-      <a href="#roadmap">Roadmap</a>
+      <a href="#build-plan">Build plan</a>
     </div>
   </div>
 </nav>
@@ -346,7 +362,7 @@ PAGE = f"""<title>Guardrail Atlas</title>
     <div class="hero-kicker"><span class="eyebrow" style="margin:0">AFNI · Responsible AI Governance</span></div>
     <h1>A field guide to building AI you can defend in front of a client.</h1>
     <p class="lede">Twenty-three open-source tools, read down to the actual source code — not the README —
-      then sorted into seven tenets and one buildable, phased plan for AFNI's own Responsible AI toolkit.</p>
+      then sorted into seven tenets and one buildable plan for AFNI's own Responsible AI toolkit.</p>
     {gen_stats()}
   </div>
 </header>
@@ -479,15 +495,17 @@ PAGE = f"""<title>Guardrail Atlas</title>
   </div>
 </section>
 
-<section class="section" id="roadmap">
+<section class="section" id="build-plan">
   <div class="wrap">
     <div class="section-head">
-      <p class="eyebrow">Adoption plan</p>
-      <h2>A 90-day phased roadmap</h2>
-      <p class="dek">Free and deterministic first. Model-based and cloud checks once thresholds are calibrated.
-        The heaviest red-teaming once the runtime layer is stable.</p>
+      <p class="eyebrow">Build plan</p>
+      <h2>One build, no phases</h2>
+      <p class="dek">All twenty-six work items are in scope now, grouped by the kind of work each one is.
+        The only ordering that matters is the runtime cost cascade &mdash; free and deterministic checks on
+        every request, local models when a cheap check is unsure, paid calls last &mdash; and that is a
+        per-request decision, not a date.</p>
     </div>
-    <div class="roadmap">{gen_roadmap()}</div>
+    <div class="build-plan">{gen_build_plan()}</div>
   </div>
 </section>
 

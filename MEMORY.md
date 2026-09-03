@@ -1097,3 +1097,86 @@ The doc tables were **derived from the registry, not hand-edited**: 32 verdict c
   Plan — A 90-Day Phased Roadmap" section. That is a **separate delivered artefact**
   about repository research, not the UI or the backend, and stripping it means
   regenerating the deck. Flagged to AFNI rather than done unasked.
+
+## 2026-09-03 — Phases removed from the deck and the Atlas HTML too
+
+AFNI: *"yes remove the phase stuff from the deck also."*
+
+The platform-side removal earlier today deliberately stopped at the `analysis/` tree,
+because the 83-slide deck and `guardrail_atlas.html` are a separate delivered artefact
+about repository research and stripping them means regenerating both. AFNI asked for it,
+so it is done.
+
+### What was there
+
+Four slides — `add_roadmap_overview_slide` ("Adoption Plan · A 90-Day Phased Roadmap")
+plus `add_roadmap_phase_slides`, one per phase — and one HTML section, `#roadmap`
+("A 90-day phased roadmap"), rendering the same three phase cards.
+
+### The decision that shaped the fix: the source data was NOT edited
+
+`analysis/data/RAI_Synthesis.json` → `roadmap_phases` is left **exactly as the analysis
+wrote it**, phases and all. It is the record of what the source-level review concluded,
+and the review did conclude a phased plan. Rewriting research output to match a later
+delivery decision would destroy the audit trail — the deck would then claim the analysis
+had said something it did not.
+
+So both renderers read those same 26 actions and regroup them by **the kind of work each
+one is**. Nothing was dropped: 7 runtime + 6 testing/CI + 2 measurement + 2 batch +
+4 governance + 5 settled/superseded/conditional = **26**, asserted rather than assumed.
+
+### `helpers/build_plan_data.py` — one source of truth for both renderers
+
+Extracted so the PowerPoint path and the HTML path cannot disagree about what the plan
+is. Deliberately free of any `python-pptx` import, so the HTML build does not depend on
+a presentation library. Colour is left to each renderer (the deck and the Atlas have
+different palettes); the shared module carries only the key, title, blurb and grouping.
+
+**The grouping is curated by `(phase_index, action_index)`, never inferred from the
+action text.** Keyword matching over prose would silently reclassify an action the moment
+somebody reworded it. `_flatten()` raises on an unclassified action *and* on a
+classification whose action no longer exists, so the mapping cannot rot into a no-op.
+
+### Two actions named a phase INSIDE their own text
+
+`[1,3]` "seeding the signature store from the Phase 1 baseline findings" and `[1,5]`
+"export every attack that succeeded in Phase 1". A deck whose heading says *no phases*
+containing sentences that name one is incoherent, but the fix could not be to edit the
+JSON. So `TEXT_FIXUPS` substitutes them at **display time**, and `_apply_fixups()`
+**raises if an expected phrase is not found** — otherwise a future rewording of the JSON
+would silently restore a phase reference into an unphased plan.
+
+Verified afterwards: 0 actions naming a phase after fixups, and `Phase 1` still present
+in the source JSON. Both facts asserted in the same check.
+
+### Three actions carry a STATUS NOTE rather than being deleted
+
+Rendered *underneath* the action they correct, never instead of it:
+
+| Action | Note |
+|---|---|
+| get legal to rule on Deepchecks AGPL / promptfoo residency | **SETTLED 2026-09-02** — licences held, transport cleared; Deepchecks benched on a technical ground (no per-request API) |
+| flag the two vendor-risk items | **PARTLY WITHDRAWN** — the Guardrails AI PyPI compromise stands; the Agentic Security "hard-coded bearer token" is a `Bearer XXXXX` placeholder in a config template. Claim withdrawn. |
+| build the per-tenant threshold configuration service | **SUPERSEDED 2026-09-03** — tenant dimension removed; one global store with an override layer and a read log is what exists |
+
+### One visual defect I introduced, and fixed
+
+The old phase cards held 8/9/9 items and looked even **by luck**. The new groups hold
+7/6/2/2/4/5, so the CSS grid stretched the two-item cards over dead space. Fixed with
+`align-items: start` on `.build-plan` so each card sizes to its own content. Caught by
+rendering the section in a browser and looking at it, not by any check.
+
+### Verification
+
+- **Deck: 80 → 83 slides** (−4 roadmap, +7 build-plan), PAGE counter and actual count in
+  agreement.
+- `qa_deck.py` — **0 issues**. `qa_matrix.py` — **0 potential overflow cells across all
+  16 tables** (the count has to be *read*; that script exits 0 regardless).
+  `verify_deck.py` — all **23 repos** and all **7 tenets** still present.
+- Atlas HTML rebuilt; rendered in a headless browser: **6 plan cards, 3 status notes,
+  no page errors**. Every `var(--…)` in the new CSS checked against the stylesheet's own
+  definitions — the first draft used `var(--muted)`, which **does not exist** in that
+  sheet (the real names are `--ink-muted` / `--ink-faint`), and would have rendered an
+  unstyled card head with white text on white.
+- Deck and HTML both carry the word "phase" exactly where intended: slide 75's
+  "there is no 30 / 60 / 90-day rollout" and the HTML's "One build, no phases" heading.
