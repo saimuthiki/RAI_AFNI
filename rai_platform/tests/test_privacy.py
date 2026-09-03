@@ -60,13 +60,12 @@ CLEAN_TRANSCRIPT = (
 )
 
 
-def event(payload=None, client_facing=True):
+def event(payload=None):
     return GuardEvent(
         kind=EventKind.REQUEST, step_id="step-1", agent_id="agent-1",
         agent_type="chat", agent_workspace="afni", agent_user="tester",
         llm_protocol=LLMProtocol.OPENAI_CHAT,
         payload=payload if payload is not None else {"text": "hello"},
-        client_facing=client_facing,
     )
 
 
@@ -717,7 +716,7 @@ class TestCascadeBehaviour(unittest.TestCase):
     # whether an optional dependency is present is not testing the cascade.
     #
     # What is actually worth pinning is the *rule*: an escalated stage that
-    # cannot look fails closed on client-facing traffic and open on internal
+    # cannot look fails closed, unconditionally
     # traffic, and an escalated stage that CAN look does neither.
 
     def _cascade_with_stage_2(self, stage_2_rail):
@@ -727,7 +726,7 @@ class TestCascadeBehaviour(unittest.TestCase):
     def test_a_severe_pii_hit_escalates_and_then_fails_closed(self):
         # A checksum-valid SSN is HIGH severity, so the engine escalates for a
         # second opinion. When that stage cannot look, fail-closed turns it into
-        # a block on client-facing traffic. Blocking is the right answer to
+        # a block. Blocking is the right answer to
         # "there is regulated PII here and I could not fully assess the payload".
         outcome = self._cascade_with_stage_2(_BlindStage2()).evaluate(
             event({"text": "my ssn is 123-45-6789"}))
@@ -737,12 +736,11 @@ class TestCascadeBehaviour(unittest.TestCase):
         self.assertTrue(any(f.category == "privacy.pii.national_id.us"
                             for f in outcome.verdict.findings))
 
-    def test_the_same_payload_is_allowed_on_internal_traffic(self):
-        outcome = self._cascade_with_stage_2(_BlindStage2()).evaluate(
-            event({"text": "my ssn is 123-45-6789"}, client_facing=False))
-        self.assertIs(outcome.verdict.decision, Decision.ALLOW)
-        # Allowed, but the gap is still on the record.
-        self.assertTrue(outcome.verdict.could_not_judge)
+    # test_the_same_payload_is_allowed_on_internal_traffic lived here, driving
+    # the same payload with `client_facing=False` to assert ALLOW. The switch was
+    # removed, so it became a duplicate of the test above. The meaningful
+    # contrast - a Stage 2 that CAN look flips the same payload to allow - is the
+    # next test, and it is the one that actually earns its place.
 
     def test_a_stage_2_that_can_look_removes_the_fail_closed_block(self):
         """The counterpart, and the reason installing presidio changes the block

@@ -248,7 +248,7 @@ def corpus_router(gateway: Any) -> APIRouter:
     router = APIRouter()
     # Cascades trimmed to a stage ceiling, built once per ceiling rather than per
     # request. `resolve_threshold` is threaded through so a corpus run honours the
-    # same per-tenant thresholds as live traffic - a regression suite judged by
+    # same thresholds as live traffic - a regression suite judged by
     # different thresholds than production is measuring the wrong thing.
     cascades: dict[int, Cascade] = {}
 

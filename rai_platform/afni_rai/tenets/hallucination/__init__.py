@@ -1166,7 +1166,7 @@ def register(registry) -> None:
         "transformers + torch and the pinned "
         f"{NliGroundednessRail.MODEL_ID} weights, and a retrieved source "
         "per path; without either it reports unjudged and fail-closed "
-        "blocks client-facing traffic.")
+        "blocks any request.")
 
     # --- needs a paid service that is not configured -------------------- #
     declare(

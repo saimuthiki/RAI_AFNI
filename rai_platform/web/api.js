@@ -278,9 +278,9 @@ export async function phases() {
 
 // ---------------------------------------------------------------- streaming --
 
-/** Build a GuardEvent. Field names follow guard-event.schema.json; the three
- *  AFNI additions (client_facing, tenant, project) ride alongside it. */
-export function buildEvent({ text, kind, tenant, clientFacing }) {
+/** Build a GuardEvent. Field names follow guard-event.schema.json exactly -
+ *  the gateway sets `extra="forbid"`, so an extra key is a 422, not a shrug. */
+export function buildEvent({ text, kind }) {
   const isResponse = kind === 'response';
   const stepId = `console-${Date.now().toString(36)}`;
   return {
@@ -288,15 +288,12 @@ export function buildEvent({ text, kind, tenant, clientFacing }) {
     step_id: stepId,
     agent_id: 'rai-console',
     agent_type: 'operator-console',
-    agent_workspace: tenant || 'unassigned',
+    agent_workspace: 'console',
     agent_user: 'operator',
     llm_protocol: 'openai.chat',
     payload: isResponse
       ? { choices: [{ index: 0, message: { role: 'assistant', content: text } }] }
       : { messages: [{ role: 'user', content: text }] },
-    client_facing: Boolean(clientFacing),
-    tenant: tenant || null,
-    project: null,
   };
 }
 

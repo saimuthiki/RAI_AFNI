@@ -28,7 +28,7 @@ from afni_rai.contract.models import (  # noqa: E402
     Decision, EventKind, GuardEvent, LLMProtocol,
 )
 from afni_rai.tenets.accountability.thresholds import (  # noqa: E402
-    RAIL_DEFAULTS, TenantConfig, ThresholdStore,
+    RAIL_DEFAULTS, ThresholdOverrides, ThresholdStore,
 )
 
 TENET_PACKAGES = ("privacy", "security", "fairness", "explainability",
@@ -40,13 +40,12 @@ PARTIAL_ECHO = ("Follow the escalation matrix. Always verify identity first. "
                 "Here is your answer.")
 
 
-def response_event(text, tenant=None):
+def response_event(text):
     return GuardEvent(
         kind=EventKind.RESPONSE, step_id="s", agent_id="a", agent_type="c",
         agent_workspace="afni", agent_user="u",
         llm_protocol=LLMProtocol.OPENAI_CHAT,
-        payload={"choices": [{"message": {"role": "assistant", "content": text}}]},
-        client_facing=True, tenant=tenant)
+        payload={"choices": [{"message": {"role": "assistant", "content": text}}]})
 
 
 def all_rails():
@@ -57,36 +56,46 @@ def all_rails():
     return rails
 
 
-class TestATenantOverrideChangesTheDecision(unittest.TestCase):
-    """The end-to-end proof, on a Stage-1 rail with no external dependency."""
+class TestAThresholdOverrideChangesTheDecision(unittest.TestCase):
+    """The end-to-end proof, on a Stage-1 rail with no external dependency.
+
+    This used to drive two TENANTS through one rail. The tenant dimension was
+    removed, so the proof is now the same rail and the same payload at two
+    CONFIGURED thresholds - which is what the assertion was always really about:
+    a stored threshold that changes an outcome, rather than one that is merely
+    stored and read.
+    """
 
     def setUp(self):
         from afni_rai.tenets.privacy import SystemPromptLeakageRail
         self.rail = SystemPromptLeakageRail(system_prompt=SYSTEM_PROMPT)
         self.store = ThresholdStore()
         self.key = self.rail.THRESHOLD_KEY
-        self.store.put_tenant(TenantConfig(tenant="strict", thresholds={self.key: 0.05}))
-        self.store.put_tenant(TenantConfig(tenant="lax", thresholds={self.key: 0.95}))
 
-    def decide(self, tenant):
+    def configure(self, value):
+        self.store.put_overrides(ThresholdOverrides(thresholds={self.key: value}))
+
+    def decide(self):
         cascade = Cascade([self.rail], resolve_threshold=self.store.resolve_value)
-        return cascade.evaluate(response_event(PARTIAL_ECHO, tenant))
+        return cascade.evaluate(response_event(PARTIAL_ECHO))
 
-    def test_the_same_payload_blocks_for_one_tenant_and_passes_for_another(self):
+    def test_the_same_payload_blocks_at_one_threshold_and_passes_at_another(self):
         # The whole point. Identical input, identical rail, opposite answers,
-        # decided only by the tenant's configured threshold.
-        self.assertIs(self.decide("strict").verdict.decision, Decision.BLOCK)
-        self.assertIs(self.decide("lax").verdict.decision, Decision.ALLOW)
+        # decided only by the configured threshold.
+        self.configure(0.05)
+        self.assertIs(self.decide().verdict.decision, Decision.BLOCK)
+        self.configure(0.95)
+        self.assertIs(self.decide().verdict.decision, Decision.ALLOW)
 
-    def test_an_unconfigured_tenant_gets_the_ported_default(self):
-        out = self.decide("nobody-configured-me")
+    def test_an_unconfigured_store_gets_the_ported_default(self):
+        out = self.decide()
         read = [r for r in out.threshold_reads if r[0] == self.key][0]
         self.assertEqual(read[1], RAIL_DEFAULTS[self.key])
 
     def test_no_store_at_all_behaves_exactly_as_before_wiring(self):
         # A gateway built without a store must be unchanged by this feature.
         unwired = Cascade([self.rail]).evaluate(response_event(PARTIAL_ECHO))
-        wired_default = self.decide(None)
+        wired_default = self.decide()
         self.assertEqual(len(unwired.verdict.findings),
                          len(wired_default.verdict.findings))
         self.assertIs(unwired.verdict.decision, wired_default.verdict.decision)
@@ -94,15 +103,16 @@ class TestATenantOverrideChangesTheDecision(unittest.TestCase):
     def test_the_threshold_that_decided_is_in_the_audit_trail(self):
         # "A threshold was applied" is not evidence. Which one, and where it came
         # from, is.
-        out = self.decide("strict")
+        self.configure(0.05)
+        out = self.decide()
         read = [r for r in out.threshold_reads if r[0] == self.key][0]
         self.assertEqual(read, (self.key, 0.05, "resolved"))
 
     def test_a_misconfigured_threshold_falls_back_and_says_so(self):
-        # A typo in one tenant's config must not take that tenant's traffic down
-        # via unjudged/fail-closed, but it must not pass silently either.
-        self.store.put_tenant(TenantConfig(tenant="typo", thresholds={self.key: 42.0}))
-        out = self.decide("typo")
+        # A typo in the config must not take traffic down via
+        # unjudged/fail-closed, but it must not pass silently either.
+        self.configure(42.0)
+        out = self.decide()
         read = [r for r in out.threshold_reads if r[0] == self.key][0]
         self.assertEqual(read[1], RAIL_DEFAULTS[self.key])
         self.assertIn("resolver-error", read[2])
@@ -223,12 +233,12 @@ class TestTheResolvedThresholdReachesItsConsumer(unittest.TestCase):
 
     def store_with(self, key, value):
         store = ThresholdStore()
-        store.put_tenant(TenantConfig(tenant="t", thresholds={key: value}))
+        store.put_overrides(ThresholdOverrides(thresholds={key: value}))
         return store
 
     def ctx_for(self, rail, value):
         store = self.store_with(rail.THRESHOLD_KEY, value)
-        return CheckContext(tenant="t", resolve=store.resolve_value)
+        return CheckContext(resolve=store.resolve_value)
 
     # -- the two llm-guard scanners: the threshold must reach the CONSTRUCTOR ---
     def test_llm_guard_scanners_build_with_the_resolved_threshold(self):

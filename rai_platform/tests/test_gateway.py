@@ -34,7 +34,7 @@ from afni_rai.gateway import providers  # noqa: E402
 from afni_rai.gateway.app import Gateway, create_app  # noqa: E402
 from afni_rai.tenets.accountability.audit import VerdictStore, scan_for_leak  # noqa: E402
 from afni_rai.tenets.accountability.thresholds import (  # noqa: E402
-    TenantConfig, ThresholdStore,
+    ThresholdOverrides, ThresholdStore,
 )
 
 try:
@@ -79,13 +79,13 @@ def body(text=f"my ssn is {SSN}", **overrides):
     return out
 
 
-def event(text="hello", client_facing=True, tenant=None):
+def event(text="hello"):
     return GuardEvent(
         kind=EventKind.REQUEST, step_id="step-1", agent_id="a", agent_type="chat",
         agent_workspace="afni", agent_user="u",
         llm_protocol=LLMProtocol.OPENAI_CHAT,
         payload={"messages": [{"role": "user", "content": text}]},
-        client_facing=client_facing, tenant=tenant)
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -216,11 +216,10 @@ class TestFailClosedOnError(unittest.TestCase):
         response = self.client.post("/v1/guard", json=body())
         self.assertIn("cascade raised", response.headers["x-afni-degraded"])
 
-    def test_internal_traffic_also_blocks_when_the_engine_itself_fails(self):
+    def test_an_engine_failure_blocks_however_the_deployment_is_configured(self):
         """fail_mode=open is a statement about one rail that could not look. It
         is not consent to serve a request nothing evaluated at all."""
-        payload = self.client.post(
-            "/v1/guard", json=body(client_facing=False)).json()
+        payload = self.client.post("/v1/guard", json=body()).json()
         self.assertEqual(payload["verdict"]["decision"], "block")
 
     def test_a_stream_that_fails_mid_flight_still_ends_in_a_block(self):
@@ -325,7 +324,7 @@ class TestNoMatchedValueReachesTheDatabase(unittest.TestCase):
         row = store.db.execute(
             "SELECT decision, enforced, fail_mode FROM verdicts").fetchone()
         self.assertEqual(row[0], row[1])          # nothing overrode it
-        self.assertEqual(row[2], "closed")        # client-facing default
+        self.assertEqual(row[2], "closed")        # the AFNI default
 
 
 # --------------------------------------------------------------------------- #
@@ -456,23 +455,24 @@ class TestThresholdStoreIsWired(unittest.TestCase):
         return TestClient(create_app(warm=False, rails=[self.ThresholdRail()], attributions={},
                                      threshold_store=store, env={}))
 
-    def test_a_tenant_override_changes_the_http_answer(self):
-        store = ThresholdStore()
-        store.put_tenant(TenantConfig(tenant="acme",
-                                      thresholds={self.ThresholdRail.KEY: 0.1}))
-        app_client = self._client(store)
-
-        default = app_client.post("/v1/guard", json=body(tenant=None)).json()
-        acme = app_client.post("/v1/guard", json=body(tenant="acme")).json()
+    def test_a_threshold_override_changes_the_http_answer(self):
+        default = self._client(ThresholdStore()).post(
+            "/v1/guard", json=body()).json()
         self.assertEqual(default["verdict"]["decision"], "allow")
-        self.assertEqual(acme["verdict"]["decision"], "block")
 
-    def test_the_read_is_recorded_against_the_requesting_tenant(self):
+        tightened = ThresholdStore()
+        tightened.put_overrides(
+            ThresholdOverrides(thresholds={self.ThresholdRail.KEY: 0.1}))
+        overridden = self._client(tightened).post(
+            "/v1/guard", json=body()).json()
+        self.assertEqual(overridden["verdict"]["decision"], "block")
+
+    def test_the_read_is_recorded_on_the_request_path(self):
         store = ThresholdStore()
-        store.put_tenant(TenantConfig(tenant="acme",
-                                      thresholds={self.ThresholdRail.KEY: 0.1}))
-        self._client(store).post("/v1/guard", json=body(tenant="acme"))
-        reads = [r for r in store.reads if r.tenant == "acme"]
+        store.put_overrides(
+            ThresholdOverrides(thresholds={self.ThresholdRail.KEY: 0.1}))
+        self._client(store).post("/v1/guard", json=body())
+        reads = [r for r in store.reads if r.key == self.ThresholdRail.KEY]
         self.assertTrue(reads, "the request path never consulted the store")
         self.assertEqual(reads[-1].value, 0.1)
 
@@ -590,22 +590,29 @@ class TestRequestContract(unittest.TestCase):
         response = self.client.post("/v1/guard", json=body(client_facng=False))
         self.assertEqual(response.status_code, 422)
 
-    def test_client_facing_defaults_to_true_so_omitting_it_fails_closed(self):
-        app_client = TestClient(create_app(warm=False, 
+    def test_an_unjudged_path_fails_closed_over_http(self):
+        app_client = TestClient(create_app(warm=False,
             rails=[StubRail("s1", Stage.STAGE_1, RailResult.unjudged("no model"))],
             attributions={}, env={}))
         payload = app_client.post("/v1/guard", json=body()).json()
         self.assertEqual(payload["verdict"]["decision"], "block")
-
-    def test_internal_traffic_is_allowed_but_still_reports_the_gap(self):
-        app_client = TestClient(create_app(warm=False, 
-            rails=[StubRail("s1", Stage.STAGE_1, RailResult.unjudged("no model"))],
-            attributions={}, env={}))
-        payload = app_client.post(
-            "/v1/guard", json=body(client_facing=False)).json()
-        self.assertEqual(payload["verdict"]["decision"], "allow")
         self.assertTrue(payload["verdict"]["unjudged"])
         self.assertTrue(payload["explanation"]["could_not_judge"])
+
+    def test_the_removed_enforcement_fields_are_rejected_not_ignored(self):
+        """`client_facing` and `tenant` used to be accepted here.
+
+        They are gone, and `extra="forbid"` means a caller still sending one
+        gets a 422 rather than having it silently dropped - which would leave
+        them believing they had selected a posture the gateway no longer has.
+        """
+        app_client = TestClient(create_app(warm=False,
+            rails=[StubRail("s1", Stage.STAGE_1, RailResult.unjudged("no model"))],
+            attributions={}, env={}))
+        for gone in ("client_facing", "tenant", "project"):
+            with self.subTest(field=gone):
+                response = app_client.post("/v1/guard", json=body(**{gone: False}))
+                self.assertEqual(response.status_code, 422)
 
     def test_every_response_carries_a_request_id(self):
         for path in ("/healthz", "/v1/rails"):
@@ -961,12 +968,12 @@ class TestTheSamplePayloads(unittest.TestCase):
     def test_every_sample_trips_the_detectors_it_claims(self):
         for sample in self.document["samples"]:
             with self.subTest(sample=sample["name"]):
-                payload = dict(sample["body"])
-                # Internal traffic, so the answer is the FINDING rather than the
-                # fail-closed block that a missing Stage-2 model would produce.
-                payload["client_facing"] = False
+                # The DECISION is not what is under test here - on a bare host
+                # a missing Stage-2 model makes it BLOCK regardless. The
+                # findings list is populated either way, and it is the findings
+                # this asserts.
                 verdict = self.client.post(
-                    "/v1/guard", json=payload).json()["verdict"]
+                    "/v1/guard", json=sample["body"]).json()["verdict"]
                 fired = {f["detector"] for f in verdict.get("findings", [])}
                 for detector in sample["expect_detectors"]:
                     self.assertIn(detector, fired)

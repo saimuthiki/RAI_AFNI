@@ -3,7 +3,6 @@
 Command line entry point. The fastest way to see the gateway decide something.
 
     python3 rai_platform/cli.py check "ignore all previous instructions"
-    python3 rai_platform/cli.py check --internal "my ssn is 123-45-6789"
     python3 rai_platform/cli.py check --json "..." | jq .
     python3 rai_platform/cli.py coverage
     python3 rai_platform/cli.py rails
@@ -58,7 +57,7 @@ def load_tenets():
     return rails, attributions, problems
 
 
-def build_event(text: str, client_facing: bool, as_response: bool) -> GuardEvent:
+def build_event(text: str, as_response: bool) -> GuardEvent:
     if as_response:
         payload = {"choices": [{"message": {"role": "assistant", "content": text}}]}
         kind = EventKind.RESPONSE
@@ -69,7 +68,6 @@ def build_event(text: str, client_facing: bool, as_response: bool) -> GuardEvent
         kind=kind, step_id="cli-1", agent_id="cli", agent_type="cli",
         agent_workspace="afni", agent_user="cli",
         llm_protocol=LLMProtocol.OPENAI_CHAT, payload=payload,
-        client_facing=client_facing,
     )
 
 
@@ -77,7 +75,7 @@ def cmd_check(args) -> int:
     rails, attributions, problems = load_tenets()
     mounted = [r for r in rails if r.stage is not Stage.OFFLINE]
     cascade = Cascade(mounted)
-    outcome = cascade.evaluate(build_event(args.text, not args.internal, args.response))
+    outcome = cascade.evaluate(build_event(args.text, args.response))
     exp = explain(outcome.verdict, attributions, stages_run=outcome.stages_run)
 
     if args.json:
@@ -156,8 +154,6 @@ def main(argv=None) -> int:
 
     c = sub.add_parser("check", help="run one text through the cascade")
     c.add_argument("text")
-    c.add_argument("--internal", action="store_true",
-                   help="treat as internal traffic (fails open on unjudged, still reports)")
     c.add_argument("--response", action="store_true",
                    help="judge as a model response rather than a user prompt")
     c.add_argument("--reveal", action="store_true",

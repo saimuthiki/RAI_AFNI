@@ -22,7 +22,7 @@ from afni_rai.contract.models import (  # noqa: E402
 )
 
 
-def event(payload=None, client_facing=True):
+def event(payload=None):
     return GuardEvent(
         kind=EventKind.REQUEST,
         step_id="step-1",
@@ -32,7 +32,6 @@ def event(payload=None, client_facing=True):
         agent_user="tester",
         llm_protocol=LLMProtocol.OPENAI_CHAT,
         payload=payload if payload is not None else {"text": "hello"},
-        client_facing=client_facing,
     )
 
 
@@ -171,18 +170,25 @@ class TestCascade(unittest.TestCase):
         Cascade([s1, s2]).evaluate(event())
         self.assertEqual(s2.calls, 1)
 
-    def test_unjudged_fails_closed_on_client_facing_traffic(self):
+    def test_unjudged_fails_closed(self):
         blind = FakeRail("broken", Stage.STAGE_1, RailResult.unjudged("model absent"))
-        out = Cascade([blind]).evaluate(event(client_facing=True))
+        out = Cascade([blind]).evaluate(event())
         self.assertIs(out.verdict.decision, Decision.BLOCK)
         self.assertTrue(out.verdict.could_not_judge)
         self.assertEqual(out.verdict.unjudged, ["payload.text"])
 
-    def test_unjudged_allows_on_internal_traffic_but_still_reports(self):
+    def test_the_engine_has_no_fail_open_path_at_all(self):
+        """Replaces a test that asserted the opposite.
+
+        `GuardEvent.client_facing=False` used to turn this exact verdict into an
+        ALLOW at the engine level. It is gone: relaxing fail-closed is now a
+        per-category deployment setting applied ABOVE the engine
+        (policy.FailurePolicy), never a field on the request. Reintroducing an
+        engine-level switch fails here.
+        """
         blind = FakeRail("broken", Stage.STAGE_1, RailResult.unjudged("model absent"))
-        out = Cascade([blind]).evaluate(event(client_facing=False))
-        self.assertIs(out.verdict.decision, Decision.ALLOW)
-        # Allowed, but never silently: the gap is still on the record.
+        out = Cascade([blind]).evaluate(event())
+        self.assertIs(out.verdict.decision, Decision.BLOCK)
         self.assertTrue(out.verdict.could_not_judge)
 
     def test_a_raising_rail_becomes_unjudged_not_clean(self):
@@ -198,7 +204,7 @@ class TestCascade(unittest.TestCase):
                 boom()
 
         rail = Exploding("timeouts", Stage.STAGE_1, None)
-        out = Cascade([rail]).evaluate(event(client_facing=True))
+        out = Cascade([rail]).evaluate(event())
         self.assertIs(out.verdict.decision, Decision.BLOCK)
         self.assertEqual(out.verdict.unjudged, ["payload.text"])
 
@@ -271,9 +277,9 @@ class TestPayloadExtraction(unittest.TestCase):
     """Protocol metadata must not be judged.
 
     Found by running the CLI: a Stage-2 rail with absent model weights returns
-    `unjudged` for every path it is handed, and `unjudged` on client-facing
-    traffic fails closed - so an unfiltered payload meant a missing dependency
-    blocked a request because nothing could judge the string "gpt-4o".
+    `unjudged` for every path it is handed, and `unjudged` always fails closed -
+    so an unfiltered payload meant a missing dependency blocked a request
+    because nothing could judge the string "gpt-4o".
     """
 
     def payload(self):

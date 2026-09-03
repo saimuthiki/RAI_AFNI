@@ -741,7 +741,7 @@ class TopicScopeRail:
 # NOT in `RAILS`. Its capability registers as CLOUD.
 #
 # Every failure path returns `unjudged`. A rubric judge that cannot run must not
-# read as "the output met the rubric" - on client-facing traffic the engine turns
+# read as "the output met the rubric" - the engine turns
 # that into a block, which is the correct outcome.
 
 
@@ -766,7 +766,7 @@ class RubricJudgeRail:
 
     def check(self, path: str, text: str,
               ctx: CheckContext | None = None) -> RailResult:
-        # Per-tenant threshold, falling back to the ported default when no
+        # Configured threshold, falling back to the ported default when no
         # store is wired. THRESHOLD_KEY is resolved once per call, not per
         # finding, so the read log carries one entry per check.
         threshold = (ctx.threshold(self.THRESHOLD_KEY, self._threshold)

@@ -24,7 +24,7 @@ WHAT A JUDGE IS, ON THE WIRE
 
 `JudgeProvider.score(prompt, text) -> float` in [0, 1]. One float, because that
 is what the rails consume: `PiiLeakageJudgeRail` and `ToxicityJudge` both take
-`judge: Callable[[str], float]` and compare the result to a per-tenant
+`judge: Callable[[str], float]` and compare the result to a configured
 threshold. The prompt is the rail's question; the text is the payload string
 under judgement. Anything the model returns that is not a parseable float in
 [0, 1] raises `JudgeUnavailable`, which the rails turn into `unjudged`.

@@ -37,7 +37,7 @@ from afni_rai.tenets import content_safety as cs  # noqa: E402
 PATH = "payload.text"
 
 
-def event(text, client_facing=True):
+def event(text):
     return GuardEvent(
         kind=EventKind.REQUEST,
         step_id="step-1",
@@ -47,7 +47,6 @@ def event(text, client_facing=True):
         agent_user="tester",
         llm_protocol=LLMProtocol.OPENAI_CHAT,
         payload={"text": text},
-        client_facing=client_facing,
     )
 
 
@@ -408,7 +407,7 @@ class TestBannedSubstrings(unittest.TestCase):
 class TestDependencyAbsence(unittest.TestCase):
     """Stage 2 and 3 must degrade to `unjudged`, never to clean. A missing
     dependency becoming unjudged is correct: fail-closed then blocks
-    client-facing traffic instead of passing it unexamined."""
+    the request instead of passing it unexamined."""
 
     def test_toxicity_model_is_unjudged_when_llm_guard_is_absent(self):
         rail = cs.ToxicityClassifier()
@@ -613,7 +612,7 @@ class TestInTheCascade(unittest.TestCase):
 
     def test_a_flag_tier_hit_escalates_and_then_fails_closed(self):
         # This is the honest consequence of the model being absent: a borderline
-        # payload escalates, stage 2 cannot judge, and client-facing traffic is
+        # payload escalates, stage 2 cannot judge, and the request is
         # blocked rather than passed.
         if cs.TOXICITY_MODEL_RAIL.available():
             self.skipTest("llm-guard is installed; stage 2 can judge")
@@ -621,14 +620,12 @@ class TestInTheCascade(unittest.TestCase):
         self.assertTrue(out.verdict.could_not_judge)
         self.assertIs(out.verdict.decision, Decision.BLOCK)
 
-    def test_the_same_payload_is_allowed_on_internal_traffic(self):
-        if cs.TOXICITY_MODEL_RAIL.available():
-            self.skipTest("llm-guard is installed; stage 2 can judge")
-        out = Cascade(cs.RAILS).evaluate(
-            event("this is bollocks", client_facing=False))
-        self.assertIs(out.verdict.decision, Decision.ALLOW)
-        # Allowed, but the gap is still on the record.
-        self.assertTrue(out.verdict.could_not_judge)
+    # test_the_same_payload_is_allowed_on_internal_traffic lived here. It drove
+    # the same payload with `client_facing=False` and asserted ALLOW. That switch
+    # was removed - fail-closed is unconditional - which makes it a duplicate of
+    # the test above rather than a contrast. The surviving assertion that no
+    # request field can relax fail-closed is
+    # test_foundation.test_the_engine_has_no_fail_open_path_at_all.
 
     def test_rails_never_raise_on_awkward_input(self):
         weird = ["", " ", "\x00\x01", "a" * 20000, "😀" * 50,

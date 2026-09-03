@@ -147,43 +147,39 @@ class RailResult:
 class CheckContext:
     """Per-request state a rail may need but cannot get from `(path, text)`.
 
-    This exists because thresholds are per-tenant and `check(path, text)` has no
-    idea which tenant it is serving. Without it a threshold service is
-    write-only - stored, exposed through an admin API, and never consulted on the
-    decision path. That is not hypothetical: it is exactly what Safe Zone does
-    (`admin.go:66` writes BlockThreshold/AllowThreshold, `guardrails.go:287`
-    reads env globals instead), and what the Infosys toolkit does with its
-    per-account ModerationCheckThreshold.
+    This exists because a configured threshold has to be *read* on the decision
+    path. Without it a threshold service is write-only - stored, exposed through
+    an admin API, and never consulted where it matters. That is not
+    hypothetical: it is exactly what Safe Zone does (`admin.go:66` writes
+    BlockThreshold/AllowThreshold, `guardrails.go:287` reads env globals
+    instead).
 
     `resolve` is injected rather than the store itself, so a rail cannot reach
     past the context to read or mutate configuration it has no business touching,
     and so tests can supply a plain lambda.
     """
 
-    tenant: str | None = None
-    portfolio: str | None = None
-    client_facing: bool = True
-    resolve: Callable[[str | None, str], float] | None = None
+    resolve: Callable[[str], float | None] | None = None
     # Every (key, value, source) actually consulted this request. The audit
     # record needs to show which threshold produced a decision, not merely that
     # some threshold did.
     reads: list[tuple[str, float, str]] = field(default_factory=list)
 
     def threshold(self, key: str, default: float) -> float:
-        """Resolve `key` for this tenant, falling back to the rail's own value.
+        """Resolve `key`, falling back to the rail's own value.
 
         The fallback is the threshold the rail was ported with, so a gateway
         constructed without a store behaves exactly as it did before this
         context existed. A resolver that raises falls back too, rather than
         failing the check - a misconfigured threshold must not become an
         unjudged path, because unjudged fails closed and a config typo would
-        take client traffic down.
+        take all traffic down.
         """
         if self.resolve is None:
             self.reads.append((key, default, "rail-default"))
             return default
         try:
-            value = self.resolve(self.tenant, key)
+            value = self.resolve(key)
         except Exception:  # noqa: BLE001 - a bad config must not break the check
             self.reads.append((key, default, "rail-default-after-resolver-error"))
             return default

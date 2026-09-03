@@ -7,7 +7,7 @@ analysis is explicit about why: three of the things AFNI needs here have no
 upstream equivalent in any of the 23 reviewed repos.
 
   1. the consolidated verdict          NeMo Guardrails does not produce one
-  2. per-tenant threshold config       nobody has it; Infosys has the admin
+  2. threshold configuration           nobody has it; Infosys has the admin
                                        shape but never reads the value back
   3. the loud-failure policy           OpenGuardrails *specifies* it, no repo
                                        enforces it, and NeMo's own jailbreak
@@ -18,10 +18,10 @@ upstream equivalent in any of the 23 reviewed repos.
 
 WHAT IS IN THIS PACKAGE
 
-    policy.py       fail_mode per tenant and per category, layered on top of the
+    policy.py       fail_mode per risk category, layered on top of the
                     engine's rule rather than duplicating it
-    thresholds.py   per-account / per-portfolio thresholds, with a read log so
-                    "was it actually consulted?" is a testable fact
+    thresholds.py   global defaults plus an operator override layer, with a read
+                    log so "was it actually consulted?" is a testable fact
     audit.py        the verdict store - stdlib sqlite3, one schema for live and
                     offline, and structurally incapable of storing a subject
     remediation.py  the four request-flow mitigation branches and a dispatcher
@@ -62,13 +62,12 @@ from .frameworks import (CATEGORY_TO_CONTROLS, FRAMEWORKS, ComplianceMapper,
                          ComplianceReport, ControlRef, Framework)
 from .gating import (DEFAULT_MAX_FAILURE_RATE, FastTierGate, GateReport,
                      SuiteResult, from_failure_percentages)
-from .policy import (CLIENT_FACING_DEFAULT, INTERNAL_DEFAULT, FailMode,
-                     FailurePolicy, ModeDecision, PolicyOutcome,
-                     engine_enforces_fail_closed)
+from .policy import (AFNI_DEFAULT, FailMode, FailurePolicy, ModeDecision,
+                     PolicyOutcome, engine_enforces_fail_closed)
 from .remediation import (ON_FAIL_INTEROP, Remediation, RemediationAction,
                           RemediationDispatcher, RemediationPlan,
                           from_on_fail_action)
-from .thresholds import (GLOBAL_DEFAULTS, TenantConfig, ThresholdMisconfigured,
+from .thresholds import (GLOBAL_DEFAULTS, ThresholdOverrides, ThresholdMisconfigured,
                          ThresholdRead, ThresholdScope, ThresholdStore)
 from .tracing import SpanRecorder
 
@@ -85,7 +84,7 @@ TENET = Tenet.ACCOUNTABILITY
 # The module-level corpus is empty at import: nothing is read from disk, no
 # network call is made, and the rail is a clean no-op until an operator or a CI
 # run confirms a first attack. A deployment binds its own corpus and threshold
-# store at gateway construction, then calls `.for_tenant(...)` per request.
+# store at gateway construction; the rail reads the threshold per request.
 # --------------------------------------------------------------------------- #
 DEFAULT_CORPUS = AttackCorpus()
 DEFAULT_THRESHOLDS = ThresholdStore()
@@ -133,8 +132,8 @@ FAIL_CLOSED_ATTRIBUTION = _attr(
     rail="cascade-engine-fail-closed",
     repo="openguardrails-main",
     display="OpenGuardrails fail_mode contract, enforced in the AFNI engine",
-    mechanism="Module - engine-level consolidation; unjudged paths block "
-              "client-facing traffic, per-category fail_mode overrides per tenant",
+    mechanism="Module - engine-level consolidation; any unjudged path blocks, "
+              "with per-category fail_mode overrides",
     stage=int(Stage.STAGE_1),
     evidence="openguardrails specification/degraded-mode.md:22-49 and "
              "schema/verdict.schema.json:140; enforced at "
@@ -145,17 +144,17 @@ FAIL_CLOSED_ATTRIBUTION = _attr(
     capability="Fail-closed / unjudged policy")
 
 THRESHOLD_ATTRIBUTION = _attr(
-    rail="per-tenant-threshold-store",
+    rail="threshold-store",
     repo="Infosys-Responsible-AI-Toolkit-master",
-    display="Infosys admin ModerationCheckThreshold, per account and portfolio",
-    mechanism="Module - account/portfolio/global threshold resolution with a "
-              "read log; misconfiguration yields unjudged, never a default",
+    display="Infosys admin ModerationCheckThreshold, collapsed to one scope",
+    mechanism="Module - override/global threshold resolution with a read log; "
+              "misconfiguration yields unjudged, never a default",
     stage=int(Stage.STAGE_1),
     evidence="responsible-ai-admin/.../mappers/FmConfigMapper.py:66-113 and "
              ":116-123; anti-pattern avoided: safe-zone-main "
              "internal/handlers/admin.go:66-67 stores per-pattern thresholds "
              "that internal/guardrails/thresholds.go:8-24 never reads",
-    capability="Per-tenant threshold config")
+    capability="Threshold configuration")
 
 AUDIT_ATTRIBUTION = _attr(
     rail="verdict-store",
@@ -273,17 +272,17 @@ def register(registry) -> None:
     registry.register(
         TENET, "Fail-closed / unjudged policy", Coverage.IMPLEMENTED,
         FAIL_CLOSED_ATTRIBUTION,
-        note="Enforced in cascade/engine.py (Cascade._decide blocks a "
-             "client-facing request with any unjudged path; Cascade._run turns a "
+        note="Enforced in cascade/engine.py (Cascade._decide blocks ANY request "
+             "with an unjudged path, unconditionally; Cascade._run turns a "
              "rail exception into unjudged rather than dropping the check). "
-             "policy.FailurePolicy adds the per-tenant, per-category fail_mode "
-             "OpenGuardrails degraded-mode.md:46-49 requires - client-facing "
-             "closed, internal open - and fail_mode=open never suppresses the "
-             "report.")
+             "policy.FailurePolicy adds the per-category fail_mode "
+             "OpenGuardrails degraded-mode.md:46-49 requires; the fallback is "
+             "closed, there is no per-request switch that relaxes it, and "
+             "fail_mode=open never suppresses the report.")
     registry.register(
-        TENET, "Per-tenant threshold config", Coverage.IMPLEMENTED,
+        TENET, "Threshold configuration", Coverage.IMPLEMENTED,
         THRESHOLD_ATTRIBUTION,
-        note="ThresholdStore resolves account -> portfolio -> global -> rail "
+        note="ThresholdStore resolves override -> global -> rail "
              "default -> last resort, logs every read, and all 11 "
              "threshold-bearing rails now consult it through "
              "CheckContext.threshold(). Earlier this was registered DEPENDENCY "
@@ -292,15 +291,15 @@ def register(registry) -> None:
              "a threshold guardrails.go:287 never reads. The bar for this "
              "registration is an OUTCOME difference, not a read: "
              "test_threshold_wiring.py drives one identical payload through one "
-             "rail for two tenants and asserts it blocks for one and passes for "
-             "the other. Keys are mechanism-specific (…toxicity.classifier vs "
+             "rail at two configured thresholds and asserts it blocks at one and "
+             "passes at the other. Keys are mechanism-specific (…toxicity.classifier vs "
              "…toxicity.judge) because a classifier probability and a judge's "
              "self-report are not one scale, and a shared knob would let an "
              "operator tighten one while loosening the other. Each default is "
              "the value its rail was ported with, so wiring changed no detection "
              "behaviour. A misconfigured value falls back to that default rather "
              "than becoming unjudged - unjudged fails closed, so one typo would "
-             "take a tenant's traffic down - and the read is labelled "
+             "take all traffic down - and the read is labelled "
              "rail-default-after-resolver-error so it stays distinguishable from "
              "a value nobody set.")
     registry.register(
@@ -397,9 +396,9 @@ __all__ = [
     "ATTRIBUTIONS",
     # policy / fail-closed
     "FailMode", "FailurePolicy", "PolicyOutcome", "ModeDecision",
-    "CLIENT_FACING_DEFAULT", "INTERNAL_DEFAULT", "engine_enforces_fail_closed",
+    "AFNI_DEFAULT", "engine_enforces_fail_closed",
     # thresholds
-    "ThresholdStore", "TenantConfig", "ThresholdRead", "ThresholdScope",
+    "ThresholdStore", "ThresholdOverrides", "ThresholdRead", "ThresholdScope",
     "ThresholdMisconfigured", "GLOBAL_DEFAULTS",
     # audit
     "VerdictStore", "SecurityEvent", "RingEvent", "Summary", "TraceRow",

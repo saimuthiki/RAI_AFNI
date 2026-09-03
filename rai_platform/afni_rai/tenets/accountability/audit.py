@@ -92,12 +92,9 @@ CREATE TABLE IF NOT EXISTS verdicts (
     decision      TEXT    NOT NULL,
     enforced      TEXT,
     fail_mode     TEXT,
-    tenant        TEXT,
-    project       TEXT,
     agent_id      TEXT,
     agent_type    TEXT,
     kind          TEXT,
-    client_facing INTEGER NOT NULL DEFAULT 1,
     could_not_judge TEXT,
     latency_ms    INTEGER,
     stages_run    INTEGER,
@@ -150,7 +147,7 @@ CREATE TABLE IF NOT EXISTS spans (
     attributes TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_verdicts_event ON verdicts(event_id);
-CREATE INDEX IF NOT EXISTS idx_verdicts_tenant ON verdicts(tenant, recorded_at);
+CREATE INDEX IF NOT EXISTS idx_verdicts_time ON verdicts(recorded_at);
 CREATE INDEX IF NOT EXISTS idx_findings_verdict ON findings(verdict_id);
 CREATE INDEX IF NOT EXISTS idx_findings_category ON findings(category);
 """
@@ -190,7 +187,6 @@ class RingEvent:
     request_id: str
     blocked: bool
     reason: str
-    tenant: str | None = None
     findings: int = 0
     unjudged: int = 0
 
@@ -285,7 +281,7 @@ class VerdictStore:
         """Persist one verdict and everything that explains it. Returns the row id.
 
         `enforced` and `fail_mode` come from `policy.PolicyOutcome`, so a record
-        shows both what the cascade concluded and what the tenant's configuration
+        shows both what the cascade concluded and what the configured fail_mode
         enforced. A record that showed only the second would hide every policy
         override.
         """
@@ -299,15 +295,13 @@ class VerdictStore:
         now = time.time()
         cur = db.execute(
             "INSERT INTO verdicts (event_id, origin, provider, decision, enforced,"
-            " fail_mode, tenant, project, agent_id, agent_type, kind, client_facing,"
+            " fail_mode, agent_id, agent_type, kind,"
             " could_not_judge, latency_ms, stages_run, recorded_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (verdict.event_id, origin, verdict.provider, verdict.decision.value,
              enforced, fail_mode,
-             getattr(event, "tenant", None), getattr(event, "project", None),
              getattr(event, "agent_id", None), getattr(event, "agent_type", None),
              event.kind.value if event is not None else None,
-             1 if (event is None or event.client_facing) else 0,
              json.dumps(list(verdict.unjudged)) if verdict.unjudged else None,
              verdict.latency_ms,
              stages_run if stages_run is not None
@@ -407,7 +401,6 @@ class VerdictStore:
         self._ring.append(RingEvent(
             timestamp=time.time(), request_id=verdict.event_id,
             blocked=decision == "block", reason=reason,
-            tenant=getattr(event, "tenant", None),
             findings=len(verdict.findings), unjudged=len(verdict.unjudged)))
 
     def _emit(self, verdict: Verdict, event: GuardEvent | None,
@@ -416,9 +409,9 @@ class VerdictStore:
         if self._log_audit_lines:
             # Safe Zone's `[AUDIT]` line. Categories and counts only.
             LOGGER.info(
-                "[AUDIT] event=%s tenant=%s decision=%s fail_mode=%s findings=%s "
+                "[AUDIT] event=%s decision=%s fail_mode=%s findings=%s "
                 "categories=%s unjudged=%s",
-                verdict.event_id, getattr(event, "tenant", None), decision,
+                verdict.event_id, decision,
                 fail_mode, len(verdict.findings),
                 ",".join(sorted({f.category for f in verdict.findings})) or "-",
                 ",".join(verdict.unjudged) or "-")

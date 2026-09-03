@@ -643,7 +643,7 @@ class LocalBiasClassifierRail:
 
     Degradation is honest and total: with transformers/torch absent, or the
     weights unavailable, `check()` returns `unjudged` with the real reason. It
-    never guesses, and the engine's fail-closed rule then blocks client-facing
+    never guesses, and the engine's fail-closed rule then blocks
     traffic - which is correct behaviour, not a bug.
 
     Nothing is loaded at import time and no network call happens until the first
@@ -715,7 +715,7 @@ class LocalBiasClassifierRail:
     # -- Rail protocol -----------------------------------------------------
     def check(self, path: str, text: str,
               ctx: CheckContext | None = None) -> RailResult:
-        # Per-tenant threshold, falling back to the ported default when no
+        # Configured threshold, falling back to the ported default when no
         # store is wired. THRESHOLD_KEY is resolved once per call, not per
         # finding, so the read log carries one entry per check.
         threshold = (ctx.threshold(self.THRESHOLD_KEY, self._threshold)
@@ -786,7 +786,7 @@ class GenerativeBiasJudgeRail:
     score.
 
     It is deliberately NOT in `RAILS`. Mounting a rail that is unjudged by
-    default would, via fail-closed, block every escalated client-facing request
+    default would, via fail-closed, block every escalated request
     on a box with no judge wired up. It lives in `CLOUD_RAILS` and the
     capability is registered `Coverage.CLOUD`, which is the honest status.
     """
@@ -808,7 +808,7 @@ class GenerativeBiasJudgeRail:
 
     def check(self, path: str, text: str,
               ctx: CheckContext | None = None) -> RailResult:
-        # Per-tenant threshold, falling back to the ported default when no
+        # Configured threshold, falling back to the ported default when no
         # store is wired. THRESHOLD_KEY is resolved once per call, not per
         # finding, so the read log carries one entry per check.
         threshold = (ctx.threshold(self.THRESHOLD_KEY, self._threshold)
@@ -1277,7 +1277,7 @@ _SPEC_GROUP_METRICS = BatchJobSpec(
              "_metric_frame.py:746-768",
     note="Fairlearn is the pick over AIF360 here for Azure alignment and lower "
          "overhead; the Azure ML Responsible AI dashboard is built on Fairlearn "
-         "itself, so the same numbers surface client-facing at no extra "
+         "itself, so the same numbers surface to the caller at no extra "
          "licensing cost. GroupFairnessMetricsJob in this package ports the two "
          "headline differences to stdlib so CI can run them with fairlearn "
          "absent.",
@@ -1436,7 +1436,7 @@ GENERATIVE_BIAS_JUDGE_RAIL = GenerativeBiasJudgeRail()
 #: The Stage 2 rail is included even though it reports `unjudged` on a stock
 #: box. That is the documented, intended contract (see its docstring): a missing
 #: dependency must surface as "could not look", and the engine's fail-closed
-#: rule must then block client-facing traffic. It only runs when something
+#: rule must then block the request. It only runs when something
 #: escalates, and the Stage 1 rail here deliberately does not escalate, so the
 #: blast radius is traffic another tenet's rail flagged as severe.
 RAILS: list[Any] = [PROTECTED_ATTRIBUTE_RAIL, LOCAL_BIAS_CLASSIFIER_RAIL]
@@ -1647,7 +1647,7 @@ def register(registry) -> None:
             "transformers and torch present - runs today."
             if available else
             "transformers/torch absent - the rail is mounted and reports "
-            "unjudged, so fail-closed will BLOCK client-facing traffic that "
+            "unjudged, so fail-closed will BLOCK traffic that "
             "reaches Stage 2. Install transformers + torch and pin revision "
             f"{LocalBiasClassifierRail.MODEL_REVISION} to turn this into "
             "protection.")) +

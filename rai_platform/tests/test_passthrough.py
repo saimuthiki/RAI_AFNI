@@ -514,10 +514,9 @@ class TestFailClosed(unittest.TestCase):
         self.assertNotIn(SECRET_ANSWER, response.text)
         self.assertIn("output guard", payload["degraded"][0])
 
-    def test_a_rail_that_raises_is_unjudged_and_still_blocks_client_traffic(self):
-        """The engine converts a raising RAIL into `unjudged`, and `unjudged` on
-        client-facing traffic is a block. Same outcome, different mechanism -
-        and `client_facing` defaults to true so a caller who omits it gets it."""
+    def test_a_rail_that_raises_is_unjudged_and_still_blocks(self):
+        """The engine converts a raising RAIL into `unjudged`, and `unjudged` is
+        always a block. Same outcome as a real finding, different mechanism."""
         client, counting = target()
         app = chat_app([MarkerRail("x", raises_on="what is a guardrail?")], client)
         payload = app.post("/v1/chat", json=prompt()).json()
@@ -740,9 +739,8 @@ class TestAbsentConfigurationDegradesHonestly(unittest.TestCase):
         self.assertEqual(counting.completions(), [])
 
     def test_an_unknown_field_is_rejected_rather_than_ignored(self):
-        """`extra=forbid`, matching `/v1/guard`. A silently ignored
-        `client_facing` typo would mean traffic judged as client-facing that the
-        caller believed was internal, or the reverse."""
+        """`extra=forbid`, matching `/v1/guard`. A silently ignored field means
+        a caller believing they configured something the gateway never saw."""
         client, _ = target()
         app = chat_app([CleanRail()], client)
         response = app.post("/v1/chat",

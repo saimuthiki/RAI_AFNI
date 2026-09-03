@@ -70,13 +70,6 @@ const SAMPLES = [
   },
 ];
 
-const DEFAULT_TENANTS = ['afni-core', 'afni-portfolio-alpha', 'afni-portfolio-beta', 'client-demo'];
-
-function tenantList() {
-  const q = new URLSearchParams(location.search).get('tenants');
-  return q ? q.split(',').map((s) => s.trim()).filter(Boolean) : DEFAULT_TENANTS;
-}
-
 // The request path is stages 1-3. Offline is drawn too, permanently out of
 // scope, because a reader who cannot see it will ask where it went.
 const RUNGS = [1, 2, 3, 4];
@@ -119,21 +112,6 @@ export async function render(root) {
   });
   ui.text.value = SAMPLES[0].text;
 
-  ui.tenant = el('select', {}, [
-    el('option', { value: '', text: '(unassigned)' }),
-    ...tenantList().map((t) => el('option', { value: t, text: t })),
-  ]);
-
-  ui.clientFacing = el('input', { type: 'checkbox', checked: true });
-  const cfSwitch = el('label', { class: 'switch' }, [
-    ui.clientFacing,
-    el('span', { class: 'switch__track', 'aria-hidden': 'true' }),
-    el('span', { class: 'switch__text' }, [
-      el('b', { text: 'Client-facing' }),
-      el('span', { text: 'fail closed — an unjudged path blocks' }),
-    ]),
-  ]);
-
   ui.run = el('button', { class: 'btn', type: 'submit', text: 'Run the cascade' });
   ui.cancel = el('button', { class: 'btn btn--quiet', type: 'button', text: 'Stop', hidden: true });
 
@@ -144,19 +122,15 @@ export async function render(root) {
       on: { click() { ui.text.value = s.text; setDirection(ui, s.kind); ui.text.focus(); } },
     }))),
     el('div', { class: 'compose__row' }, [
-      field('Tenant', ui.tenant),
-      el('div', { class: 'field' }, [
-        el('span', { class: 'eyebrow', text: 'Enforcement' }), cfSwitch,
-      ]),
       el('div', { class: 'field' }, [
         el('span', { class: 'eyebrow', text: ' ' }),
         el('div', { style: 'display:flex;gap:.5rem' }, [ui.run, ui.cancel]),
       ]),
     ]),
     el('p', { class: 'micro mute', style: 'max-width:80ch', text:
-      'Direction is chosen on the rig above. Tenant ids are what the per-tenant '
-      + 'threshold store keys on; the gateway exposes no tenant list, so this selector '
-      + 'is the console’s own — pass ?tenants=a,b,c to replace it.' }),
+      'Direction is chosen on the rig above. The gateway always fails closed: if any '
+      + 'part of this payload cannot be judged, it blocks — there is no setting here '
+      + 'that relaxes that.' }),
   ]);
 
   root.append(el('section', { class: 'card card__pad', style: 'margin-top:var(--sp-4)' }, form));
@@ -202,11 +176,7 @@ export async function render(root) {
     const text = ui.text.value.trim();
     if (!text) { ui.text.focus(); return; }
 
-    const event = buildEvent({
-      text, kind: ui.dir,
-      tenant: ui.tenant.value,
-      clientFacing: ui.clientFacing.checked,
-    });
+    const event = buildEvent({ text, kind: ui.dir });
 
     clear(ui.verdictSlot); clear(ui.blindSlot); clear(ui.findings);
     clear(ui.statSlot); clear(ui.ledgerSlot);
@@ -264,7 +234,7 @@ export async function render(root) {
     const runner = state.source === 'fixtures' ? guardStreamFixture : guardStream;
     ui.srcLine.textContent = state.source === 'fixtures'
       ? 'REPLAY OF A FIXTURE — NOT A JUDGEMENT'
-      : `LIVE · ${event.kind} · client_facing=${event.client_facing}`;
+      : `LIVE · ${event.kind} · fail-closed`;
 
     runner(event, onEvent, { signal: ctl.signal })
       .catch((err) => {
@@ -598,8 +568,8 @@ function paintStage(ui, s, stopAt) {
   // apply to this direction. A prompt has no answer to ground and no output
   // contract to validate, so the output-side rails had nothing to look at. That
   // is not a failure to look, and the engine deliberately records it as skipped
-  // rather than unjudged — otherwise every client-facing request would have
-  // fail-closed on the output rails.
+  // rather than unjudged — otherwise every request would have fail-closed on
+  // the output rails.
   const wrongWay = s.railsSkipped;
   const bits = [total
     ? `${s.railsRun.length} of ${total} rails apply here`
@@ -719,12 +689,12 @@ function paintVerdict(ui, v, stagesSeen, stopAt) {
         ? `A finding carried the block action. ${ui.dir === 'prompt'
           ? 'The prompt never reached the model.' : 'The response never reached the person.'}`
         : failClosed
-          ? 'No finding blocked this. A payload path went unjudged on client-facing '
-            + 'traffic, and that fails closed — the block is the missing check, not a detection.'
+          ? 'No finding blocked this. A payload path went unjudged, and that always '
+            + 'fails closed — the block is the missing check, not a detection.'
           : 'Nothing was found and nothing was unjudged, yet the engine blocked. Read the stages below.')
       : (v.could_not_judge.length
-        ? 'Allowed WITH an unjudged path, because this run is not client-facing. '
-          + 'The same payload blocks with the switch on.'
+        ? 'Allowed WITH an unjudged path. The engine blocks on an unjudged path, so a '
+          + 'configured fail_mode=open on this category let it through — and recorded it.'
         : 'Every rail that ran judged every payload path and found nothing that blocks.') }),
     el('dl', { class: 'verdict__meta' }, [
       stat('stages run', v.stages_run === null ? '—' : String(v.stages_run)),
@@ -756,9 +726,9 @@ function paintBlind(ui, paths, { partial }) {
         + 'least means something looked.' + (partial ? ' (Stages are still reporting.)' : '') }),
       el('ul', { class: 'blind__paths' }, paths.map((p) => el('li', { text: p }))),
       el('p', { class: 'blind__foot', text:
-        'On client-facing traffic the engine fails closed on any unjudged path, so this '
-        + 'blocks. Turn the client-facing switch off and the same payload is allowed through '
-        + 'unexamined — which is the trade this panel exists to make visible.' }),
+        'The engine fails closed on any unjudged path, unconditionally, so this blocks. '
+        + 'That is the point of this panel: a block you see here is a gap in coverage, '
+        + 'not something the gateway caught.' }),
     ]),
   ]));
 }
