@@ -98,3 +98,19 @@ references/**/*.tab
 references/**/*.html
 references/**/*.parquet
 references/**/*.sqlite
+
+# Credential-shaped files inside the vendored third-party repos. Stripped from
+# all history on 2026-09-03 along with the binary payload.
+#
+# None was an AFNI secret: the Infosys .env files are TEMPLATES full of
+# ${placeholder} substitutions, and promptfoo's keypair is a test fixture
+# published in its own public repo. But a .env or a .pem sitting in this
+# repository is a finding every secret scanner raises and every security
+# reviewer has to be talked out of, and none of them is cited by any rail.
+references/**/.env
+references/**/*.pem
+references/**/*.p12
+references/**/*.pfx
+references/**/*.key
+references/**/secret.yaml
+references/**/*credentials*.json
