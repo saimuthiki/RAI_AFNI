@@ -99,18 +99,23 @@ references/**/*.html
 references/**/*.parquet
 references/**/*.sqlite
 
-# Credential-shaped files inside the vendored third-party repos. Stripped from
-# all history on 2026-09-03 along with the binary payload.
+# NOTE 2026-09-03, second pass: these were briefly stripped and then RESTORED at
+# AFNI's instruction — "don't modify or delete any folders in the references"
+# beyond the large files. The rules below are therefore commented out.
 #
-# None was an AFNI secret: the Infosys .env files are TEMPLATES full of
-# ${placeholder} substitutions, and promptfoo's keypair is a test fixture
-# published in its own public repo. But a .env or a .pem sitting in this
-# repository is a finding every secret scanner raises and every security
-# reviewer has to be talked out of, and none of them is cited by any rail.
-references/**/.env
-references/**/*.pem
-references/**/*.p12
-references/**/*.pfx
-references/**/*.key
-references/**/secret.yaml
-references/**/*credentials*.json
+# What they were: 22 Infosys .env files (templates full of ${placeholder}, no
+# real values), promptfoo's example keypair (a test fixture published in its own
+# public repo), a helm secret.yaml template and an llm_connection_credentials.json.
+# None was an AFNI secret; all are third-party repo contents.
+#
+# The one consequence to know: a secret scanner pointed at this repository WILL
+# flag the .env and .pem files. They are not live credentials, but somebody will
+# have to say so. Uncomment these lines if that becomes tiresome.
+#
+# references/**/.env
+# references/**/*.pem
+# references/**/*.p12
+# references/**/*.pfx
+# references/**/*.key
+# references/**/secret.yaml
+# references/**/*credentials*.json
