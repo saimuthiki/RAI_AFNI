@@ -84,8 +84,10 @@ Total ≈ **2.8 GB**. Ordered by what you get for the download.
 Why first: **no Stage-1 rail blocks a prompt injection.** That is deliberate —
 PyRIT documents a high false-positive rate for the regex patterns, so a Stage-1
 hit flags and escalates rather than refusing. This model is what the escalation
-escalates *to*. Without it, a textbook injection produces four HIGH findings and
-is **allowed** on internal traffic.
+escalates *to*. Without it, a textbook injection produces HIGH findings that
+every one of them only **flags** — and the request still blocks, on the
+`COULD NOT JUDGE` line rather than on any of them. Read the reason: that block is
+a coverage gap, not a detection.
 
 > **Now pinned.** This was the one model with no revision, which on a security
 > control is a supply-chain hole — upstream could replace the weights and the

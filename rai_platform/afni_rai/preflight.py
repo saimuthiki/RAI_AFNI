@@ -65,8 +65,8 @@ def _hf_models() -> list[tuple[str, str, str | None, str, str, str]]:
     add("security", "DebertaInjectionRail", "security.injection.deberta_v3_v2",
         "Security", "~740 MB",
         "The only thing that BLOCKS a prompt injection. Stage 1 flags and "
-        "escalates by design, so without this a textbook injection is allowed "
-        "on internal traffic.")
+        "escalates by design, so without this the block you get is the "
+        "fail-closed one - a coverage gap, not a detection.")
     add("fairness", "LocalBiasClassifierRail", "llm_guard.bias", "Fairness & Bias",
         "~330 MB",
         "The only runtime bias signal beyond a regex. Fairness is 0/9 "

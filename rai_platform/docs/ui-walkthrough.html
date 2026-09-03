@@ -187,7 +187,11 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
 .dwrap{overflow-x:auto}
 
 /* ---- decoder grid ------------------------------------------------------ */
-.decode{display:grid;gap:.85rem;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))}
+.decode{display:grid;gap:.85rem;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));
+  align-items:start}
+/* A 4-card group: two columns, so nothing sits alone in a row of three. */
+.decode--2{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:720px){.decode--2{grid-template-columns:1fr}}
 .dc{border:1px solid var(--rule);border-top-width:4px;border-radius:8px;padding:1rem 1.1rem;
   background:var(--card);display:flex;flex-direction:column;gap:.45rem}
 .dc h5{margin:0;font:600 .95rem/1.4 var(--sans)}
@@ -220,18 +224,19 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
     <li><a href="#flow"><span class="n">§</span>The whole journey</a></li>
     <li><a href="#words"><span class="n">§</span>Six words to learn</a></li>
     <li><a href="#decode"><span class="n">§</span>Reading the answer</a></li>
-    <li class="grp">The seven screens</li>
+    <li class="grp">The six screens</li>
     <li><a href="#v1"><span class="n">1</span>Live check</a></li>
     <li><a href="#v2"><span class="n">2</span>How it works</a></li>
     <li><a href="#v3"><span class="n">3</span>Tenets</a></li>
     <li><a href="#v4"><span class="n">4</span>Rails</a></li>
     <li><a href="#v5"><span class="n">5</span>Corpus</a></li>
-    <li><a href="#v6"><span class="n">6</span>Roadmap</a></li>
-    <li><a href="#v7"><span class="n">7</span>Frameworks</a></li>
+    <li><a href="#v6"><span class="n">6</span>Frameworks</a></li>
     <li class="grp">Always on screen</li>
     <li><a href="#topbar"><span class="n">§</span>Top bar &amp; warning strip</a></li>
     <li><a href="#legend"><span class="n">§</span>The left-hand legend</a></li>
     <li class="grp">Using it</li>
+    <li><a href="#sides"><span class="n">§</span>Input vs output checks</a></li>
+    <li><a href="#offline"><span class="n">§</span>What "offline" means</a></li>
     <li><a href="#cases"><span class="n">§</span>Ten prompts to try</a></li>
     <li><a href="#demo"><span class="n">§</span>A 10-minute demo script</a></li>
     <li><a href="#swagger"><span class="n">§</span>Swagger, if you prefer</a></li>
@@ -376,9 +381,13 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
         every single message. <span class="chip c-s2">Stage 2</span> uses an AI model on your own
         machine — a few seconds, no bill. <span class="chip c-s3">Stage 3</span> calls a paid AI —
         money per message. We only climb the ladder when the cheaper step could not settle it.</td></tr>
-      <tr><td><b>Phase</b></td><td><em>A date in the calendar</em>, nothing to do with cost.
-        Phase 1 means "adopt in the first 30 days". It is deliberately never given a
-        stage colour anywhere in the console, so the two can never be confused.</td></tr>
+      <tr><td><b>Verdict</b></td><td><em>A judgement about one open-source project</em>,
+        nothing to do with cost: <b>Adopt now</b>, <b>Combine</b>, <b>Bench</b> or
+        <b>Skip</b>. It is never given a stage colour, because an adopted project quite
+        normally provides a Stage 3 check. There used to be a third thing called a
+        <b>Phase</b> here — a 90-day calendar window. It was removed on 3 September 2026:
+        we build the platform in one go, so 1, 2 and 3 now mean exactly one thing
+        anywhere in the console.</td></tr>
       <tr><td><b>Finding</b></td><td>One thing a rail noticed. "There is a US social-security
         number at characters 21 to 32." A message can have several findings, or none.</td></tr>
       <tr><td><b>Decision</b></td><td>The single verdict for the whole message:
@@ -449,8 +458,8 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
 
 <!-- ===================================================================== -->
 <section id="screens" class="stack-lg">
-  <h2>The seven screens, one at a time</h2>
-  <p class="sub">These are the seven items down the left-hand side of the console,
+  <h2>The six screens, one at a time</h2>
+  <p class="sub">These are the six items down the left-hand side of the console,
   in the order they appear. Click any of them; nothing on any of these screens can
   break anything.</p>
 
@@ -485,12 +494,13 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
             to think of one: <em>Stops at stage 1</em>, <em>Escalates to stage 2</em>,
             <em>Climbs all three</em>, <em>Clean — stops at stage 1</em>,
             <em>Guards the way out</em>. Click one and it fills the box for you.</td></tr>
-          <tr><td><b>Tenant</b></td><td>A dropdown. Different clients can have different
-            strictness settings; this picks whose settings to use. Leave it on
-            <code>(unassigned)</code> and the defaults apply.</td></tr>
-          <tr><td><b>Client-facing</b> toggle</td><td>Leave this <b>on</b>. On means: if a
-            check could not run, refuse the message. Off means: let it through. On is the
-            safe setting and it is what production uses.</td></tr>
+          <tr><td><b>One line of small print</b></td><td>It says the gateway always
+            fails closed. That is the whole setting, and it is not adjustable: if any
+            part of your message cannot be checked, it is refused. There used to be a
+            <b>Tenant</b> dropdown and a <b>Client-facing</b> switch here. Both were
+            <b>removed on 3 September 2026</b> — the switch could turn the safe
+            behaviour off, and a safety setting that can be switched off gets switched
+            off by whoever is in a hurry.</td></tr>
           <tr><td><b>Run the cascade</b></td><td>The one button that does the work.</td></tr>
           <tr><td><b>Stop</b></td><td>Abandons a run in progress. Useful only for slow
             Stage-2 or Stage-3 runs.</td></tr>
@@ -595,8 +605,10 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
           <tr><td><b>The two rules that never bend</b></td><td><b>Fail closed</b> — if we
             could not check it, we refuse it. <b>Fail loud</b> — we say so, we never
             quietly pretend the check passed.</td></tr>
-          <tr><td><b>Phase is not stage</b></td><td>The one section written purely to stop
-            a misunderstanding. Stage is money; phase is the calendar.</td></tr>
+          <tr><td><b>A verdict is not a stage</b></td><td>The one section written purely
+            to stop a misunderstanding. A stage is money per message; a verdict is about a
+            project. An adopted project routinely provides a Stage 3 check, so the two
+            are unrelated.</td></tr>
           <tr><td><b>This host, right now</b></td><td>Five live counts:
             <span class="mono">rails mounted</span>,
             <span class="mono">run on all traffic</span>,
@@ -786,41 +798,16 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
     </div>
   </article>
 
-  <!-- ---------- 6 ROADMAP ---------- -->
+  <!-- ---------- 6 FRAMEWORKS ---------- -->
   <article class="view" id="v6">
     <div class="view__head"><span class="view__n">6</span>
-      <span class="view__t">Roadmap</span>
-      <span class="view__click">#/roadmap</span></div>
-    <div class="view__body">
-      <h4>What this screen is for</h4>
-      <div class="prose"><p>The 90-day adoption plan, next to what is actually running.
-      Twenty-three open-source projects were reviewed and sorted into Phase 1 (days 0–30),
-      Phase 2 (30–60), Phase 3 (60–90) and "reviewed and not adopted".</p></div>
-
-      <h4>The section your manager will ask about</h4>
-      <div class="prose">
-        <p>It is called <b>"The number that gets misquoted"</b>, and it exists because
-        three projects show up as <em>present in the platform</em> despite being on the
-        <em>not adopted</em> list. That is not a contradiction, and the screen explains it:
-        <b>their patterns were ported; the projects were not adopted.</b> We read their
-        source, took the regular expressions and the entity lists, and wrote our own check.
-        We did not take on the dependency, the licence, or in one case a documented
-        supply-chain compromise.</p>
-        <p>Being able to say that difference out loud is what makes the review credible.</p>
-      </div>
-    </div>
-  </article>
-
-  <!-- ---------- 7 FRAMEWORKS ---------- -->
-  <article class="view" id="v7">
-    <div class="view__head"><span class="view__n">7</span>
       <span class="view__t">Frameworks</span>
       <span class="view__click">#/frameworks</span></div>
     <div class="view__body">
       <h4>What this screen is for</h4>
       <div class="prose"><p>One row per reviewed project: which tenets its patterns serve,
       which cascade stage it lands in, and whether a live check actually cites it today.
-      Two filters — <b>Phase</b> and <b>Serves tenet</b>.</p>
+      Two filters — <b>Adoption</b> and <b>Serves tenet</b>.</p>
       <p>The five counters at the top are the honest arithmetic:
       <span class="mono">reviewed</span> 23,
       <span class="mono">contributing</span>, <span class="mono">cited by a live rail</span>,
@@ -880,7 +867,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
 <!-- ===================================================================== -->
 <section id="legend" class="stack">
   <h2>The legend under the left-hand menu</h2>
-  <p class="sub">Below the seven menu items there is a small key. It is not decoration —
+  <p class="sub">Below the six menu items there is a small key. It is not decoration —
   it is there to stop the one mistake everybody makes.</p>
 
   <div class="tw"><table>
@@ -894,16 +881,199 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
         <td>paid judge · last resort</td></tr>
       <tr><td><span class="chip c-off">◇</span></td><td>a dashed diamond</td>
         <td>offline · never in the request path</td></tr>
-      <tr><td><b>Phase 2 · days 30–60</b></td><td>a day bracket, <b>no colour at all</b></td>
-        <td>a 90-day adoption window for a project</td></tr>
+      <tr><td><b>Adopt now</b> / <b>Combine</b> / <b>Bench</b> / <b>Skip</b></td>
+        <td>a word, <b>never a stage colour</b></td>
+        <td>whether one reviewed project is in the build, and on what terms</td></tr>
     </tbody>
   </table></div>
 
-  <div class="note"><span class="note__t">Why phases get no colour</span>
-  <span>Because "Stage 2" and "Phase 2" are unrelated, and a coloured Phase 2 badge would
-  be read as a Stage 2 badge within a week. Stage is money per request. Phase is a date
-  in the plan. Nothing anywhere in the console gives a phase a stage colour, and nothing
-  gives a stage a date range.</span></div>
+  <div class="note"><span class="note__t">Why a verdict gets no stage colour</span>
+  <span>Because a stage is money per message and a verdict is about a project, and the two
+  have no relationship at all — <b>LLM Guard is "adopt now" and provides checks at Stage 1
+  <em>and</em> Stage 2</b>. If they shared a colour, a reader would infer a link inside a
+  week. This legend used to carry a third row, a 90-day "Phase" bracket. Phases were
+  removed on 3 September 2026, which is why the numerals 1, 2 and 3 now mean one thing
+  only.</span></div>
+</section>
+
+<!-- ===================================================================== -->
+<section id="sides" class="stack">
+  <h2>Input checks vs output checks: almost all of them are the same checks</h2>
+  <p class="sub">This one has confused people, including because our own notes used
+  to describe it wrongly. The short version: <strong>the checks on the way out are
+  the checks on the way in, plus more.</strong> The outgoing side is the stricter of
+  the two, not a lighter afterthought.</p>
+
+  <div class="decode">
+    <div class="dc dc--allow">
+      <h5>23 checks run on <em>both</em> sides</h5>
+      <p>Every privacy check, every security check, every content-safety check, and
+      the fairness check. Same code, run twice.</p>
+      <p class="say">Why: <em>a social-security number leaving your model is worse
+      than one arriving. And a hidden instruction can arrive in a document your
+      model retrieved just as easily as in something a person typed.</em></p>
+    </div>
+    <div class="dc dc--unj">
+      <h5>1 check runs on the message only</h5>
+      <p>The confirmed-attack list. It holds attack <em>questions</em> that got
+      through before.</p>
+      <p class="say">Why: <em>comparing your model's answer against a list of
+      questions compares the wrong text to the wrong list.</em></p>
+    </div>
+    <div class="dc dc--mod">
+      <h5>8 checks run on the answer only</h5>
+      <p>Is the answer grounded in the documents we retrieved? Is it valid JSON?
+      Does it match the promised shape? Did the model refuse? Did it invent a
+      software package that does not exist? Did it emit a <code>&lt;script&gt;</code>
+      tag or a <code>DROP TABLE</code>?</p>
+      <p class="say">Why: <em>a person's question has no answer to ground, no
+      promised shape to match, and cannot "refuse" anything. These checks have no
+      meaning on the way in.</em></p>
+    </div>
+  </div>
+
+  <div class="tw"><table>
+    <thead><tr><th>Cascade stage</th><th>Checks installed</th>
+      <th>Run on the message going in</th><th>Run on the answer coming out</th></tr></thead>
+    <tbody>
+      <tr><td><span class="chip c-s1">1</span> free, instant</td><td>22</td><td>16</td><td>21</td></tr>
+      <tr><td><span class="chip c-s2">2</span> local model</td><td>7</td><td>5</td><td>7</td></tr>
+      <tr><td><span class="chip c-s3">3</span> paid AI</td><td>3</td><td>3</td><td>3</td></tr>
+      <tr><td><b>All stages</b></td><td><b>32</b></td><td><b>24</b></td><td><b>31</b></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note"><span class="note__t">If a check does not apply, that is not a failure</span>
+  <span>When the outgoing guardrail runs, the message-only check is marked
+  <b>skipped</b> — it had nothing to look at. It is <em>not</em> marked "could not
+  judge". That distinction matters more than it sounds: "could not judge" causes a
+  refusal, so if the two were muddled, <b>every single answer your model produced
+  would be refused</b> by checks that were never meant to see it. You will see
+  <em>"6 output-only did not apply"</em> in the stage rows on the Live check screen.
+  That line is the system telling you it knows the difference.</span></div>
+
+  <div class="note"><span class="note__t">What our own notes used to say, and why it was wrong</span>
+  <span>The old <code>request-flow</code> note listed five example checks for the way
+  in and five <em>different</em> ones for the way out, so it read as though the two
+  guardrails did unrelated jobs. It had been copied from a slide and never checked
+  against the built system. It was not just thin — it was <b>wrong</b>: it showed
+  toxicity as an outgoing-only check when all six content-safety checks run both
+  ways, and it called privacy an outgoing "re-check" when all eight privacy checks
+  run both ways. That note is now <b>generated from the code</b>, and four tests
+  fail if the numbers in it ever stop matching.</span></div>
+</section>
+
+<!-- ===================================================================== -->
+<section id="offline" class="stack">
+  <h2>What "offline" means, and how you test those things</h2>
+  <p class="sub">You have seen the word <span class="chip c-off">◇ offline</span> in
+  the left-hand legend and in the stage rows, and asked what it means and how to test
+  it. It is the most misleading word in the console, so here it is plainly.</p>
+
+  <div class="note note--warn">
+    <span class="note__t">"Offline" does not mean "switched off", and it does not mean "no internet"</span>
+    <span>It means <b>this check never runs while someone is waiting</b>. Stages 1, 2
+    and 3 all happen inside the few seconds between a person pressing send and getting
+    an answer. Offline work happens somewhere else entirely — overnight, or on a build
+    server before a release. A better name would be <em>"not in the request path"</em>,
+    which is exactly what the legend says next to it.</span>
+  </div>
+
+  <h3 style="font-size:1.12rem">Why some checks can never be live</h3>
+  <div class="prose">
+    <p>Three different reasons, and none of them is a shortcoming:</p>
+    <ul>
+      <li><b>Some checks need a whole dataset, not one message.</b> "Does this model
+      approve loans for one group more often than another?" cannot be answered from a
+      single answer. You need thousands of decisions. That is why <b>7 of the 9
+      fairness capabilities are offline</b> — more than any other tenet. Fairness is
+      arithmetic over a population, and one response is not a population.</li>
+      <li><b>Some checks are attacks.</b> Red-teaming means firing thousands of
+      hostile prompts at your own system to see what gets through. You cannot do that
+      to a customer's conversation.</li>
+      <li><b>Some checks are far too slow.</b> A multi-turn jailbreak attempt takes
+      many exchanges. SHAP explanations take minutes.</li>
+    </ul>
+  </div>
+
+  <h3 style="font-size:1.12rem">Where the 19 offline capabilities sit</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Tenet</th><th>Offline capabilities</th><th>What they are</th></tr></thead>
+    <tbody>
+      <tr><td>Fairness &amp; Bias</td><td><b>7</b></td><td>group fairness metrics, the three
+        mitigation families, automated subgroup discovery, bias probe packs, bias benchmarks</td></tr>
+      <tr><td>Hallucination / Reliability</td><td><b>4</b></td><td>RAG retrieval quality,
+        deterministic regression checks, truthfulness benchmarks, fabrication probes</td></tr>
+      <tr><td>Explainability</td><td><b>3</b></td><td>SHAP feature attribution, LIME,
+        counterfactual / recourse analysis</td></tr>
+      <tr><td>Accountability</td><td><b>2</b></td><td>CI test-gating, detector-accuracy self-evaluation</td></tr>
+      <tr><td>Privacy</td><td><b>1</b></td><td>PII-leakage red-team probing</td></tr>
+      <tr><td>Security</td><td><b>1</b></td><td>multi-turn jailbreak attacks</td></tr>
+      <tr><td>Content Safety</td><td><b>1</b></td><td>harmful-content red-team sets</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note"><span class="note__t">The gateway physically refuses to run these live</span>
+  <span>This is not a convention anyone has to remember. If a developer tries to
+  install an offline check into the live path, the gateway <b>throws an error and will
+  not start</b>: <em>"rail is OFFLINE and cannot be mounted in the request cascade"</em>.
+  Verified today: <b>zero</b> offline checks are in the live path. An overnight
+  red-team tool running on a customer's message would be a cost and latency incident,
+  so the rule is enforced by the code rather than trusted to a reviewer.</span></div>
+
+  <h3 style="font-size:1.12rem">So how do you actually test the offline things?</h3>
+  <div class="prose"><p>Honestly: <strong>two of them you can run right now, and the
+  rest are reviewed but not yet wired.</strong> That is worth saying plainly rather
+  than implying the whole offline tier exists.</p></div>
+
+  <div class="decode decode--2">
+    <div class="dc dc--allow">
+      <h5>Runs today · the Corpus screen</h5>
+      <p><b>This is offline testing, in the console.</b> The Corpus screen is the one
+      offline surface with a UI. It fires our library of 11,369 real harmful prompts
+      at the checks and reports how many got through. No customer is involved and
+      nothing is waiting.</p>
+      <p class="say">Click <b>Corpus</b>, set the slider to 50, press run.</p>
+    </div>
+    <div class="dc dc--allow">
+      <h5>Runs today · the command line</h5>
+      <p>The same run without the browser, and the version to use for a real number:</p>
+      <p class="say"><code>cd rai_platform</code><br>
+      <code>python corpus/baseline.py corpus/harm-intents.jsonl
+      --limit&nbsp;20 --stage-1-only</code></p>
+    </div>
+    <div class="dc dc--allow">
+      <h5>Runs today · the test suite</h5>
+      <p>1,014 tests, no internet and no downloads needed. If this passes, the free
+      tier works.</p>
+      <p class="say"><code>cd rai_platform</code><br><code>python run_tests.py</code></p>
+    </div>
+    <div class="dc dc--unj">
+      <h5>Not wired yet · the red-team tools</h5>
+      <p>garak, promptfoo, PyRIT and DeepTeam are reviewed, and their patterns are
+      already ported into live checks — but the <b>overnight scanning runs are not
+      built</b>. They are items 9, 10, 11 and 13 on the build plan, and they need one
+      thing nobody has given us: <b>an AFNI application to point them at.</b></p>
+      <p class="say">Do not claim these run. They do not, yet.</p>
+    </div>
+  </div>
+
+  <div class="note note--warn">
+    <span class="note__t">Run this one thing before your demo, and read the number</span>
+    <span>The corpus run above is the most persuasive thing in the whole platform,
+    because of what it reports. Here is a real run from today, 20 harmful prompts
+    through the free tier:<br><br>
+    <code>decisions&nbsp;&nbsp;&nbsp;allow=20</code><br><br>
+    <b>Twenty out of twenty harmful prompts were allowed through.</b> Across the full
+    280-prompt sample it is 279 of 280. That is not a bug and it is not a
+    misconfiguration — the free tier matches <em>patterns</em>, and "How do I hack
+    into someone's email?" in polite English contains no pattern to match.
+    <b>So never present the free tier as protection against harmful intent.</b> It
+    protects against data loss and known attack shapes. The gap between that number
+    and the same run with the local models installed <em>is</em> the business case for
+    the next tier — and it can only be produced on a machine that has the model
+    files.</span>
+  </div>
 </section>
 
 <!-- ===================================================================== -->
@@ -1032,7 +1202,10 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       <tr><td><code>POST /v1/corpus/run/stream</code></td><td>The same, one event per prompt.</td></tr>
       <tr><td><code>GET /v1/coverage</code></td><td>The Tenets screen as JSON.</td></tr>
       <tr><td><code>GET /v1/rails</code></td><td>The Rails screen as JSON.</td></tr>
-      <tr><td><code>GET /v1/phases</code></td><td>The Roadmap screen as JSON.</td></tr>
+      <tr><td><code>GET /v1/repositories</code></td><td>The Frameworks screen as JSON —
+        all 23 reviewed projects, grouped by verdict, each cross-referenced against what
+        is actually wired. (This replaced <code>GET /v1/phases</code>, which now returns
+        <b>404</b> on purpose.)</td></tr>
       <tr><td><code>GET /healthz</code></td><td>What is missing, and why. The first thing
         to check when something looks wrong.</td></tr>
     </tbody>
