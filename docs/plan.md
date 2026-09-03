@@ -340,6 +340,18 @@ scan, the CI tier has nothing to gate, and **every threshold in this platform is
 the number its source project shipped with rather than one tuned on AFNI traffic**. The
 Sensitivity screen is ready for the tuning; there is nothing to tune against.
 
+**Half of this is now closed.** AFNI asked for a prompt list in the repo, and
+`corpus/benign-traffic.jsonl` is it: 178 hand-written benign messages, each one built to
+*tempt* a specific rail — order numbers shaped like card numbers, "I bombed the
+interview", a legitimate question about resetting a password. It measures whether the
+rails are **precise**, which is the half that does not need a pilot. Measured result:
+**zero false positives out of 178 at Stage 1**, and an 11.8% friction rate that is almost
+entirely benign reference numbers being redacted as SSNs. See
+[corpus.md](corpus.md#the-other-corpus-178-benign-messages).
+
+What a written corpus **cannot** give you is what AFNI's customers actually type. That is
+still the pilot, and it is still the thing that turns shipped thresholds into tuned ones.
+
 **Nothing here is the platform's own name.** The platform is the AFNI Responsible AI
 gateway. The pilot is somebody else's application that it will sit in front of.
 

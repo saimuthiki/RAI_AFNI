@@ -28,6 +28,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from enum import Enum
+from collections.abc import Iterable
 from typing import Any
 
 PROTOCOL_VERSION = "0.8"
@@ -180,6 +181,36 @@ class Span:
     def to_dict(self) -> dict[str, Any]:
         return {"path": self.path, "start": self.start, "end": self.end,
                 "replacement": self.replacement}
+
+
+def apply_spans(text: str, spans: "Iterable[Span]", path: str | None = None) -> str:
+    """Apply redaction spans to one string. The reference implementation.
+
+    THIS EXISTS SO NOBODY HAS TO GET IT RIGHT TWICE. `allow` with redactions is
+    the outcome that is easiest to mishandle - the docs say repeatedly that an
+    application ignoring `modifications.spans` lets the SSN straight through -
+    and an application that *honours* them has its own trap: replacing
+    left-to-right invalidates every offset after the first replacement.
+
+    So this walks the spans in REVERSE order of start. Offsets before the
+    current one are untouched by definition, so no arithmetic on the remaining
+    spans is needed and there is nothing to get wrong.
+
+    `path` filters to the spans for one payload string; offsets from a different
+    path refer to a different string and applying them here would corrupt this
+    one. Passing `None` means "these spans are already for this text", which is
+    what a caller who has grouped them itself wants.
+
+    Spans from `Verdict.modifications` are already non-overlapping and
+    per-path - the engine resolves them - so the reverse pass is sufficient. If
+    you are assembling spans from somewhere else, resolve them first.
+    """
+    chosen = [s for s in spans if path is None or s.path == path]
+    for span in sorted(chosen, key=lambda s: s.start, reverse=True):
+        start = max(0, min(span.start, len(text)))
+        end = max(start, min(span.end, len(text)))
+        text = text[:start] + span.replacement + text[end:]
+    return text
 
 
 @dataclass

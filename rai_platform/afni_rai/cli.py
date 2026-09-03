@@ -7,6 +7,7 @@ Command line entry point. The fastest way to see the gateway decide something.
     python3 rai_platform/cli.py image photo.jpg
     python3 rai_platform/cli.py image clip.mp4 --video --blur out.png
     python3 rai_platform/cli.py compare --limit 200
+    python3 rai_platform/cli.py falsepositives
     python3 rai_platform/cli.py governance --markdown
     python3 rai_platform/cli.py coverage
     python3 rai_platform/cli.py rails
@@ -318,6 +319,86 @@ def cmd_compare(args) -> int:
     return min(top["delivered_to_model"], 100)
 
 
+def cmd_falsepositives(args) -> int:
+    """How much ORDINARY work does the guardrail refuse?
+
+    The harm corpus answers "does it catch attacks". This answers the question
+    that decides whether the business leaves the guardrail switched on.
+
+    Exit code is the count of refusals BY DETECTION - the only one of the three
+    numbers that tuning a threshold changes - capped at 100, so CI can gate on
+    it without a coverage gap on an unprovisioned runner failing the build.
+    """
+    from . import ab, regression                                 # noqa: PLC0415
+
+    rails, _attributions, problems = load_tenets()
+    if problems:
+        print("! tenets not loaded: " + "; ".join(problems), file=sys.stderr)
+    try:
+        records = regression.load_benign()
+    except FileNotFoundError as exc:
+        print(str(exc), file=sys.stderr)
+        return 100
+
+    if args.category:
+        records = [r for r in records if r.get("category") == args.category]
+        if not records:
+            print(f"no benign records in category {args.category!r}",
+                  file=sys.stderr)
+            return 100
+
+    ceiling, note = regression.effective_max_stage(args.max_stage)
+    body = ab.false_positives(rails, records, max_stage=ceiling)
+    if note:
+        body.setdefault("notes", []).append(note)
+
+    if args.json:
+        print(json.dumps(body, indent=2))
+        return min(body["refused_by_detection"], 100)
+
+    pct = lambda v: "—" if v is None else f"{v * 100:.1f}%"   # noqa: E731
+    print(f"{body['sample']} benign messages, Stage 1..{ceiling}, "
+          f"{body['rails']} rails\n")
+    print(f"  {'clean':<26s} {body['clean']:5d}")
+    print(f"  {'REFUSED - a detection':<26s} {body['refused_by_detection']:5d}  "
+          f"{pct(body['false_positive_rate']):>7s}   <- the false-positive rate")
+    print(f"  {'REFUSED - a coverage gap':<26s} {body['refused_by_coverage_gap']:5d}  "
+          f"{pct(body['coverage_gap_rate']):>7s}   <- fail-closed, not a detection")
+    print(f"  {'allowed, but flagged':<26s} {body['allowed_with_findings']:5d}  "
+          f"{pct(body['friction_rate']):>7s}   <- friction, not a refusal")
+
+    if body["rails_unavailable"]:
+        print(f"\n  ! {len(body['rails_unavailable'])} rail(s) cannot judge on "
+              f"this host, which is where the coverage gaps come from:")
+        print(f"    {', '.join(body['rails_unavailable'])}")
+
+    for label, key in (("Refused by a detection", "detection"),
+                       ("Allowed but flagged", "friction")):
+        rows = body["by_category"][key]
+        if not rows:
+            continue
+        print(f"\n  {label}, by category:")
+        for cat, n in rows.items():
+            print(f"    {n:4d}  {cat}")
+
+    if body["detections"]:
+        print("\n  Every false positive, so you can see WHICH rail to look at:")
+        for row in body["detections"]:
+            print(f"    [{row['category']}] {row['prompt']!r}")
+            print(f"          rail={row.get('rail')} finding={row.get('finding')}")
+
+    if args.verbose and body["friction"]:
+        print("\n  Allowed but flagged (--verbose):")
+        for row in body["friction"]:
+            print(f"    [{row['category']}] {row['prompt']!r}")
+            print(f"          {row['findings']} redactions={row['redactions']}")
+
+    print(f"\n  {body['measures']}")
+    for line in body.get("notes", []):
+        print(f"\n  ! {line}")
+    return min(body["refused_by_detection"], 100)
+
+
 def cmd_governance(args) -> int:
     """The governance register.
 
@@ -415,6 +496,22 @@ def main(argv=None) -> int:
                            "sets AFNI_CORPUS_ALLOW_CLOUD=1.")
     cmp_.add_argument("--json", action="store_true")
     cmp_.set_defaults(func=cmd_compare)
+
+    fp = sub.add_parser("falsepositives",
+                        help="run the benign corpus: how much ordinary work "
+                             "does the guardrail refuse?")
+    fp.add_argument("--max-stage", dest="max_stage", type=int, default=1,
+                    choices=(1, 2, 3),
+                    help="cascade ceiling. Default 1, because Stage 1 runs on "
+                         "every message and is where a false positive costs "
+                         "the most.")
+    fp.add_argument("--category", default=None,
+                    help="restrict to one benign category, e.g. "
+                         "number-shaped-but-not-pii")
+    fp.add_argument("--verbose", action="store_true",
+                    help="also list every message that was allowed but flagged")
+    fp.add_argument("--json", action="store_true")
+    fp.set_defaults(func=cmd_falsepositives)
 
     gov = sub.add_parser("governance",
                          help="the governance register: one accountable role "

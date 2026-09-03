@@ -446,6 +446,122 @@ def split_by_direction(records: Iterable[dict[str, Any]]
     return ins, outs
 
 
+# --------------------------------------------------------------------------- #
+# The other half: how much ORDINARY work does it refuse?                       #
+# --------------------------------------------------------------------------- #
+def false_positives(rails: list[Any], records: list[dict[str, Any]],
+                    max_stage: int = 2,
+                    resolve_threshold: Callable[[str], float | None] | None = None
+                    ) -> dict[str, Any]:
+    """Run the benign corpus and split the refusals THREE ways.
+
+    A single "false-positive rate" over this corpus would be a misleading
+    number, and the first measurement proved it: 15 of 178 benign messages came
+    back BLOCKED on this host, which reads as an 8.4% false-positive rate.
+    **Every single one was a coverage gap**, not a detection - the Stage-2 model
+    rails have no weights here, so they reported `unjudged`, and unjudged fails
+    closed. The detection false-positive rate was ZERO.
+
+    Reporting those together would have produced a number that gets worse when
+    you install FEWER models, which is exactly backwards. So:
+
+      refused_by_detection   a rail looked and was wrong. THE false-positive
+                             rate, and the only one that tuning a threshold
+                             changes.
+      refused_by_coverage_gap  nothing could look. Fail-closed doing its job.
+                             Fix it by installing the model, not by tuning.
+      allowed_with_findings  allowed, but something was flagged or redacted.
+                             Not a refusal, and still friction: a customer's
+                             order number coming back as [REDACTED-US-SSN] is
+                             a real problem even though the message went
+                             through.
+
+    `by_category` and `by_rail` are what make it actionable - a rate tells you
+    there is a problem, a category tells you which rail to look at.
+    """
+    from collections import Counter
+
+    from .cascade.engine import Cascade
+
+    trimmed = regression.rails_for(max_stage, rails)
+    cascade = Cascade(trimmed, resolve_threshold=resolve_threshold)
+
+    detection: list[dict[str, Any]] = []
+    gap: list[dict[str, Any]] = []
+    noisy: list[dict[str, Any]] = []
+    clean = 0
+
+    for record in records:
+        try:
+            outcome = cascade.evaluate(regression.event_for(record))
+        except Exception as exc:  # noqa: BLE001 - one record must not end the run
+            detection.append({"id": record["id"],
+                              "category": record.get("category", ""),
+                              "prompt": regression.preview(record["prompt"]),
+                              "rail": f"engine error: {type(exc).__name__}",
+                              "finding": None})
+            continue
+        verdict = outcome.verdict
+        blocked = verdict.decision.value == "block"
+        row = {
+            "id": record["id"],
+            "category": record.get("category", ""),
+            "tempts": record.get("tempts", ""),
+            "prompt": regression.preview(record["prompt"]),
+        }
+        if blocked and verdict.unjudged:
+            gap.append(dict(row, unjudged=list(verdict.unjudged)))
+        elif blocked:
+            top = next((f for f in verdict.findings
+                        if f.action is not None and f.action.value == "block"), None)
+            detection.append(dict(row, rail=top.detector if top else None,
+                                  finding=top.category if top else None))
+        elif verdict.findings or verdict.modifications:
+            noisy.append(dict(
+                row,
+                findings=[f.category for f in verdict.findings],
+                rails=sorted({f.detector for f in verdict.findings if f.detector}),
+                redactions=len(verdict.modifications)))
+        else:
+            clean += 1
+
+    total = len(records)
+    def rate(n: int) -> float | None:
+        return round(n / total, 4) if total else None
+
+    return {
+        "sample": total,
+        "corpus": str(regression.benign_path()),
+        "max_stage": max_stage,
+        "rails": len(trimmed),
+        "rails_unavailable": cannot_judge(trimmed),
+        "clean": clean,
+        "refused_by_detection": len(detection),
+        "refused_by_coverage_gap": len(gap),
+        "allowed_with_findings": len(noisy),
+        "false_positive_rate": rate(len(detection)),
+        "coverage_gap_rate": rate(len(gap)),
+        "friction_rate": rate(len(noisy)),
+        "by_category": {
+            "detection": dict(Counter(r["category"] for r in detection).most_common()),
+            "coverage_gap": dict(Counter(r["category"] for r in gap).most_common()),
+            "friction": dict(Counter(r["category"] for r in noisy).most_common()),
+        },
+        "by_rail": dict(Counter(
+            r.get("rail") or "?" for r in detection).most_common()),
+        "detections": detection[:40],
+        "friction": noisy[:40],
+        "measures": (
+            "`false_positive_rate` is the only one of the three that tuning a "
+            "threshold changes. `coverage_gap_rate` gets WORSE when you install "
+            "fewer models and is fixed by installing them. `friction_rate` is "
+            "messages that went through with something flagged or redacted - "
+            "not a refusal, and still a problem when it is a customer's order "
+            "number coming back as [REDACTED-US-SSN]."),
+    }
+
+
 __all__ = ["ARMS", "ARM_BY_NAME", "Arm", "Comparison", "arms_for", "compare",
+           "false_positives",
            "cannot_judge",
            "headline", "pipeline_estimate", "split_by_direction"]

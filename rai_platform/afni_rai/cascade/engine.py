@@ -6,8 +6,9 @@ survives, and consolidate the lot into exactly one verdict.
 Two invariants are enforced *here*, in the engine, rather than trusted to each
 of the dozens of rails:
 
-  fail closed  - on client-facing traffic, a request that could not be fully
-                 judged is blocked. NeMo Guardrails' own jailbreak rail defaults
+  fail closed  - a request that could not be fully judged is blocked.
+                 UNCONDITIONALLY: no request field and no console switch relaxes
+                 it. NeMo Guardrails' own jailbreak rail defaults
                  to fail-OPEN (documented at
                  references/Guardrails-develop/docs/configure-rails/guardrail-catalog/jailbreak-protection.mdx:112),
                  which is exactly why this cannot be left to rail authors.
@@ -105,6 +106,69 @@ class CascadeOutcome:
     @property
     def stages_skipped(self) -> int:
         return sum(1 for t in self.trace if not t.rails_run)
+
+
+def _resolve_spans(spans: Iterable[Span]) -> list[Span]:
+    """Make the redaction instructions APPLICABLE. Non-overlapping, per path.
+
+    Findings are de-duplicated but deliberately keep corroboration - two
+    detectors agreeing on a span is signal. **Redaction spans cannot afford the
+    same generosity**, and this function exists because they were not getting
+    any.
+
+    Measured on the benign corpus: "Reference 123-45-6789 on my invoice" comes
+    back with TWO spans over the identical range 10-21, one from
+    `privacy.region_ids` replacing with `[REDACTED-US-SSN]` and one from
+    `privacy.reversible_anonymiser` replacing with `[REDACTED_US_SSN_1]`. Both
+    detectors are right and both are kept in `findings`. But an application that
+    dutifully applies `modifications.spans` in order would replace the same
+    eleven characters twice, and every offset after the first replacement is
+    now wrong - so honouring the contract corrupted the text, which is a worse
+    outcome than ignoring it.
+
+    THE RULES, and the direction each one errs in:
+
+      * spans are resolved PER PATH, because offsets only mean anything within
+        one string;
+      * a span fully inside another is dropped - the wider redaction already
+        covers it;
+      * two spans that merely OVERLAP are merged into one covering both, and
+        the earlier span's replacement text wins. Merging widens what gets
+        hidden, which is the safe direction; dropping the second would leave
+        its tail visible;
+      * the output is sorted by start, so a caller can apply it in one
+        left-to-right pass, or in reverse to keep earlier offsets valid.
+
+    Nothing is lost by this: every detector's opinion is still in `findings`,
+    with its own span and its own fingerprint. What changes is that the
+    redaction list is now something a caller can actually apply.
+    """
+    by_path: dict[str, list[Span]] = {}
+    for span in spans:
+        by_path.setdefault(span.path, []).append(span)
+
+    out: list[Span] = []
+    for path in sorted(by_path):
+        # Widest-first at a given start, so the container is seen before the
+        # thing it contains.
+        ordered = sorted(by_path[path], key=lambda s: (s.start, -(s.end - s.start)))
+        current: Span | None = None
+        for span in ordered:
+            if current is None:
+                current = span
+                continue
+            if span.start >= current.end:
+                out.append(current)
+                current = span
+            elif span.end > current.end:
+                # Overlaps and extends past it: widen, keep the first
+                # replacement. `Span` is frozen, so this is a new one.
+                current = Span(path=current.path, start=current.start,
+                               end=span.end, replacement=current.replacement)
+            # else: fully contained, drop it.
+        if current is not None:
+            out.append(current)
+    return out
 
 
 def _dedupe(findings: Iterable[Finding]) -> list[Finding]:
@@ -335,6 +399,8 @@ class Cascade:
             yield progress(entry)
 
         findings = _dedupe(findings)
+        # Spans, unlike findings, must be non-overlapping to be applicable.
+        modifications = _resolve_spans(modifications)
         decision = self._decide(event, findings, unjudged)
         verdict = Verdict(
             event_id=event.step_id,

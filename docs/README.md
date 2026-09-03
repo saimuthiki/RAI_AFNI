@@ -14,7 +14,7 @@ holds the answer.
 | [**frameworks.md**](frameworks.md) | All 23 reviewed open-source projects: verdict, mechanism, and the Infosys vs NeMo comparison |
 | [**plan.md**](plan.md) | What to build, what is decided, and what is still open |
 | [**setup.md**](setup.md) | **[Quick start — just the commands](setup.md#quick-start)**, then the reference: every library, every model file, and where each one goes |
-| [**corpus.md**](corpus.md) | The 11,369-prompt harm corpus: what is in it, and how to run part of it |
+| [**corpus.md**](corpus.md) | The 11,369-prompt harm corpus, **and the 178 benign messages that measure false positives** |
 | [**ui-walkthrough.html**](ui-walkthrough.html) | **Open this in a browser.** Every console screen in plain English, with worked examples |
 
 Two files deliberately live elsewhere:
@@ -78,6 +78,14 @@ seconds between send and answer; offline work happens overnight or on a build se
 capabilities are offline-only — **7 of the 9 fairness ones**, because fairness is
 arithmetic over a *population* and one response is not a population. The gateway
 physically refuses to start if an offline check is put in the live path.
+
+**4b · Two corpora, and the second one is newer.** 11,369 harmful prompts answer "does it
+catch attacks". 178 hand-written benign messages answer **"does it refuse ordinary
+work"** — and that number is what decides whether a business leaves a guardrail switched
+on. Measured: **zero false positives out of 178 at Stage 1**, with an 11.8% *friction*
+rate that is almost all benign order numbers being redacted as SSNs. Three separate
+numbers, because a combined one gets worse the fewer models you install.
+`python rai_platform/cli.py falsepositives`.
 
 **5 · Fail closed is unconditional.** If any part of a message cannot be checked, it is
 refused. There is no request field and no UI switch that relaxes it. A `fail_mode` can be

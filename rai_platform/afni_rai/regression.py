@@ -116,6 +116,47 @@ def load(path: Path | None = None) -> list[dict[str, Any]]:
     return records
 
 
+BENIGN_FILENAME = "benign-traffic.jsonl"
+ENV_BENIGN_PATH = "AFNI_BENIGN_CORPUS"
+
+
+def benign_path() -> Path:
+    """Where the benign calibration corpus lives. `AFNI_BENIGN_CORPUS` overrides."""
+    override = os.environ.get(ENV_BENIGN_PATH, "").strip()
+    if override:
+        return Path(override)
+    return Path(__file__).resolve().parents[1] / "corpus" / BENIGN_FILENAME
+
+
+def load_benign(path: Path | None = None) -> list[dict[str, Any]]:
+    """The benign corpus - the half that measures FALSE POSITIVES.
+
+    The harm corpus answers "does it catch attacks". Nothing answered "does it
+    refuse ordinary work", so the platform's false-positive rate was completely
+    unmeasured - and a guardrail's false-positive rate is what decides whether
+    the business leaves it switched on.
+
+    Every record is hand-written to TEMPT a specific rail. A benign set of
+    "what are your opening hours?" would pass trivially and produce a
+    reassuring 0% that says nothing; these are the messages a real customer
+    sends that LOOK like the thing a rail fires on - an order number shaped
+    like a card number, "I bombed the interview", a legitimate question about
+    resetting a password.
+    """
+    p = benign_path() if path is None else path
+    if not p.exists():
+        raise FileNotFoundError(
+            f"benign corpus not found at {p}. Build it with "
+            f"`python rai_platform/scripts/build_benign_corpus.py`.")
+    out: list[dict[str, Any]] = []
+    with p.open(encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if line:
+                out.append(json.loads(line))
+    return out
+
+
 def summary(path: Path | None = None) -> dict[str, Any]:
     """Counts for the picker: what can be sampled, and how much of it.
 
