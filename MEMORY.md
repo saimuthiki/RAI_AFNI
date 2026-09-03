@@ -1267,3 +1267,75 @@ of the console: `allow` **with redaction spans** is a delivery, and an applicati
 ignores `modifications.spans` **leaks the value the gateway just caught**.
 
 **1014 tests, OK bare and provisioned.**
+
+## 2026-09-03 — CLI examples in the docs re-captured, not just edited
+
+Removing `--internal` left captured CLI output in `docs/00-architecture.md`,
+`docs/01-setup.md` and `README.md` that the commands no longer produce. Deleting the
+flag and keeping the old output would have been fabrication, so every example was
+**re-run** and the real output pasted.
+
+### Most examples did not change — and that is the interesting part
+
+Five of the seven produce **byte-identical verdicts** without the flag, because
+`--internal` only ever mattered when a path went `unjudged`:
+
+| Example | Before | After |
+|---|---|---|
+| clean prompt | ALLOWED, 0 findings | unchanged |
+| leaked API key | BLOCKED by a finding | unchanged (latency 0ms → 1ms) |
+| SQL as a prompt | ALLOWED | unchanged |
+| SQL as a response | BLOCKED by a finding | unchanged |
+| hallucinated package | ALLOWED, 1 flag | unchanged (75ms → 89ms) |
+
+Two changed, and both changed **meaning**, not just wording.
+
+### The SSN example flipped verdict, and the doc's explanation was backwards
+
+`check "my ssn is 123-45-6789 and card 4111111111111111"` was documented as
+`ALLOWED after 3 cascade stage(s)` with five findings. It is now
+`BLOCKED after 3 cascade stage(s)` — **and not one of the five findings blocked it.**
+All five carry `action: redact`. The block is the `COULD NOT JUDGE` line, because the
+Stage-3 PII-leakage judge has no credential here.
+
+The doc now says that explicitly, because it is the four-outcome finding in its
+sharpest form: install the credential and the same request is *allowed*, with five
+findings and two redaction spans. Both answers are correct and they mean completely
+different things.
+
+### The setup doc's proof-of-installation test was BROKEN, not just stale
+
+`docs/01-setup.md` and `README.md` both told the reader: run the injection prompt,
+**`ALLOWED` before the model, `BLOCKED` after** — "that single line is the clearest
+evidence the drop-in is live".
+
+That test no longer works. Verified by running it: on a machine with no weights it
+**already prints `BLOCKED`**, because Stage 2 reports `unjudged` and fail-closed is now
+unconditional. So the reader would install nothing, see `BLOCKED`, and conclude the
+model was live.
+
+Replaced with a test on the **reason** rather than the verdict, which is strictly
+sharper — the old one conflated a real detection with a fail-closed block:
+
+1. `COULD NOT JUDGE` **disappears** (Stage 2 can now judge that path)
+2. a `Blocked by:` line appears naming the DeBERTa classifier, with a real confidence
+   score rather than a deterministic match
+
+Both must change. If `COULD NOT JUDGE` is still printed, the weights are not being
+found whatever the folder listing says.
+
+The "before" output is a real capture from this machine. The **"after" is labelled as
+the expected change rather than pasted**, because this environment cannot reach
+`huggingface.co` and no honest capture is possible here.
+
+### Also removed
+
+The `--internal` row from README's CLI flag table, and one further stale sentence at
+`README.md:941` claiming the same text could be allowed by re-running it with the flag.
+Every documented `cli.py` invocation was then checked against `--help`: the accepted
+flags are exactly `--response`, `--reveal`, `--json`.
+
+Three mentions of `--internal` survive on purpose, all in the past tense, saying the flag
+was removed — a reader holding the old note needs to find that out somewhere.
+
+**1014 tests OK.**

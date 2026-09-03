@@ -60,12 +60,12 @@ gets caught.
 **Proof it works.** Same string, both directions:
 
 ```
-$ python rai_platform/cli.py check --internal "How do I stop '; DROP TABLE customers; -- from working?"
+$ python rai_platform/cli.py check "How do I stop '; DROP TABLE customers; -- from working?"
 ALLOWED after 1 cascade stage(s) in 0ms
   No findings - every rail judged the payload and found nothing.
   (2 stage(s) never ran - that is the saving)
 
-$ python rai_platform/cli.py check --internal --response "'; DROP TABLE customers; --"
+$ python rai_platform/cli.py check --response "'; DROP TABLE customers; --"
 BLOCKED after 1 cascade stage(s) in 0ms
   Blocked by:
     - NeMo YARA injection rules + PyRIT OWASP output scorers (Guardrails-develop)
@@ -362,13 +362,15 @@ python rai_platform/cli.py coverage     # 65 capabilities in five honest states
 
 ## 6 · Sample outputs — what you actually see
 
-Captured from real runs. `--internal` reports without blocking, so the findings
-are visible; drop it and client-facing fail-closed applies.
+Captured from real runs on a machine with no Stage-3 credential and no Stage-2
+weights installed - which is the honest default, and the reason two of these
+block on a coverage gap rather than on a finding. Re-captured 2026-09-03 after
+the `--internal` flag was removed; fail-closed is now unconditional.
 
 ### Clean prompt — the common case
 
 ```
-$ python rai_platform/cli.py check --internal "Please summarise the attached invoice for finance."
+$ python rai_platform/cli.py check "Please summarise the attached invoice for finance."
 ALLOWED after 1 cascade stage(s) in 0ms
   No findings - every rail judged the payload and found nothing.
   (2 stage(s) never ran - that is the saving)
@@ -380,8 +382,8 @@ expensive tiers were never touched.
 ### Leaked credential — blocked at Stage 1, nothing paid for
 
 ```
-$ python rai_platform/cli.py check --internal "our key is sk-proj-Xq7SvT2mNbLp9RdKzWyE4HcJ8FgAuQ3T"
-BLOCKED after 1 cascade stage(s) in 0ms
+$ python rai_platform/cli.py check "our key is sk-proj-Xq7SvT2mNbLp9RdKzWyE4HcJ8FgAuQ3T"
+BLOCKED after 1 cascade stage(s) in 1ms
   Blocked by:
     - garak dora key regexes + hai-guardrails entropy gate (+ AFNI LLM-provider
       prefixes) (garak-main) flagged api_key at payload.messages[0].content
@@ -449,9 +451,9 @@ Two tenets and three repositories on one payload, each attributed separately.
 ### Output guardrail — a hallucinated package
 
 ```
-$ python rai_platform/cli.py check --internal --response "You can use:
+$ python rai_platform/cli.py check --response "You can use:
 import supercalifragil_utils"
-ALLOWED after 1 cascade stage(s) in 75ms
+ALLOWED after 1 cascade stage(s) in 89ms
   Also flagged (did not block): 1
     - garak packagehallucination (PyRIT port) (garak-main) flagged
       hallucinated_package at payload.choices[0].message.content
@@ -476,8 +478,8 @@ a model inventing one is. Two honest details:
 Real output, from a machine where the Stage-3 judge is not configured:
 
 ```
-$ python rai_platform/cli.py check --internal "my ssn is 123-45-6789 and card 4111111111111111"
-ALLOWED after 3 cascade stage(s) in 9310ms
+$ python rai_platform/cli.py check "my ssn is 123-45-6789 and card 4111111111111111"
+BLOCKED after 3 cascade stage(s) in 5627ms
   COULD NOT JUDGE 1 path(s): payload.messages[0].content  <- not the same as 'found nothing'
   Also flagged (did not block): 5
     - AFNI region ID recognizers (Infosys-Responsible-AI-Toolkit-master + safe-zone-main)
@@ -489,9 +491,15 @@ ALLOWED after 3 cascade stage(s) in 9310ms
       - confidence 1.00 (classifier) - action redact
 ```
 
-Five findings across three stages, and it still says **COULD NOT JUDGE** —
-because the Stage-3 PII-leakage judge has no credential. Drop `--internal` and
-that same request **blocks**, on the gap rather than on any finding.
+Five findings across three stages, **and it BLOCKS** — but read *why*. Not one
+of those five findings blocked: every one carries `action: redact`. The block is
+the `COULD NOT JUDGE` line, because the Stage-3 PII-leakage judge has no
+credential on this machine. **The refusal is the coverage gap, not a detection.**
+
+This is the single most important thing to understand about the output. Install
+the credential and the same request is *allowed* — with five findings and two
+redaction spans attached. Both answers are correct; they mean completely
+different things.
 
 Note the mix of confidence kinds in one verdict: four `deterministic` matches
 with no score, and one `1.00 (classifier)`. They are not comparable, and the
