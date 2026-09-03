@@ -263,6 +263,26 @@ export function claim(score, kind) {
 
 // ------------------------------------------------------------------ layout --
 
+/** The judge provider, as a string a person can read.
+ *
+ *  `/healthz` returns an OBJECT here - `{provider, chain, models, attempts,
+ *  prefer_local}` - and two call sites interpolated it straight into a
+ *  template, so the top bar of a fully configured gateway read
+ *  `judge provider: [object Object]`. Reported from AFNI's machine, where
+ *  copying `.env.example` is enough to trigger it.
+ *
+ *  The chain is the useful part: which providers will be tried, in order. The
+ *  attempt counters and the prefer-local probe live on the How-it-works screen
+ *  where there is room for them.
+ */
+export function judgeChain(provider) {
+  if (!provider) return 'none';
+  if (typeof provider === 'string') return provider;
+  const chain = Array.isArray(provider.chain) ? provider.chain : [];
+  if (!chain.length) return provider.provider || 'none';
+  return chain.join(' → ');
+}
+
 export function pageHead(eyebrow, title, lede) {
   return el('header', { class: 'head' }, [
     el('p', { class: 'head__eyebrow', text: eyebrow }),

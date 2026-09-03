@@ -3,7 +3,7 @@
 // judgement, or a stale panel for a live one.
 
 import { probe, readBaseFromLocation, state, onSourceChange } from './api.js';
-import { el, clear } from './ui.js';
+import { el, clear, judgeChain } from './ui.js';
 
 import * as live from './views/live.js';
 import * as architecture from './views/architecture.js';
@@ -136,7 +136,7 @@ function paintHealth() {
           + 'protecting anything.' }),
       ]),
       el('span', { class: 'health__cfg mute',
-        text: `judge provider: ${h.judge_provider || 'none'} · reveal_subject: ${h.reveal_subject ? 'ON' : 'off'}` }),
+        text: `judge provider: ${judgeChain(h.judge_provider)} · reveal_subject: ${h.reveal_subject ? 'ON' : 'off'}` }),
     ]),
     el('details', {}, [
       el('summary', { text: 'What exactly is missing' }),

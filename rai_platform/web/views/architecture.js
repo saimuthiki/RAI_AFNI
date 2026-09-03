@@ -13,8 +13,7 @@
 
 import {
   el, svg, clear, pageHead, rule, stageMeta, stageTag, adoptionTag, errorBox,
-  statRow, plural, STAGES,
-} from '../ui.js';
+  statRow, plural, STAGES, judgeChain } from '../ui.js';
 import { railsWithHealth, coverage, health } from '../api.js';
 
 export async function render(root) {
@@ -127,8 +126,8 @@ export async function render(root) {
       el('p', { class: 'axis__q', text: 'Rule one' }),
       el('p', { class: 'axis__t', text: 'Fail closed' }),
       el('p', { class: 'axis__say', text:
-        'Client-facing traffic that could not be fully judged is blocked. Internal traffic '
-        + 'fails open and still reports.' }),
+        'Anything that could not be fully judged is blocked. Unconditionally — there is '
+        + 'no request field and no switch on any of these screens that relaxes it.' }),
       el('p', { class: 'small mute', text:
         'This is not caution for its own sake. NeMo Guardrails — mature, NVIDIA-maintained — '
         + 'ships a jailbreak rail that defaults to fail-open. If a rail author can ship that, '
@@ -187,7 +186,7 @@ export async function render(root) {
           class: 'railchip railchip--dead', text: r.name,
           title: r.unavailable_reason || 'reported unavailable',
         }))) : null,
-      el('p', { class: 'micro mute', text: `judge provider: ${h.judge_provider || 'none configured'}`
+      el('p', { class: 'micro mute', text: `judge provider: ${judgeChain(h.judge_provider)}`
         + `  ·  reveal_subject: ${h.reveal_subject ? 'ON — matched values are echoed' : 'off — fingerprints only'}`
         + `  ·  protocol ${h.protocol_version || '?'}` }),
     ]));

@@ -1219,7 +1219,35 @@ def _mount_console(app: FastAPI) -> None:
     except ImportError:  # pragma: no cover - starlette ships it with fastapi
         LOGGER.warning("operator console not mounted: StaticFiles unavailable")
         return
-    app.mount("/", StaticFiles(directory=str(console), html=True),
+
+    class RevalidatingStatic(StaticFiles):
+        """StaticFiles that makes the browser CHECK before reusing a file.
+
+        WHY THIS EXISTS. `StaticFiles` sends `etag` and `last-modified` but no
+        `Cache-Control`, so a browser is free to use its own heuristic
+        freshness and serve a cached ES module WITHOUT asking. Observed on
+        2026-09-03: AFNI pulled a build in which the Tenant selector and the
+        Enforcement switch had been deleted, and their console still showed
+        both - because the browser never re-fetched `views/live.js`. They then
+        reasonably reported the removal as not done.
+
+        A stale operator console is worse here than in most products. Every
+        screen is a claim about what the gateway is doing right now; a cached
+        one makes confident, specific, wrong claims - the old build's
+        "internal traffic fails open" being the sharpest example.
+
+        `no-cache` is not `no-store`: the browser still caches, and still gets
+        a 304 on the etag, so the cost is one conditional request per file
+        rather than a re-download. For a console served from localhost that is
+        free, and it means `git pull` plus a reload is always sufficient.
+        """
+
+        def file_response(self, *args, **kwargs):  # noqa: D102
+            response = super().file_response(*args, **kwargs)
+            response.headers["cache-control"] = "no-cache"
+            return response
+
+    app.mount("/", RevalidatingStatic(directory=str(console), html=True),
               name="console")
     LOGGER.info("operator console mounted at / from %s", console)
 

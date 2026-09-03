@@ -952,6 +952,65 @@ class TestTheFallbackChain(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
+class TestTheConsoleIsNotSERVEDSTALE(unittest.TestCase):
+    """The console must never be a cached build making confident wrong claims.
+
+    On 2026-09-03 AFNI pulled a build in which the Tenant selector and the
+    Enforcement switch had been deleted, and their console still showed both -
+    so they reasonably reported the removal as not done. `StaticFiles` sends
+    `etag` and `last-modified` but no `Cache-Control`, which leaves a browser
+    free to reuse a cached ES module WITHOUT asking.
+
+    A stale console is worse here than in most products: every screen is a
+    claim about what the gateway is doing right now. The old build's "internal
+    traffic fails open" was the sharpest example - the exact opposite of the
+    running behaviour.
+    """
+
+    def setUp(self):
+        from fastapi.testclient import TestClient
+        from afni_rai.gateway.app import create_app
+        self.client = TestClient(create_app(warm=False, env={}))
+
+    def test_every_console_file_says_no_cache(self):
+        for path in ("/", "/app.js", "/api.js", "/ui.js", "/styles.css",
+                     "/views/live.js", "/views/media.js",
+                     "/views/sensitivity.js"):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.headers.get("cache-control"),
+                                 "no-cache")
+
+    def test_no_cache_is_not_no_store_so_a_304_is_still_possible(self):
+        # The cost has to be one conditional request, not a re-download of
+        # every module on every reload.
+        first = self.client.get("/app.js")
+        etag = first.headers.get("etag")
+        self.assertTrue(etag)
+        again = self.client.get("/app.js", headers={"if-none-match": etag})
+        self.assertEqual(again.status_code, 304)
+
+    def test_the_removed_controls_are_gone_from_the_served_javascript(self):
+        # Asserted against what the SERVER SENDS, not against the file on disk,
+        # because "it is not in the repo" was already true when AFNI saw it on
+        # screen. If either of these ever comes back, it comes back on purpose.
+        served = self.client.get("/views/live.js").text
+        for gone in ("Tenant", "client_facing", "Client-facing"):
+            with self.subTest(token=gone):
+                self.assertNotIn(gone, served)
+
+    def test_the_console_makes_no_fail_open_claim_anywhere(self):
+        # fail-closed is unconditional. A screen saying otherwise is the
+        # console lying about the engine.
+        for path in ("/views/architecture.js", "/views/live.js",
+                     "/views/tenets.js", "/index.html"):
+            with self.subTest(path=path):
+                served = self.client.get(path).text.lower()
+                self.assertNotIn("fails open", served)
+                self.assertNotIn("internal traffic", served)
+
+
 class TestTheSamplePayloads(unittest.TestCase):
     """Every shipped sample must actually trip the tenet it claims.
 

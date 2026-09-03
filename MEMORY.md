@@ -2738,3 +2738,93 @@ with `requirements.txt` by hand — the same class of drift. It is now
 because one needs the CPU wheel index and the other is not a pip package at all.
 
 **1245 tests pass.**
+
+---
+
+## 2026-09-03 — AFNI's console was a CACHED build, and two real bugs behind it
+
+AFNI's install went green — 1249 tests PASS, preflight down to four credentials — and they
+pasted the Live check screen. It showed a **Tenant selector** and an **Enforcement ·
+Client-facing** switch: the two controls task 1 removed this morning.
+
+### The controls were gone. Their browser was not.
+
+`grep -rn "Tenant\|client_facing" web/` returns nothing. The removal was real. What they
+were looking at was a **cached ES module** — they had pulled the new code and the browser
+never re-fetched `views/live.js`.
+
+`StaticFiles` sends `etag` and `last-modified` but **no `Cache-Control`**, which leaves a
+browser free to use its own heuristic freshness and reuse a module *without asking*.
+
+**A stale operator console is worse here than in most products.** Every screen is a claim
+about what the gateway is doing *right now*. A cached one makes confident, specific, wrong
+claims — and it cost AFNI a bug report about work that was already done.
+
+`RevalidatingStatic` now sends `cache-control: no-cache` on every console file. Not
+`no-store`: the browser still caches and still gets a **304** on the etag, so the cost is
+one conditional request per file rather than a re-download. Verified: 200 with the header,
+then 304 on `if-none-match`. `git pull` plus a reload is now always sufficient.
+
+A test asserts the removed tokens are absent **from what the server sends**, not from the
+file on disk — "it is not in the repo" was already true when AFNI saw it on screen.
+
+### Two real bugs the screenshot exposed
+
+**1 · `judge provider: [object Object]`** in the top bar. `/healthz` returns an *object*
+here — `{provider, chain, models, attempts, prefer_local}` — and two call sites
+interpolated it straight into a template string. It only shows on a machine with a judge
+chain configured, which is what copying `.env.example` does, so it had never appeared
+here. `ui.judgeChain()` now renders the chain (`openai[0]`) and both call sites use it.
+Reproduced first, fixed second.
+
+**2 · The console told an operator the opposite of what the engine does.**
+`views/architecture.js`, under "Rule one · Fail closed":
+
+> *"Client-facing traffic that could not be fully judged is blocked. Internal traffic
+> **fails open** and still reports."*
+
+Both halves wrong since this morning: the client-facing/internal split was removed, and
+fail-closed is unconditional. A test now asserts **no console file contains "fails open"
+or "internal traffic"** — a screen that lies about the engine is worse than a screen with
+nothing on it.
+
+### And I shipped a blank page while fixing it
+
+The scripted edit that added `judgeChain` to a **multiline** `import { ... }` produced:
+
+```js
+  statRow, plural, STAGES,, judgeChain } from '../ui.js';
+```
+
+A double comma. **Every Python test passed, preflight was clean, the gateway served the
+file with a 200 and the correct no-cache header — and the console rendered nothing at
+all**, because one `SyntaxError` aborts the whole module graph. Only the browser check
+caught it, and only because I ran one.
+
+That gap is now closed properly. `tests/test_console_javascript.py` runs a real JavaScript
+parser over every file the console ships, using node's `SourceTextModule`, which parses an
+ES module **without executing it or resolving its imports** — so each file is checked
+alone, no DOM, no network. Verified twice: it catches a synthetic double comma, and
+re-introducing *the actual error that shipped* fails the suite with
+`views/architecture.js: Unexpected token ','`.
+
+The harness had its own bug on the way: `process.argv[2]` is wrong under `node -e`, where
+there is no script path and `--` handling is ambiguous, so it crashed rather than
+reporting — which is how a check silently stops checking. The file list now arrives in an
+environment variable, which has one unambiguous name.
+
+It also asserts every `views/*.js` is imported by *something*, since a view nobody imports
+is a screen nobody can open and a file no browser will ever parse.
+
+### Files
+
+| File | Change |
+|---|---|
+| `afni_rai/gateway/app.py` | `RevalidatingStatic` — `cache-control: no-cache` on the console |
+| `web/ui.js` | `judgeChain()` |
+| `web/app.js`, `web/views/architecture.js` | use it; the fail-open claim removed |
+| `tests/test_gateway.py` | 4 tests: no-cache, 304, removed tokens absent from served JS, no fail-open claim anywhere |
+| `tests/test_console_javascript.py` | new — a real JS parser over every console module |
+
+**1253 tests pass.** Browser-verified: `judge provider: openai[0]`, no Tenant, no
+Enforcement, no "fails open", no page errors.
