@@ -22,7 +22,7 @@ promptfoo has the richest mapping of the 23 repos - six frameworks, all in
 DeepTeam has five framework maps and PyRIT has none at all - its compliance
 mapping is OWASP LLM01/LLM02 docstrings only, with no report generator (the
 per-repo caveats note that the deck overstates this). So promptfoo is the pick,
-and `knowledge/tenets.md:129-133` records that decision.
+and `docs/tenets.md:129-133` records that decision.
 
 HOW THE PORT WORKS
 

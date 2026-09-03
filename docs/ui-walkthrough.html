@@ -725,13 +725,42 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
         <thead><tr><th style="width:11rem">Control</th><th>What it does</th></tr></thead>
         <tbody>
           <tr><td><b>The slider and the number box</b></td><td>How many prompts to run.
-            They move together. Above them a line tells you the <em>projected time</em>
+            They move together. <b>Hidden in <em>Records N to M</em> mode</b>, because a
+            size and a range are the same decision expressed two ways and offering both
+            invites you to set each and wonder which won. Above them a line tells you the <em>projected time</em>
             before you commit — and after your first run it switches from an estimate to
             your own machine's measured speed.</td></tr>
-          <tr><td><b>Sampling</b></td><td><code>N records</code> draws from the whole
-            corpus. <code>N per tenet</code> takes the same number from each tenet.
-            <b>Prefer per-tenet for a headline number</b> — the corpus is 42% content-safety
-            prompts, so a plain draw mostly measures that one tenet.</td></tr>
+          <tr><td><b>Sampling</b></td><td><b>Three choices, and this is the control
+            that decides what the other boxes even mean.</b>
+            <ul style="margin:.4rem 0 0;padding-left:1.1rem">
+              <li><code>N records</code> — a plain draw from the whole corpus.</li>
+              <li><code>N per tenet</code> — the same number from each tenet.
+              <b>Prefer this for a headline number</b>: the corpus is 42%
+              content-safety prompts, so a plain draw mostly measures that one
+              tenet.</li>
+              <li><code>Records N to M</code> — <b>exact positions.</b> Pick this
+              when you want the 10th to the 20th prompt rather than a sample. The
+              slider disappears and two boxes take its place.</li>
+            </ul></td></tr>
+          <tr><td><b>From record … to …</b><br><span class="micro mute">(only in
+            <em>Records N to M</em> mode)</span></td><td>The exact prompts to run,
+            counted from 1.
+            <b>The range includes both ends: 10 to 20 is eleven prompts, not ten.</b>
+            The line beside the boxes says so as you type, because that off-by-one
+            gets read as a bug in the corpus rather than in the counting.
+            <br><br>
+            Two things this mode does deliberately:
+            <ul style="margin:.4rem 0 0;padding-left:1.1rem">
+              <li><b>It ignores the Draw setting</b> — so the Draw dropdown is
+              hidden while you are in this mode. "The 10th record" has to be the
+              same prompt on every machine, or the number means nothing.</li>
+              <li><b>Filters apply first.</b> If you set Tenet to Privacy and then
+              ask for 1 to 50, you get the first 50 <em>Privacy</em> prompts. Each
+              dropdown shows its pool size so you can see what you are counting
+              into.</li>
+            </ul>
+            Ask for more than 500 and <b>Run</b> greys out with a message naming the
+            cap — it does not silently run a smaller number.</td></tr>
           <tr><td><b>Cascade ceiling</b></td><td>How far up to run. Stage 1 is free and
             instant. Stage 1 + 2 adds the local models and costs seconds per prompt.
             Stage 1 + 2 + 3 is greyed out unless the server explicitly enables it — these
@@ -1283,9 +1312,9 @@ python -m uvicorn afni_rai.gateway.app:create_app --factory --port 8080</div>
   <p><b>Every figure in this guide was measured on a running gateway</b>, not estimated:
   the rail counts per side and per stage, the four worked verdicts, and the 280-prompt
   corpus run. Where a number depends on which machine you are on, the guide says so.</p>
-  <p>Companion documents in this repository: <code>rai_platform/docs/00-architecture.md</code>
-  (the request path in detail), <code>rai_platform/docs/01-setup.md</code> (installing the
-  model files), <code>rai_platform/corpus/SCHEMA.md</code> (what the corpus contains and
+  <p>Companion documents in this repository: <code>docs/architecture.md</code>
+  (the request path in detail), <code>docs/setup.md</code> (installing the
+  model files), <code>docs/corpus.md</code> (what the corpus contains and
   what it has already proved).</p>
 </footer>
 

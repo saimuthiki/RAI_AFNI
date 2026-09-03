@@ -6,7 +6,7 @@ Read this before looking for a per-request fairness check, because there isn't
 one and there should not be one.
 
 The methodology analysis counted 13 tools contributing to this tenet and put
-**11 of them Offline** (`knowledge/methodology.md`, "Fairness & Bias": Stage 2 1
+**11 of them Offline** (`docs/frameworks.md`, "Fairness & Bias": Stage 2 1
 - Stage 3 1 - Offline 11). That is not a shortfall in the tooling; it is what
 fairness *is*. Every group-fairness metric in the reviewed corpus needs two
 things that do not exist at request time:
@@ -22,7 +22,7 @@ things that do not exist at request time:
 
 Bias is a property of a *population* of decisions, not an event in one request.
 A single request carries one outcome and no counterfactual, so there is nothing
-to disaggregate. `knowledge/tenets.md` states the consequence directly: this
+to disaggregate. `docs/tenets.md` states the consequence directly: this
 tenet "runs as: scheduled batch job. **Never** a live per-response check".
 
 So this package deliberately does three things and refuses a fourth:
@@ -940,7 +940,7 @@ class BatchDataset:
                 "no sensitive_features declared. Every group-fairness metric in "
                 "the reviewed corpus requires a named protected attribute; "
                 "there is no automatic detector for 'unfair' without one "
-                "(knowledge/tenets.md, Fairness & Bias)")
+                "(docs/tenets.md, Fairness & Bias)")
         for name, values in self.sensitive_features.items():
             if len(values) != n:
                 raise ValueError(

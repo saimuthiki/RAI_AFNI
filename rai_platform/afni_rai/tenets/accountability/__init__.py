@@ -179,7 +179,7 @@ REMEDIATION_ATTRIBUTION = _attr(
     stage=int(Stage.STAGE_1),
     evidence="guardrails-main/guardrails/types/on_fail.py:24-31 (eight values, "
              "no mask/allow/block) and :33-45; branches from "
-             "knowledge/request-flow.md §'Four things that are easy to get wrong'",
+             "docs/request-flow.md §'Four things that are easy to get wrong'",
     capability="On-fail remediation actions")
 
 FRAMEWORK_ATTRIBUTION = _attr(
@@ -241,9 +241,9 @@ DASHBOARD_ATTRIBUTION = _attr(
     mechanism="Cloud API - OpenTelemetry ingestion, workbooks and alerting over "
               "the same spans tracing.py emits",
     stage=int(Stage.STAGE_3),
-    evidence="knowledge/tenets.md:98-100 names Azure Monitor / Application "
+    evidence="docs/tenets.md:98-100 names Azure Monitor / Application "
              "Insights (or Azure AI Foundry Observability) as the cloud pick; "
-             "knowledge/methodology.md Accountability row lists Monitaur / "
+             "docs/frameworks.md Accountability row lists Monitaur / "
              "Fiddler / DataRobot / Purview as the vendor alternatives",
     capability="Governance dashboards")
 

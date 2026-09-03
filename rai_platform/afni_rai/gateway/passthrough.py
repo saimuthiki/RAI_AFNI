@@ -5,7 +5,7 @@ The guarded passthrough: one interaction, two guardrails, one model between them
     caller -> [INPUT guardrail] -> target model -> [OUTPUT guardrail] -> caller
 
 `/v1/guard` judges text somebody hands it. This is the same cascade wired in
-front of and behind a real AI system, which is the topology `docs/00-architecture.md`
+front of and behind a real AI system, which is the topology `docs/architecture.md`
 section 1 draws. The order is not an implementation detail, it IS the product:
 
   1. guard the prompt          `EventKind.REQUEST`

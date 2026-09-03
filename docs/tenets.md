@@ -123,7 +123,7 @@ slide states all three layers explicitly, so nothing reads as a contradiction:
 | **ADOPT** | which of the 23 reviewed repos AFNI takes on |
 | **ENGINE UNDER IT** | the library or model those repos actually run (Presidio, the HF model ids) |
 | **CLOUD SECOND OPINION** | the managed Azure/vendor service layered beside them |
-| **WHERE IT RUNS** | the cascade stage, from [methodology.md](methodology.md) |
+| **WHERE IT RUNS** | the cascade stage, from [methodology.md](frameworks.md#methodology--mechanism-cost-and-stage-per-repo-tenet-pair) |
 
 Two tenets genuinely disagreed rather than differing in altitude:
 
@@ -156,7 +156,7 @@ difference is accounted for.
 
 For *how* each tool implements its check - module vs keyword vs classifier vs LLM judge vs
 cloud API - and which cascade stage that puts it in, see
-[methodology.md](methodology.md).
+[methodology.md](frameworks.md#methodology--mechanism-cost-and-stage-per-repo-tenet-pair).
 
 **LLM Guard is the runtime primary for four of seven tenets.** That concentration is
 why D4 (fork it, pin the model revisions, own it) matters more than any other single

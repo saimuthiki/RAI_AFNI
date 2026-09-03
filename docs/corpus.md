@@ -142,6 +142,95 @@ will give a very different figure. That comparison — same sample, same seed, t
 tiers — is the single most persuasive artefact this repository can produce, and
 it needs a provisioned host to generate.
 
+## Where it lives, and how to run part of it
+
+**`rai_platform/corpus/harm-intents.jsonl`** — 11,369 records, one JSON object per line,
+6.35 MB. The warning that governs its use sits beside it at
+[`rai_platform/corpus/WARNING.md`](../rai_platform/corpus/WARNING.md), on purpose:
+anyone who opens that folder meets it there.
+
+You never run all of it interactively. A Stage-2 pass costs **1–3 seconds per record** on
+CPU, so the whole file is about **nine hours**. One interactive run is capped server-side
+(`AFNI_CORPUS_MAX_SAMPLE`, default 500) and asking for more is a `422` naming the cap —
+not a truncated run, because silently running 500 of the 5,000 you asked for produces a
+pass rate you would misread.
+
+### Three ways to choose what runs
+
+All three work identically in the console (**Corpus** screen), the API
+(`POST /v1/corpus/run`) and the CLI (`corpus/baseline.py`).
+
+| You want | Console setting | API field | CLI flag |
+|---|---|---|---|
+| a representative sample | *N records* | `limit` | `--limit` |
+| a fair comparison across tenets | *N per tenet* | `per_tenet` | `--per-tenet` |
+| **exact records — the 10th to the 20th** | *Records N to M* | `start`, `end` | `--start`, `--end` |
+
+Any of the three can be narrowed first by `tenet`, `owasp` or `direction`. The filter is
+applied **before** the sample or the range, so a range is over the filtered pool —
+`GET /v1/corpus` reports each pool's size.
+
+### The positional range, and its two rules
+
+**It is 1-based and INCLUSIVE.** `start: 10, end: 20` is **eleven** records, the 10th
+through the 20th. 1-based because that is how a person counts records; inclusive for the
+same reason. A range that quietly returned ten would be read as a bug in the corpus rather
+than in the indexing, so the console prints the count beside the inputs — *"11 records —
+the range is inclusive, so 10 to 20 is 11, not 10"* — and a test pins it.
+
+**It ignores the seed, and indexes the pool in id order.** This is the property the whole
+feature rests on: *"the 10th record"* has to be the same record on every machine and at
+every seed, or the position means nothing. Two consequences:
+
+- The corpus file's **line order is irrelevant** — it is an artefact of the ingest run, so
+  a range over raw line order would move if the corpus were regenerated. Sorting by id
+  first makes the position permanent.
+- The console **hides the Draw (seed) control** in range mode. Leaving it on screen would
+  tell the reader it does something.
+
+A range and per-tenet sampling are **rejected together** rather than silently resolved —
+one asks for specific records, the other for a representative spread. A bad range gets its
+own error code, `range_out_of_bounds`, distinct from `empty_selection`: a typo'd range is a
+mistake to fix, whereas a filter that legitimately matches nothing is an answer.
+
+```bash
+cd rai_platform
+
+# the exact records 10 to 20, free tier, in under a second
+python corpus/baseline.py corpus/harm-intents.jsonl --start 10 --end 20 --stage-1-only
+
+# 40 per tenet, deterministic — the run that produces the headline number
+python corpus/baseline.py corpus/harm-intents.jsonl --per-tenet 40 --seed 0
+```
+
+```jsonc
+// POST /v1/corpus/run
+{"start": 10, "end": 20, "max_stage": 1}                    // eleven exact records
+{"start": 1, "end": 50, "tenet": "Privacy", "max_stage": 1} // first 50 Privacy records
+{"per_tenet": 40, "seed": 0, "max_stage": 1}                // the headline run
+```
+
+### A real run, today
+
+```
+corpus      corpus/harm-intents.jsonl  (11,369 records)
+range       records 10-20  (1-based, inclusive)  ->  11 records, in id order
+build       2f2f3932   tier=stage_1_only
+
+decisions   allow=11
+elapsed     0.0s  (0.6 ms/record)
+```
+
+Eleven of eleven allowed — which is the finding below, in miniature.
+
+### Colours are reversed on the Corpus screen
+
+Every prompt in this corpus is something the model should ideally not answer. So a
+**block is a success** and an **allow is a miss**, the opposite way round from the Live
+check screen. The console colours them accordingly and says so, but it is worth saying out
+loud in a demo before somebody reads a wall of green as a wall of failures.
+
+
 ## Honest limits
 
 - **This corpus measures the guardrail, not the model.** `target_complied` is

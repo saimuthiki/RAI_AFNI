@@ -1,4 +1,102 @@
-# How Each Tool Actually Works
+# The Reviewed Frameworks
+
+All 23 open-source projects read at source level: the adoption verdict, the
+mechanism behind each contributed check, and the one head-to-head comparison
+worth keeping. Merged on 2026-09-03 from `knowledge/frameworks.md`,
+`knowledge/methodology.md` and `knowledge/infosys-vs-nemo.md`.
+
+
+---
+
+## Verdicts — what to keep, combine, bench and skip
+
+*Was `knowledge/frameworks.md`.*
+
+Every tool reviewed at source level, with the adoption verdict. Source of
+truth: `data/RAI_Synthesis.json` → `feasibility_matrix`, and `helpers/repo_slide_content.py`
+→ `REPO_SLIDES`. Each tool's actual code is in `references/<folder>/`, indexed by graft
+(`graft ask "<question>" --in references/<folder>/`).
+
+Role: **Dev** = runs live in the request path · **Test** = offline red-team/eval ·
+**Dev+Test** = both. Split as analysed: 12 Dev, 4 Test, 7 both.
+
+| Tool | `references/` folder | Role | Tier | Verdict | Cost | Effort | License |
+|---|---|---|---|---|---|---|---|
+| DeepEval | `deepeval-main` | Dev | Tier 1 | **Adopt now** | Mixed (free core + optional paid add-ons) | Low | Apache-2.0 |
+| DeepTeam | `deepteam-main` | Dev+Test | Tier 1 | **Adopt now** | Requires paid API or hosted model | Medium | Apache-2.0 |
+| Fairlearn | `fairlearn-main` | Dev | Tier 1 | **Adopt now** | Free / open-source | Medium | MIT |
+| LLM Guard (Protect AI) | `llm-guard-main` | Dev | Tier 1 | **Adopt now** | Free / open-source | Medium | MIT |
+| NVIDIA NeMo Guardrails | `Guardrails-develop` | Dev | Tier 1 | **Adopt now** | Mixed (free core + optional paid add-ons) | Medium | Apache-2.0 |
+| NVIDIA garak | `garak-main` | Test | Tier 1 | **Adopt now** | Mixed (free core + optional paid add-ons) | Medium | Apache-2.0 |
+| OpenGuardrails Protocol (OGR) | `openguardrails-main` | Dev+Test | Tier 2 | **Adopt now** | Mixed (free core + optional paid add-ons) | Medium | Apache-2.0 |
+| Promptfoo | `promptfoo-main` | Dev+Test | Tier 1 | **Adopt now** | Mixed (free core + optional paid add-ons) | Medium | MIT |
+| PyRIT (Microsoft) | `PyRIT-main` | Dev+Test | Tier 1 | **Adopt now** | Mixed (free core + optional paid add-ons) | Medium | MIT |
+| SHAP | `shap-master` | Dev | Tier 1 | **Adopt now** | Free / open-source | Medium | MIT |
+| Agentic Security | `agentic_security-main` | Dev+Test | Tier 2 | **Bench for later** | Mixed (free core + optional paid add-ons) | Medium | Apache-2.0 |
+| Deepchecks | `deepchecks-main` | Dev | Tier 2 | **Bench for later** | Free / open-source | Medium | AGPL-3.0 |
+| FuzzyAI | `FuzzyAI-main` | Test | Tier 2 | **Bench for later** | Mixed (free core + optional paid add-ons) | Medium | Apache-2.0 |
+| Giskard OSS (v3) | `giskard-oss-main` | Dev+Test | Tier 2 | **Bench for later** | Mixed (free core + optional paid add-ons) | Medium | Apache-2.0 |
+| OpenAI Evals | `evals-main` | Dev+Test | Tier 2 | **Bench for later** | Mixed (free core + optional paid add-ons) | High | MIT |
+| TSZ (Thyris Safe Zone) | `safe-zone-main` | Dev | Tier 2 | **Bench for later** | Mixed (free core + optional paid add-ons) | Medium | Apache-2.0 |
+| Infosys Responsible AI Toolkit | `Infosys-Responsible-AI-Toolkit-master` | Dev | Tier 1 | **Combine with Guardrails-develop** | Mixed (free core + optional paid add-ons) | High | MIT |
+| Rebuff (Protect AI) | `rebuff-main` | Dev | Tier 2 | **Combine with Guardrails-develop** | Mixed (free core + optional paid add-ons) | Low | Apache-2.0 |
+| AI Fairness 360 (AIF360) | `AIF360-main` | Dev | Tier 1 | **Combine with fairlearn-main** | Free / open-source | Medium | Apache-2.0 |
+| hai-guardrails | `hai-guardrails-main` | Dev | Tier 2 | **Combine with llm-guard-main** | Mixed (free core + optional paid add-ons) | Medium | MIT |
+| Guardrails AI | `guardrails-main` | Dev | Tier 2 | **Skip** | Mixed (free core + optional paid add-ons) | Medium | Apache-2.0 |
+| JCB (Jailbreak with Cross-Behavior Attacks) | `JCB-main` | Test | Tier 3 | **Skip** | Mixed (free core + optional paid add-ons) | High | MIT |
+| LLMFuzzer | `LLMFuzzer-main` | Test | Tier 3 | **Skip** | Free / open-source | Low | MIT |
+
+### How to read the verdicts
+
+- **Adopt now (10)** — goes into the platform. Ten of the 23.
+- **Combine with … (4)** — adopt, but only alongside the named primary; not a
+  standalone choice. AIF360 behind Fairlearn; Infosys and Rebuff behind NeMo;
+  hai-guardrails behind LLM Guard (port its PHI regexes into Presidio recognisers).
+- **Bench for later (6)** — genuine capability, deliberately not wired yet. Deepchecks is a batch
+  library with no per-request API, which is the reason it is benched — **not** its
+  licence: AFNI holds licences covering Apache-2.0, MIT and AGPL-3.0 and confirmed
+  on 2026-09-02 that no repository in this review is licence-restricted. OpenAI
+  Evals is worth one run against any product claiming agent autonomy (its
+  deception / sandbagging / covert-persuasion suite).
+- **Skip (3)** — Guardrails AI (superseded by NeMo for AFNI's shape, plus a documented
+  PyPI supply-chain compromise), JCB and LLMFuzzer (narrow, high effort, low return).
+
+### The ones that carry the platform
+
+| Tool | Why it matters |
+|---|---|
+| **LLM Guard** | Presidio + ai4privacy DeBERTa NER + a **Vault for reversible redaction** (unique in the set — redaction stops breaking workflows). Also the DeBERTa-v3 prompt-injection classifier, local toxicity/bias models, zero-shot BanTopics, and a cross-encoder NLI groundedness scanner cheap enough to run on every response. Archived upstream → fork it. |
+| **NeMo Guardrails** | The rail engine and orchestration layer. Plugin rails, YARA injection rules, perplexity heuristics, context-bloat checks, tool-schema validation, ~20 vendor adapters. |
+| **OpenGuardrails** | No detectors — the Verdict/GuardEvent schema and taxonomy. The contract that makes every other choice swappable. |
+| **PyRIT** | Deepest red-team coverage found: Crescendo, TAP, PAIR, Skeleton-Key multi-turn strategies, ~80 obfuscation converters, free regex output-scorers (SQLi, SSRF, secret leaks), a memory store, and `scorer_evaluation` with Krippendorff's alpha for measuring detector accuracy against human labels. |
+| **garak** | Second offline scanner. Uniquely has **shields up / shields down** probes — point them at AFNI's own gateway to prove the rails actually fire. ProPILE probes for PII leakage. |
+| **promptfoo** | The compliance reporting engine: OWASP LLM Top 10, NIST AI RMF, MITRE ATLAS and EU AI Act mapped reports straight out of CI. Also HarmBench / BeaverTails / DoNotAnswer / XSTest corpora. |
+| **DeepEval** | G-Eval and DAG — versioned, CI-runnable rubrics with written reasons, instead of an ad-hoc prompt-based judge. Faithfulness and contextual precision/recall for RAG. |
+| **Fairlearn + AIF360** | Fairlearn for everyday group metrics and mitigation (Azure-aligned, and Azure's own RAI dashboard is built on it). AIF360's MDSS and FACTS scanners **find which subgroup is biased** rather than requiring AFNI to already know which group to check. |
+| **SHAP** | The tool Kiran named. 12 Shapley estimators behind one auto-dispatching API, Nature-published, with its own benchmark for judging whether an explanation is trustworthy. |
+
+### Tools whose only role is to be borrowed from
+
+Not deployed — specific parts are ported into the AFNI stack:
+
+- **hai-guardrails** — the only dedicated healthcare PHI regex set found (ICD-10, MRN,
+  NPI, DEA) plus entropy-gated secret patterns. Port into Presidio custom recognisers.
+- **Rebuff** — canary-token leak detection and a self-hardening attack-signature store.
+  Reimplement as native NeMo rails, seeded from the baseline red-team findings.
+- **Infosys toolkit** — the dispatcher shape (see [infosys-vs-nemo.md](frameworks.md#infosys-toolkit-vs-nemo-guardrails)).
+  Optionally vendor three genuinely unique modules if the business needs them:
+  multi-format/DICOM PII scanning, NSFW image and video detection, and Faker-based
+  anonymisation with differential privacy.
+- **Presidio** (not in `references/`, but the de-facto engine four of these tools wrap) —
+  18 country recognizer packs including India Aadhaar with Verhoeff checksum, PAN,
+  GSTIN, and US SSN/ITIN/passport. Extending it is a ~50–130 line recogniser.
+
+
+---
+
+## Methodology — mechanism, cost and stage per repo-tenet pair
+
+*Was `knowledge/methodology.md`.*
 
 Mechanism, cost, latency class and cascade stage for every tool that contributes a
 check to each tenet. Derived by reading the actual source under `references/` — every
@@ -8,7 +106,7 @@ row in `data/tenet_methodology_facts.json` carries an `evidence` field naming th
 Regenerate with `python3 helpers/build_tenet_methodology_data.py`; rendered as deck
 slides 62–68 by `helpers/build_deck_methodology.py`.
 
-## Reading the Stage column
+### Reading the Stage column
 
 | Stage | Meaning |
 |---|---|
@@ -27,7 +125,7 @@ DeBERTa classifier, so it earns Stage 1 on the strength of the former. Latency i
 
 ---
 
-## Privacy
+### Privacy
 
 17 contributing tools — Stage 1 6 · Stage 3 1 · Delegates 2 · Offline 8
 
@@ -55,7 +153,7 @@ DeBERTa classifier, so it earns Stage 1 on the strength of the former. Latency i
 
 ---
 
-## Security
+### Security
 
 16 contributing tools — Stage 1 5 · Stage 2 1 · Stage 3 2 · Offline 8
 
@@ -82,7 +180,7 @@ DeBERTa classifier, so it earns Stage 1 on the strength of the former. Latency i
 
 ---
 
-## Fairness & Bias
+### Fairness & Bias
 
 13 contributing tools — Stage 2 1 · Stage 3 1 · Offline 11
 
@@ -106,7 +204,7 @@ DeBERTa classifier, so it earns Stage 1 on the strength of the former. Latency i
 
 ---
 
-## Explainability & Transparency
+### Explainability & Transparency
 
 13 contributing tools — Stage 1 5 · Stage 3 2 · Offline 6
 
@@ -130,7 +228,7 @@ DeBERTa classifier, so it earns Stage 1 on the strength of the former. Latency i
 
 ---
 
-## Profanity / Content Safety
+### Profanity / Content Safety
 
 15 contributing tools — Stage 1 2 · Stage 2 2 · Stage 3 2 · Delegates 1 · Offline 8
 
@@ -156,7 +254,7 @@ DeBERTa classifier, so it earns Stage 1 on the strength of the former. Latency i
 
 ---
 
-## Hallucination / Reliability
+### Hallucination / Reliability
 
 17 contributing tools — Stage 1 1 · Stage 2 2 · Stage 3 4 · Offline 10
 
@@ -184,7 +282,7 @@ DeBERTa classifier, so it earns Stage 1 on the strength of the former. Latency i
 
 ---
 
-## Accountability
+### Accountability
 
 17 contributing tools — Stage 1 6 · Stage 3 2 · Offline 9
 
@@ -212,7 +310,7 @@ DeBERTa classifier, so it earns Stage 1 on the strength of the former. Latency i
 
 ---
 
-## Per-repo caveats found in the source
+### Per-repo caveats found in the source
 
 These came out of the source read and are not in the original deck.
 
@@ -238,3 +336,84 @@ These came out of the source read and are not in the original deck.
 - **`rebuff-main`** — Only the L1 heuristic layer is genuinely free and local. JS SDK can swap Pinecone for self-hosted Chroma, but embeddings still call OpenAI ada-002. The self-hardening corpus (log_leakage back into the same index) is the part AFNI wants to reimplement.
 - **`safe-zone-main`** — Go service. LLM layer defaults to LOCAL Ollama (llama3, config.go:104-106) so paid API is optional. No Luhn/checksum in code. Per-pattern thresholds are stored and API-exposed (admin.go:66) but never read by Detect - env globals only.
 - **`shap-master`** — Pure local library, no paid API, no hardcoded model ids (user supplies the model). Kernel/Deep cost scales samples x features - that is the concrete reason it cannot run synchronously. Tree/Linear are fast. Also ships a GPUTreeExplainer.
+
+
+---
+
+## Infosys toolkit vs NeMo Guardrails
+
+*Was `knowledge/infosys-vs-nemo.md`.*
+
+The sharpest call in the analysis. Source: deck slides 67–69.
+**Verdict: right shape, wrong implementation. Copy the shape, do not deploy the toolkit.**
+
+### What Infosys has today (the shape worth copying)
+
+`references/Infosys-Responsible-AI-Toolkit-master`, service `moderationlayer`:
+
+- **One async dispatcher** fans a single input out to ~15 independently-thresholded checks.
+- Returns **one pass/fail summary with per-check evidence**, in both coupled and
+  decoupled modes.
+- Thresholds configured **per account and per portfolio** through a separate admin service.
+- Locally-hosted fine-tuned models for toxicity, jailbreak, restricted topics and
+  gibberish — no per-call cloud cost.
+
+That fan-out plus per-tenant threshold pattern is the correct design for AFNI and
+should be reproduced.
+
+### The five drawbacks found in its code
+
+1. **Deployment cost.** Adopting it as designed means ~20 independently-versioned
+   FastAPI microservices plus an Angular micro-frontend, each with its own
+   requirements file and several GB of local model weights.
+2. **Dead red-team modules.** PAIR/TAP modules are marked retired for release 2.2.1,
+   while the frontend still ships orphaned red-teaming components pointing at nothing.
+3. **No accuracy figures** published for any of its in-house fine-tuned models.
+4. **Silent check-dropping — the disqualifying one.** The core dispatcher wraps each
+   check in a broad `try/except` that logs and returns `None`. A single timeout or
+   misconfigured threshold silently drops a check rather than failing loudly. That is
+   precisely the failure mode a governance framework exists to prevent.
+5. **Configuration coupling.** Every one of the ~20 services must be configured with
+   every other service's URL.
+
+Also on the record from the wider review: a **SDK version drift** issue and an **Azure
+Blob Storage dependency**.
+
+### Why NeMo Guardrails wins as the backbone
+
+`references/Guardrails-develop`:
+
+1. **One pip-installable Python package**, not a service mesh to operate.
+2. **Already a plugin architecture** — every rail is a self-contained module (an
+   actions file, a config schema, a manifest), so AFNI's own detectors and the other
+   adopted repos plug in as first-class rails.
+3. **~20 ready adapters** to managed safety vendors plus native Azure service
+   adapters — Azure-first without lock-in.
+4. **NVIDIA-maintained**, 383-file test suite, and it publishes honest numbers about
+   its own weak spots instead of hiding them.
+
+Known NeMo facts to carry into design: NIM F1 scores and Enterprise pricing are
+published; **there is an HA gap**; the **jailbreak rail defaults to fail-open** and
+must be explicitly flipped to fail-closed for client-facing traffic.
+
+### What AFNI must build itself
+
+NeMo provides none of these — all three are carried over from the Infosys pattern:
+
+1. A **per-tenant / per-project threshold configuration service**, modelled on the
+   Infosys admin pattern, so each AFNI project sets its own strictness without
+   forking the gateway.
+2. **One consolidated verdict summary** per request — not a raw list of rail outputs.
+3. A **loud-failure policy**: any check that could not complete is reported as
+   `unjudged`, and for client-facing traffic the gateway fails closed.
+
+Plus the contract itself: the **OpenGuardrails Verdict/GuardEvent schema** as the
+fixed interface between the gateway and every application. That is what lets AFNI
+swap a detector, add a vendor, or move a check from local to cloud without touching
+application code.
+
+### Also considered and rejected as the backbone
+
+**Guardrails AI** (`references/guardrails-main`) — verdict **Skip**. Superseded by
+NeMo for AFNI's shape, and it carries a **documented PyPI supply-chain compromise**
+plus the **Aug 2026 Hub deprecation**, which has already happened, affecting a stated percentage of validators.
