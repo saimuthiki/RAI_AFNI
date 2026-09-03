@@ -1645,3 +1645,91 @@ sweep cannot see a path that is assembled, and that is worth remembering.
 **All 35 internal markdown links were then machine-checked: 6 broken, all fixed, 0 left.**
 
 **1029 tests OK** bare and provisioned. Deck rebuilt, 83 slides, `qa_deck` 0 issues.
+
+## 2026-09-03 — Git history rewritten; 857 MB → 64 MB
+
+AFNI: *"yes rewrite the git history and reclaim that space."*
+
+Deleting files in a commit does not remove their blobs — git keeps every version
+reachable from history, which is why the earlier 1.6 GB cleanup left `.git` at 857 MB.
+Reclaiming it needs a history rewrite.
+
+### Safety first, and the first plan failed
+
+Intended backup was a tag pushed to the remote. **Tag pushes are blocked in this
+environment — HTTP 403 from the git proxy, on all five retries.** Branch pushes work, so
+the backup went up as a branch instead:
+
+**`origin/backup/pre-history-rewrite-2026-09-03` = `722e1c62`** — the complete
+pre-rewrite history, on GitHub.
+
+Also found a bug in my own retry loops, used all session:
+`git push … | tail -2 && break` breaks on **`tail`'s** exit code, not the push's, so a
+`fatal:` was being treated as success. That is how the failed tag push initially looked
+like it had worked. Replaced with a helper that greps the output for `fatal|error|rejected`.
+
+### An opportunistic secret scan, because a rewrite is the only chance
+
+Scanned all 59 commits for secret-shaped filenames and credential shapes. **Nothing of
+AFNI's**, but 25 third-party files did turn up, all inside `references/`:
+
+- **22 Infosys `.env` files** — checked before deleting: **templates**, full of
+  `${placeholder}` substitutions, no real values.
+- **promptfoo's `private_key.pem` / `public_key.pem`** — real 28-line PKCS#8 key material,
+  but a **test fixture published in promptfoo's own public repo**, so not secret in any
+  meaningful sense.
+- a helm `secret.yaml` template and an `llm_connection_credentials.json`.
+
+Stripped anyway, and the reasoning is worth keeping: a `.env` or a `.pem` in this
+repository is a finding every secret scanner raises and every security reviewer has to be
+talked out of, none is cited by any rail, and the cost of removing them was zero against a
+recurring cost of keeping them. `.gitignore` now covers them.
+
+The exhaustive per-commit credential-value scan **timed out** (59 commits × 21k files) and
+was not completed. `references/` was added in a single commit so scanning HEAD covers it,
+but this is stated rather than claimed as a clean bill of health.
+
+### The rewrite, and the check that mattered
+
+`git filter-repo --invert-paths` with 58 path patterns: every bulk extension under
+`references/`, plus the credential shapes. 59 commits rewritten in 1.15 s.
+
+The check worth doing was **the diff of tracked file lists before and after**, taken from
+the remote backup rather than trusted:
+
+- **present before, absent now: exactly the 25 credential-shaped files.** Nothing else.
+- **present now, absent before: empty.**
+
+The HEAD *tree hash* did change (`9d1056f2` → `3cf6d55c`) — expected, and the 25 files are
+precisely why. Had it been unchanged, the credential strip would have silently done
+nothing.
+
+Then verified the content, not just the counts: **all 47 real citations resolve**, and
+three cited lines still read what the code says they read —
+`agentic_security/config.py:99` → `Authorization: Bearer XXXXX`,
+`guardrails/types/on_fail.py:24` → `REASK = "reask"`,
+`jailbreak-protection.mdx:112` → `Jailbreak detection fails open.`
+
+**1029 tests OK** bare and provisioned on the rewritten repo.
+
+### The numbers, measured on real clones
+
+| | `.git` | working tree |
+|---|---|---|
+| before | 857 MB | — |
+| **single-branch clone of `main`** | **64 MB** | 367 MB |
+| full clone, all branches | 848 MB | 1.2 GB |
+
+**13× smaller** for anyone cloning `main`. The full-clone figure is the honest catch: the
+backup branch keeps the old objects reachable on the remote, so a plain `git clone` still
+pulls them. **Deleting `backup/pre-history-rewrite-2026-09-03` is what finalises the
+reclaim** — deliberately left for AFNI to authorise, because it is the only remaining copy
+of the pre-rewrite history and they have not yet seen the result.
+
+### Every SHA changed
+
+`722e1c62` → `8038f901` at the tip; all 59 commits have new hashes. Commit messages,
+authorship and order are intact. **Every existing clone is now incompatible and must be
+re-cloned** — a `git pull` into an old clone will not resolve. `filter-repo` removed the
+`origin` remote by design (to prevent an accidental push); it was re-added from the saved
+URL before pushing.
