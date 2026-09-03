@@ -489,6 +489,48 @@ export async function saveTopicPolicy({ enabled, blocking }) {
 }
 
 
+// -------------------------------------------------------------- media --
+// Image and video moderation. Separate routes from /v1/guard because a
+// GuardEvent payload is strings and an image is not one — so an application
+// that accepts uploads has to call these as well. `mediaStatus()` is what tells
+// the screen whether the model is even installed.
+
+export const mediaStatus = () => getJSON('/v1/media', { timeout: 10000 });
+
+/** Send one image (or video) for moderation.
+ *
+ *  Base64 in a JSON body rather than multipart, matching the gateway: FastAPI's
+ *  UploadFile needs python-multipart, and media is meant to be an optional extra
+ *  that adds no hard dependency for deployments that never send an image.
+ *
+ *  Deliberately NOT routed through `getJSON`'s timeout. A video frame costs
+ *  ~87 ms, so a 120-frame sample is ten seconds of held-open socket before a
+ *  byte comes back, and a timeout tuned for an introspection route would abort
+ *  a run that was working perfectly. The screen shows a pending state instead.
+ */
+export async function moderateMedia(kind, base64, options = {}) {
+  const route = kind === 'video' ? '/v1/media/video' : '/v1/media/image';
+  const body = kind === 'video'
+    ? { video_base64: base64, ...options }
+    : { image_base64: base64, ...options };
+  const res = await fetch(url(route), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
+  let parsed = null;
+  try { parsed = await res.json(); } catch { /* not JSON */ }
+  if (!res.ok) {
+    // The useful part of a 422 here is the message — "image_base64 is not valid
+    // base64" — and "HTTP 422" tells an operator nothing about what to fix.
+    throw new Error(parsed && parsed.message
+      ? parsed.message
+      : `POST ${route} → HTTP ${res.status} ${res.statusText}`);
+  }
+  return parsed;
+}
+
+
 /** Run a sample, one callback per record as it is judged.
  *
  *  Streamed rather than awaited because a 200-record Stage-2 run is ten minutes.

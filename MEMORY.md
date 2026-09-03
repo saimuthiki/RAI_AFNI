@@ -1836,3 +1836,129 @@ Updated to 276 everywhere it appears rather than left at the flattering old figu
 | `.gitignore` | `afni_topic_policy.json` — deployment state, not source |
 
 **1052 tests pass** bare and provisioned.
+
+---
+
+## 2026-09-03 — Media moderation: what was portable, and what was not
+
+AFNI asked for media moderation from the Infosys toolkit in `references/`, and asked
+explicitly to be told if it was not possible. It was possible, but only half of what
+Infosys ships is, and the honest answer is the split.
+
+### The two Infosys media detectors are not equally portable
+
+**Ported: NudeNet.** `responsible-ai-safety/.../util/NudeNet/NudeNet.py` wraps the
+`nudenet` pip package, gets 18 labelled bounding boxes and Gaussian-blurs the explicit
+ones. The thing that makes it work here is a packaging detail worth writing down: the
+model — `nudenet/320n.onnx`, 12 MB — **ships inside the wheel**. `pip install nudenet` is
+both the library and the model download, nothing is fetched at runtime, and it therefore
+works on an air-gapped box. Dependencies are `numpy`, `onnxruntime`,
+`opencv-python-headless` and nothing else.
+
+**Not ported: nsfw_model.** `.../nsfw_model/nsfw_detector/videonsfw.py` loads
+`../models/nsfw.299x299.h5`, a Keras InceptionV3 five-class classifier
+(`drawings/hentai/neutral/porn/sexy`), through TensorFlow and tensorflow_hub. The `.h5`
+is **not in the toolkit repository** — it is a separate several-hundred-MB download — and
+TensorFlow is ~600 MB of dependency for one check NudeNet already covers with a 12 MB
+ONNX file. If AFNI later wants the five-way breakdown rather than body-part boxes, that
+is the file to revisit; the interface here would not change.
+
+### Measured in this environment
+
+| | |
+|---|---|
+| model load | **0.11 s** |
+| one image, CPU | **≈87 ms** (105–140 ms through the HTTP route) |
+| ONNX head | 2100 anchors × 18 classes, verified graded |
+| a 60-frame clip, stride 10 | **6 frames scored, 378 ms** |
+
+### What is honestly UNVERIFIED, and why
+
+**Detection accuracy.** Testing it needs labelled imagery; there is deliberately none in
+this repository and none may be fetched. So the band mapping is tested against a **fake
+detector** — which is the honest scope — and the real model is asserted only to load and
+run. `GET /v1/media` returns an `accuracy_note` saying the numbers are NudeNet's, not
+AFNI's. Overlay geometry *was* verified visually against the fake detector: a box at
+(40,30) 120×90 in a 320×240 image lands at 12.5% / 12.5% / 37.5% / 37.5%, measured
+0.127 / 0.128 / 0.373 / 0.372 in the browser.
+
+### The gender labels are dropped, in exactly one line
+
+The model emits `FACE_FEMALE` / `FACE_MALE`, and the exposed-breast classes are also
+gender-split. `_BAND_SPEC["face"]` forces the reported label to `"face"` and the gender
+guess goes no further — not into a finding, not into the audit record, not into a
+compliance report. **A binary gender inference from a photograph is precisely the
+fairness harm this platform exists to catch**, and re-emitting it would have been
+grotesque. A test asserts the string "FEMALE" appears nowhere in a face result.
+
+### Design decisions and the reasoning
+
+**One finding per BAND, not per box.** Three exposed regions in one photograph are one
+policy violation with three rectangles. Emitting three identical `safety.sexual` findings
+would treble the count in the compliance report without adding information.
+
+**Faces FLAG and never block.** A photograph of a person is not a policy violation. It is
+reported as `privacy.pii` because a face is biometric PII and an operator may need to
+know.
+
+**Bellies, feet and armpits are not reported at all.** The model finds them; six of its
+eighteen classes are them. A visible ankle is not a finding, and filling the audit record
+with them buries the ones that matter.
+
+**Media is NOT a rail, and `POST /v1/guard` does not check images.** Every other check is
+a `Rail` over `GuardEvent.texts()` — strings keyed by payload path. An image is not a
+string, and forcing one through would mean base64 in a text field that every text rail
+then uselessly scans. So media gets its own routes and shares what actually needs
+sharing: the `Finding` shape, the severity vocabulary, the compliance grouping. The
+consequence is *stated* in `GET /v1/media`'s description rather than left to be
+discovered: an application that accepts uploads must call both.
+
+**Base64 in a JSON body, not multipart.** FastAPI's `UploadFile` needs
+`python-multipart`, which this gateway does not otherwise require. Media is meant to be
+an optional extra that adds no hard dependency for deployments that never send an image.
+Base64 costs 33% on the wire and buys a gateway that still boots with nothing installed.
+
+**Video is Offline, and the sampling is reported.** A frame is ~87 ms, so Infosys's
+every-frame approach is ~78 s of CPU for a 30-second 30 fps clip. Default is every 15th
+frame capped at 120, and `frames_scored` / `frames_total` come back so a reviewer sees
+that 120 of 5,400 frames were looked at. A single explicit frame anywhere in the sample
+blocks the whole video — the union of what was seen, never an average, because an average
+lets one bad frame in a long clean clip disappear.
+
+**Blur redacts the regions it was GIVEN**, not a second detection. Infosys's `NudeNet.py`
+detects twice and can in principle blur a region it did not report. The 75×75 kernel is
+kept from the original.
+
+### The threshold bug this nearly shipped with
+
+The three media thresholds had to be added to `GLOBAL_DEFAULTS` explicitly. Nothing in
+that dict prefix-matches `safety.sexual.image_explicit`, so `resolve()` would have
+returned the **last-resort 0.85** — silently raising the explicit-nudity threshold from
+Infosys's ported 0.50 to 0.85 and halving the detector's sensitivity. That is the
+write-only-config class of bug `thresholds.py` was written to prevent, arriving from the
+other direction. A test asserts the resolved value is not 0.85.
+
+### And a stale claim in preflight, found while wiring this
+
+`preflight.py` still called the topic list "the one item that is not a download" and
+reported `TopicScopeRail` as **NOT MOUNTED**. That stopped being true when the topic
+policy shipped earlier today, and preflight was telling an operator the rail was off
+while it was blocking their traffic. Replaced with a live report of what is armed. The
+footer's hardcoded "Stage 1 — 22 rails" was stale for the same reason; it is now counted
+from `load_tenets()` rather than written down.
+
+### Files
+
+| File | Change |
+|---|---|
+| `afni_rai/media.py` | new — bands, thresholds, `moderate_image`, `moderate_video`, `blur` |
+| `afni_rai/gateway/media_api.py` | new — `GET /v1/media`, `POST /v1/media/image`, `/video` |
+| `afni_rai/gateway/app.py` | router mounted unconditionally, even with `nudenet` absent |
+| `afni_rai/cli.py` | `image` subcommand, `--video`, `--stride`, `--blur` |
+| `afni_rai/preflight.py` | media packages added; the stale topic asset and rail count fixed |
+| `afni_rai/tenets/accountability/thresholds.py` | three media keys in `GLOBAL_DEFAULTS` |
+| `web/views/media.js` | new — picker, verdict, drawn regions, blurred-first preview |
+| `web/api.js`, `app.js`, `index.html`, `styles.css` | client, route, nav, CSS |
+| `tests/test_media.py` | new — 50 tests |
+
+**1102 tests pass.**

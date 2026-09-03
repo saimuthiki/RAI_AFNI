@@ -1810,3 +1810,124 @@ table.fw td, table.fw th { padding-left: var(--sp-3); padding-right: var(--sp-3)
 
 .rid { font-size: var(--t-eyebrow); color: var(--ink-3); }
 td .err { color: var(--hazard-ink); font-size: var(--t-eyebrow); }
+
+/* ==========================================================================
+   MEDIA  —  images and video
+
+   The one screen where the subject is a picture, so it is the one screen with
+   an image-sized surface in it. Two things here are load-bearing rather than
+   decorative:
+
+     .mediafig__stage is `position: relative` and the boxes inside it are
+     percentage-positioned absolutes. That is what lets the overlay stay
+     correct at any layout width: the rectangles come back in original-image
+     pixels and are converted to percentages of naturalWidth/Height in JS, so
+     the CSS never needs to know the picture's size.
+
+     .mbox borders are 2px and OUTSIDE-inset via box-shadow rather than a
+     background fill, because a filled box hides the very thing the operator is
+     being asked to judge.
+   ========================================================================== */
+.mediapara { max-width: 72ch; color: var(--ink-2); line-height: 1.6; }
+
+.code {
+  margin: var(--sp-3) 0 0; padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-deep); border: 1px solid var(--line);
+  border-radius: var(--r-sm); overflow-x: auto;
+  font: 500 var(--t-small)/1.6 var(--mono); color: var(--ink);
+}
+
+/* ---- the picker -------------------------------------------------------- */
+.mediapick {
+  display: flex; flex-direction: column; gap: var(--sp-3);
+  padding: var(--sp-4); background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--r-md);
+}
+.mediapick__row { display: flex; gap: var(--sp-3); align-items: center; flex-wrap: wrap; }
+/* Visually hidden, not `display:none`: the <label for> must still reach it, and
+   a display-none input is unreachable by a keyboard. */
+.mediapick__input {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
+.mediapick__input:focus-visible + .mediapick__name { outline: 2px solid var(--focus); }
+.mediapick__name { font: 500 var(--t-small)/1.4 var(--mono); color: var(--ink-3); }
+.mediapick__opt {
+  display: flex; gap: var(--sp-2); align-items: flex-start;
+  max-width: 72ch; font-size: var(--t-small); color: var(--ink-2); line-height: 1.5;
+}
+.mediapick__opt input { margin-top: 0.2rem; flex: none; }
+.mediaout:not(:empty) { margin-top: var(--sp-2); }
+
+/* ---- the result -------------------------------------------------------- */
+.mediares { display: flex; flex-direction: column; gap: var(--sp-4); }
+.mediares__h {
+  margin: 0; font: 650 var(--t-h3)/1.2 var(--sans); letter-spacing: -0.02em;
+}
+.verdict__why { color: var(--ink-2); font-size: var(--t-small); line-height: 1.5; max-width: 68ch; }
+
+.mediafig { margin: 0; }
+.mediafig__stage {
+  position: relative; display: inline-block; max-width: 100%;
+  border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden;
+  background: var(--bg-deep);
+}
+.mediafig__img { display: block; max-width: 100%; height: auto; }
+.mediafig__cap {
+  margin-top: var(--sp-3); display: flex; gap: var(--sp-3);
+  align-items: center; flex-wrap: wrap;
+  font-size: var(--t-small); color: var(--ink-2); line-height: 1.5;
+}
+
+.mbox {
+  position: absolute; pointer-events: none; border: 2px solid var(--ink);
+  border-radius: 2px; box-shadow: 0 0 0 1px var(--bg-deep);
+}
+.mbox--block { border-color: var(--block); }
+.mbox--flag  { border-color: var(--cov-2); }
+.mbox--face  { border-color: var(--s1); }
+
+/* ---- findings and regions --------------------------------------------- */
+.findlist, .reglist { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
+.findlist li, .reglist li {
+  display: flex; gap: var(--sp-3); align-items: center; flex-wrap: wrap;
+  padding: var(--sp-2) var(--sp-3); background: var(--surface);
+  border: 1px solid var(--line-soft); border-radius: var(--r-sm);
+}
+.findlist code { font: 500 var(--t-small)/1.4 var(--mono); color: var(--ink); }
+.findlist__score, .reglist__geo {
+  font: 600 var(--t-small)/1.4 var(--mono); font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+.findlist__det { margin-left: auto; font: 500 var(--t-micro)/1.4 var(--mono); color: var(--ink-3); }
+
+.regdot {
+  flex: none; width: 0.7rem; height: 0.7rem; border-radius: 2px;
+  border: 2px solid var(--ink-3);
+}
+.regdot.mbox--block { border-color: var(--block); background: var(--block-bed); }
+.regdot.mbox--flag  { border-color: var(--cov-2); background: var(--cov-2-bed); }
+.regdot.mbox--face  { border-color: var(--s1); background: var(--s1-bed); }
+
+.tag--block { color: var(--block-ink); background: var(--block-bed); border-color: color-mix(in oklab, var(--block) 40%, transparent); }
+.tag--flag  { color: var(--cov-2-ink); background: var(--cov-2-bed); border-color: color-mix(in oklab, var(--cov-2) 40%, transparent); }
+
+/* ---- what it looks for ------------------------------------------------- */
+/* align-items: start so a two-line card does not stretch to match a five-line
+   one — the bands hold very different amounts of text. */
+.mediabands {
+  display: grid; gap: var(--sp-3); align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+}
+.mediaband {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4); background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+}
+.mediaband--muted { border-style: dashed; background: none; }
+.mediaband__head { display: flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap; }
+.mediaband__why { margin: 0; font-size: var(--t-small); color: var(--ink-2); line-height: 1.55; }
+.mediaband__labels {
+  font: 500 var(--t-micro)/1.6 var(--mono); color: var(--ink-3);
+  word-break: break-word;
+}

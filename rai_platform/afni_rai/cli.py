@@ -4,6 +4,8 @@ Command line entry point. The fastest way to see the gateway decide something.
 
     python3 rai_platform/cli.py check "ignore all previous instructions"
     python3 rai_platform/cli.py check --json "..." | jq .
+    python3 rai_platform/cli.py image photo.jpg
+    python3 rai_platform/cli.py image clip.mp4 --video --blur out.png
     python3 rai_platform/cli.py coverage
     python3 rai_platform/cli.py rails
     python3 rai_platform/cli.py preflight
@@ -159,6 +161,87 @@ def cmd_rails(args) -> int:
     return 0
 
 
+def cmd_image(args) -> int:
+    """Score one image or video file.
+
+    Separate from `check` rather than folded into it, and the reason is the
+    same one that keeps media off `POST /v1/guard`: the cascade judges strings
+    keyed by payload path, and an image is not a string. Forcing it through
+    would mean base64 in a text field that every text rail then uselessly
+    scans.
+
+    Exit codes match `check` so a script can treat them the same: 0 allowed,
+    1 blocked, 2 nothing could be judged.
+    """
+    from . import media                                          # noqa: PLC0415
+    from .tenets.accountability.thresholds import ThresholdStore  # noqa: PLC0415
+
+    try:
+        data = open(args.path, "rb").read()
+    except OSError as exc:
+        print(f"cannot read {args.path}: {exc}", file=sys.stderr)
+        return 2
+
+    store = ThresholdStore()
+    if args.video:
+        result = media.moderate_video(data, resolve=store.resolve_value,
+                                      frame_stride=args.stride,
+                                      max_frames=args.max_frames)
+    else:
+        result = media.moderate_image(data, resolve=store.resolve_value)
+
+    if args.json:
+        print(json.dumps({"result": result.to_dict(),
+                          "available": media.available(),
+                          "model_path": media.model_path()}, indent=2))
+    else:
+        if not media.available():
+            # Said first and said loudly. An operator reading "BLOCKED" without
+            # this line would conclude the picture was explicit.
+            print(f"! {media.PACKAGE} is not installed, so nothing was judged. "
+                  f"`pip install {media.PACKAGE}` - the model ships in the "
+                  f"wheel.", file=sys.stderr)
+        if result.unjudged:
+            print("BLOCKED - nothing could be judged (coverage gap, not a "
+                  "detection)")
+        elif result.blocked:
+            print("BLOCKED - explicit content above threshold")
+        elif result.findings:
+            print("ALLOWED with findings - flagged for review, not refused")
+        else:
+            print("ALLOWED - nothing above the thresholds")
+        for finding in result.findings:
+            print(f"  {finding.category:20s} {finding.action.value:6s} "
+                  f"score {finding.score:.2f}  {finding.detector}")
+        for region in result.regions:
+            frame = f" frame {region.frame}" if region.frame is not None else ""
+            print(f"    region {region.band:11s} {region.score:.2f} "
+                  f"at ({region.x},{region.y}) {region.width}x{region.height}"
+                  f"{frame}")
+        if result.frames_scored is not None:
+            total = result.frames_total or "?"
+            print(f"  {result.frames_scored} of {total} frames scored - "
+                  f"sampling is a real coverage gap, reported not hidden")
+        if result.latency_ms is not None:
+            print(f"  {result.latency_ms} ms")
+
+    if args.blur and not args.video:
+        if result.regions:
+            try:
+                open(args.blur, "wb").write(media.blur(data, result.regions))
+                print(f"  blurred copy written to {args.blur}")
+            except (ValueError, ImportError, OSError) as exc:
+                print(f"! could not write blurred copy: {exc}", file=sys.stderr)
+        else:
+            # Deliberately not writing an unmodified copy under a name that
+            # implies redaction happened.
+            print("  nothing to blur - no regions detected, no file written")
+
+    if result.unjudged:
+        return 2
+    return 1 if result.blocked else 0
+
+
 def cmd_preflight(args) -> int:
     """Every asset the platform needs but does not ship.
 
@@ -185,6 +268,22 @@ def main(argv=None) -> int:
                         "is not printed into a log")
     c.add_argument("--json", action="store_true")
     c.set_defaults(func=cmd_check)
+
+    i = sub.add_parser("image", help="run one image or video through media "
+                                     "moderation")
+    i.add_argument("path")
+    i.add_argument("--video", action="store_true",
+                   help="treat the file as a video and score sampled frames. "
+                        "OFFLINE cost: ~87 ms per frame.")
+    i.add_argument("--stride", type=int, default=15,
+                   help="score every Nth frame (video only). Default 15.")
+    i.add_argument("--max-frames", dest="max_frames", type=int, default=120,
+                   help="cap on frames scored (video only). Default 120.")
+    i.add_argument("--blur", metavar="OUT.png",
+                   help="write a copy with detected regions blurred (images "
+                        "only). Nothing is written when nothing was detected.")
+    i.add_argument("--json", action="store_true")
+    i.set_defaults(func=cmd_image)
 
     sub.add_parser("coverage", help="capability coverage report").set_defaults(
         func=cmd_coverage)

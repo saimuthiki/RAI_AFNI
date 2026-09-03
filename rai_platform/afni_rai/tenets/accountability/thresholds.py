@@ -65,6 +65,22 @@ GLOBAL_DEFAULTS: dict[str, float] = {
     # Safe Zone internal/guardrails/thresholds.go:14,23 - the two envelope bounds
     "x.afni.confidence.allow": 0.30,
     "x.afni.confidence.block": 0.85,
+    # --- Media moderation -------------------------------------------------
+    # Infosys NudeNet.py:47 uses `score > 0.5` on the image path; the covered /
+    # suggestive band sits higher because it only flags, and a noisy flag an
+    # operator learns to ignore is worse than no flag.
+    #
+    # These three MUST be here rather than left to the last-resort fallback.
+    # Without them `resolve("safety.sexual.image_explicit")` returns 0.85 -
+    # nothing in this dict prefix-matches it - which would silently raise the
+    # explicit-nudity threshold from the ported 0.50 to 0.85 and quietly halve
+    # the detector's sensitivity. That is exactly the write-only-config class of
+    # bug this module was built to prevent, arriving from the other direction.
+    "safety.sexual.image_explicit": 0.50,
+    "safety.sexual.image_suggestive": 0.60,
+    # Faces are biometric PII. Flag, never block: a photograph of a person is
+    # not a policy violation, it is something an operator may need to know about.
+    "privacy.pii.face": 0.50,
 }
 
 

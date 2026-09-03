@@ -87,6 +87,7 @@ from ..tenets.accountability.thresholds import ThresholdStore
 from . import providers
 from .corpus_api import corpus_router
 from .topics_api import topics_router
+from .media_api import media_router
 from .models import (
     ChatRequest, ChatResponse, CoverageResponse, Error, GuardRequest,
     GuardResponse, HealthResponse, RailsResponse,
@@ -1040,6 +1041,13 @@ def create_app(**kwargs: Any) -> FastAPI:
     # The topic policy: the only WRITE endpoint here, kept in its own module
     # so the authorization note sits next to the handler that needs it.
     app.include_router(topics_router(gateway))
+    # Media moderation: its own module because it is the one check whose input
+    # is not a string, so it cannot be a `Rail` and does not ride on
+    # `POST /v1/guard`. Mounted unconditionally even when `nudenet` is absent -
+    # the routes then report `available: false` and return `unjudged`, which
+    # blocks. A route that vanished when a dependency was missing would look
+    # like the feature was never built.
+    app.include_router(media_router(gateway))
 
     @app.middleware("http")
     async def request_id(request: Request, call_next: Callable) -> Response:

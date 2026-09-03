@@ -134,6 +134,21 @@ def collect() -> list[Asset]:
         ("fastapi", "the gateway", "all", "~5 MB", "PyPI - reachable"),
         ("uvicorn", "the gateway", "all", "~1 MB", "PyPI - reachable"),
         ("httpx", "the Stage-3 judge chain", "all", "~1 MB", "PyPI - reachable"),
+        # Media moderation. `nudenet` is the unusual one in this list: the 12 MB
+        # 320n.onnx model ships INSIDE the wheel, so `pip install nudenet` is
+        # both the library and the model download and nothing is fetched at
+        # runtime. That is the only reason media moderation works air-gapped
+        # while the Infosys Keras alternative does not.
+        ("nudenet", "POST /v1/media/image, /v1/media/video",
+         "Profanity / Content Safety", "~11 MB wheel (model included)",
+         "PyPI - reachable. Ships nudenet/320n.onnx inside the wheel."),
+        ("onnxruntime", "POST /v1/media/* (runs 320n.onnx)",
+         "Profanity / Content Safety", "~60 MB", "PyPI - reachable"),
+        ("cv2", "POST /v1/media/* (decode, blur, video frames)",
+         "Profanity / Content Safety", "~40 MB",
+         "PyPI as `opencv-python-headless` - reachable. Headless, not the "
+         "full `opencv-python`: a gateway has no display and the GUI build "
+         "pulls in X11."),
     ]
     for module, needed_by, tenet, size, where in packages:
         present = importlib.util.find_spec(module) is not None
@@ -184,19 +199,41 @@ def collect() -> list[Asset]:
             detail="set" if os.environ.get(var, "").strip() else "empty",
             notes=[note]))
 
-    # ---- the one item that is not a download -------------------------------
+    # ---- the topic list ----------------------------------------------------
+    # This WAS the "one item that is not a download": an outstanding decision,
+    # reported as making TopicScopeRail unmounted. It no longer is, and leaving
+    # the old text here would have preflight telling an operator the rail was
+    # off while it was blocking their traffic. Six topics are compiled in and
+    # the rest are an operator choice, so what preflight reports now is which
+    # optional ones this deployment has selected - never "missing".
+    from . import topics as _topics                             # noqa: PLC0415
+    _pol = _topics.load_policy()
+    _flagging, _blocking = _topics.patterns_for(_pol)
     assets.append(Asset(
         kind="decision", name="allowed / banned topic list",
-        needed_by="TopicScopeRail, content_safety.zeroshot_topics",
-        tenet="Explainability & Transparency", where_from="AFNI - not a download",
-        destination="passed to the rail at construction, per application",
-        present=False,
-        detail="empty, so TopicScopeRail is built and tested but NOT MOUNTED",
-        notes=["This is the 'Ban-topics / on-topic scope' gap. Every reviewed "
-               "tool treats on-topic as deployment policy (NeMo config.yml, "
-               "DeepTeam TopicalGuard(allowed_topics=[...])), so no download "
-               "closes it - it needs the list of topics each AFNI application "
-               "is allowed to discuss."]))
+        needed_by="TopicScopeRail (mounted by load_tenets)",
+        tenet="Explainability & Transparency",
+        where_from="AFNI - not a download. Set it in the console's Topics "
+                   "screen, or PUT /v1/topics.",
+        destination=str(_topics.policy_path()),
+        # Present because the rail is armed either way: the six ALWAYS topics
+        # are compiled into topics.py and cannot be switched off, so there is
+        # no state in which this is an outstanding blocker.
+        present=True,
+        detail=(f"{len(_topics.ALWAYS)} always-on topics compiled in; "
+                f"{len(_pol.enabled)} of {len(_topics.OPTIONAL)} optional "
+                f"topics enabled ({len(_pol.blocking)} promoted to blocking); "
+                f"{len(_blocking)} blocking and {len(_flagging)} flagging "
+                f"patterns armed"),
+        notes=["The six always-on topics need no configuration and cannot be "
+               "disabled from the UI or the policy file - only by a code "
+               "change to topics.py.",
+               "The optional 24 ship OFF, because on-topic scope genuinely "
+               "differs per application: a benefits helpdesk must discuss "
+               "medical leave and a billing bot must not.",
+               "An enabled topic FLAGS by default. Promoting one to BLOCK is a "
+               "separate per-topic control, because a keyword hit is evidence "
+               "rather than a verdict."]))
     return assets
 
 
@@ -242,10 +279,38 @@ def render() -> str:
     lines.append(f"{len(missing)} item(s) outstanding, "
                  f"{len(assets) - len(missing)} present.")
     lines.append("")
-    lines.append("Nothing here stops the gateway running. Stage 1 - 22 rails "
-                 "across all seven tenets - is")
+    # The Stage-1 count is COUNTED, not written down. It was hardcoded at 22 and
+    # went stale the moment the topic rail was mounted; a number in prose that
+    # nothing checks is a number that will be wrong.
+    stage_1 = _stage_1_count()
+    lines.append(f"Nothing here stops the gateway running. Stage 1 - {stage_1} "
+                 "rails across all seven tenets - is")
     lines.append("pure standard library and needs none of it. Every item above "
                  "is a rail that reports")
-    lines.append("`unjudged` until it arrives, which fails closed on "
-                 "client-facing traffic.")
+    lines.append("`unjudged` until it arrives, and unjudged fails closed - "
+                 "unconditionally, for every")
+    lines.append("caller, with no request field and no switch that relaxes it.")
+    lines.append("")
+    lines.append("Media moderation is the exception to 'nothing stops it "
+                 "running': images and video are")
+    lines.append("judged only if `nudenet` is installed, and every image comes "
+                 "back unjudged - so blocked -")
+    lines.append("until it is. `GET /v1/media` reports which.")
     return "\n".join(lines)
+
+
+def _stage_1_count() -> int:
+    """How many rails run for free on every request.
+
+    Imported lazily and defensively: `preflight` must still render on an install
+    where a tenet cannot import, because reporting what is missing is the whole
+    point of this command. A failure here returns 0 rather than raising, and 0
+    reads as obviously wrong rather than as a plausible lie.
+    """
+    try:
+        from .cli import load_tenets                            # noqa: PLC0415
+        from .cascade.rail import Stage                         # noqa: PLC0415
+        rails, _attrs, _problems = load_tenets()
+        return sum(1 for r in rails if r.stage is Stage.STAGE_1)
+    except Exception:  # noqa: BLE001
+        return 0
