@@ -22,7 +22,38 @@ git clone https://github.com/saimuthiki/RAI_AFNI.git
 cd RAI_AFNI
 ```
 
-### 2 · Everything from PyPI, in one command
+### 2 · A virtual environment — do not skip this one
+
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
+```
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+**This step is here because skipping it costs a real afternoon.** `nudenet` does
+not pin numpy, so a global `pip install` takes the newest one — which on a
+machine with other Python work pulls numpy out from under anything requiring
+`numpy<2`. Observed on 2026-09-03: a global install upgraded numpy 1.26.4 →
+2.5.2 and broke that machine's `pandas 2.1.4` and `streamlit 1.31.0`.
+
+Nothing in *this* platform needs `numpy<2` — it touches numpy only inside
+`media.py`, reads the corpus spreadsheet with `openpyxl` rather than pandas, and
+the fairness tenet is deliberately written to run on a box with no numpy and no
+pandas at all. Verified on numpy 2.4.6: nudenet detects, and spaCy 3.8.16 with
+thinc 8.3.13 loads `en_core_web_lg` and returns correct entities. **The risk is
+to your other projects, not to this one.**
+
+If you have already installed globally and want your other work back:
+
+```powershell
+python -m pip install "numpy<2" "pillow<11" "protobuf<5"
+```
+
+### 3 · Everything from PyPI, in one command
 
 ```powershell
 python -m pip install fastapi uvicorn httpx pytest
@@ -44,7 +75,7 @@ python3 -m spacy download en_core_web_lg
 `spacy download`, not a pinned URL. `nudenet` carries its own 12 MB model inside
 the wheel — no separate download.
 
-### 3 · The five Stage-2 model files (~3.8 GB, resumable)
+### 4 · The five Stage-2 model files (~3.8 GB, resumable)
 
 ```powershell
 python rai_platform\scripts\fetch_models.py --dest rai_platform\models
@@ -56,7 +87,7 @@ python3 rai_platform/scripts/fetch_models.py --dest rai_platform/models
 
 Add `--dry-run` to see the plan first. Re-running skips what is already complete.
 
-### 4 · Configuration
+### 5 · Configuration
 
 ```powershell
 copy .env.example .env
@@ -77,7 +108,7 @@ LOCAL_BASE_URL=
 AFNI_GOVERNANCE_DOMAIN=your-domain
 ```
 
-### 5 · Check it
+### 6 · Check it
 
 ```powershell
 python rai_platform\run_tests.py
@@ -92,7 +123,7 @@ python3 rai_platform/cli.py preflight
 `run_tests.py` must print `OK`. `preflight` lists anything still missing, where
 to get it, and the folder it goes in.
 
-### 6 · Start it
+### 7 · Start it
 
 ```powershell
 python rai_platform\serve.py
@@ -108,7 +139,7 @@ python3 rai_platform/serve.py
 | <http://127.0.0.1:8000/docs> | Swagger, with a ready example per tenet |
 | <http://127.0.0.1:8000/healthz> | which rails can run right now, and why not |
 
-### 7 · Try it
+### 8 · Try it
 
 ```powershell
 python rai_platform\cli.py check "my ssn is 123-45-6789"
@@ -130,7 +161,7 @@ python3 rai_platform/cli.py rails
 python3 rai_platform/cli.py coverage
 ```
 
-### 8 · Run part of the corpus
+### 9 · Run part of the corpus
 
 ```bash
 cd rai_platform
@@ -143,11 +174,12 @@ does the same thing with a picker.
 
 ### Minimum viable install
 
-Steps 2–3 are the long ones and neither is required. Stage 1 — 23 rails across
+Steps 3–4 are the long ones and neither is required. Stage 1 — 23 rails across
 all seven tenets — is pure Python standard library:
 
 ```bash
 git clone https://github.com/saimuthiki/RAI_AFNI.git && cd RAI_AFNI
+python3 -m venv .venv && source .venv/bin/activate
 python3 -m pip install fastapi uvicorn httpx
 python3 rai_platform/serve.py
 ```
@@ -463,6 +495,28 @@ application, is the list of topics that application may discuss and the ones it
 must refuse.
 
 ---
+
+### If pip says `Ignoring invalid distribution ~something`
+
+A folder named `~something` in `site-packages` is a **half-installed package**
+left behind by an interrupted install — pip renames a package to `~name` while
+replacing it and does not clean up if it dies mid-write. It is not caused by
+whatever command printed the warning.
+
+It matters when the mangled name is something you depend on. `~vicorn` means
+**uvicorn** is broken, and uvicorn is what `serve.py` runs on:
+
+```powershell
+python -c "import uvicorn; print(uvicorn.__version__)"
+Remove-Item -Recurse -Force "<site-packages>\~vicorn*"
+python -m pip install --force-reinstall uvicorn
+```
+
+```bash
+python3 -c "import uvicorn; print(uvicorn.__version__)"
+rm -rf "$(python3 -c 'import site; print(site.getsitepackages()[0])')"/~*
+python3 -m pip install --force-reinstall uvicorn
+```
 
 ### Troubleshooting
 

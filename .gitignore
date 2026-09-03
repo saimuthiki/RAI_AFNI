@@ -1,6 +1,16 @@
 __pycache__/
 *.pyc
 
+# Virtual environments. docs/setup.md now tells you to create `.venv` INSIDE the
+# clone, so this rule is load-bearing rather than housekeeping: without it, a
+# `git add -A` after following the setup guide stages a few hundred MB of
+# site-packages. `.venv` is the name the guide uses; the others are here because
+# somebody will use their own.
+.venv/
+venv/
+env/
+.python-version
+
 # Local, machine-specific Claude Code settings (the shared wiring in
 # .claude/settings.json, .claude/helpers/ and .claude/skills/ IS committed).
 # Note: the reference repos' own .claude/ folders under references/ ARE tracked

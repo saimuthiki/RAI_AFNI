@@ -2282,3 +2282,58 @@ measurement, and verifying it needs a labelled set AFNI supplies. DICOM PII scan
 still genuinely unanswered.
 
 **1191 tests pass.**
+
+---
+
+## 2026-09-03 — The setup guide's global `pip install` broke somebody's other work
+
+AFNI ran the install block from `docs/setup.md` and asked whether the output was expected.
+Most of it was. Two things were not, and the first one is the guide's fault.
+
+### numpy 1.26.4 → 2.5.2, globally
+
+`nudenet` does not pin numpy, so a global `pip install nudenet` takes the newest one. On
+AFNI's machine that pulled numpy out from under **`pandas 2.1.4`** and
+**`streamlit 1.31.0`**, both of which require `numpy<2`. Neither is anything to do with
+this platform; they are that machine's other Python work.
+
+**This platform is unaffected, and that was checked rather than assumed:**
+
+| | on numpy 2.4.6 |
+|---|---|
+| `nudenet` detect | works |
+| `spacy 3.8.16` + `thinc 8.3.13` | import, load `en_core_web_lg`, correct entities |
+| `presidio_analyzer` | imports |
+
+It touches numpy only inside `media.py`, reads the corpus spreadsheet with `openpyxl`
+rather than pandas, and `tenets/fairness/__init__.py:1161` says outright that it is
+exercised in CI "on a box with no numpy, no pandas and no fairlearn". So the risk was
+always to the *rest of the machine*, never to the gateway.
+
+**The guide now has a venv as step 2**, before any install, with the observed breakage
+written into it as the reason. A guide that says "do this in a venv" gets skipped; one
+that says "skipping this upgraded numpy and broke pandas and streamlit on 2026-09-03"
+does not.
+
+And a second-order consequence caught immediately: the guide tells you to create `.venv`
+**inside the clone**, and `.gitignore` did not mention it. A `git add -A` after following
+the setup guide would have staged a few hundred megabytes of site-packages. Added
+`.venv/`, `venv/`, `env/`, `.python-version`.
+
+### `Ignoring invalid distribution ~vicorn`
+
+Pre-existing, not caused by the install, and worth its own section because of *which*
+package it is. A `~name` folder in `site-packages` is a **half-installed package**: pip
+renames a package to `~name` while replacing it and leaves it behind if it dies mid-write.
+
+`~vicorn` means **uvicorn is broken**, and uvicorn is what `serve.py` runs on — so the one
+warning in that output people would scroll past is the one that stops the gateway
+starting. `docs/setup.md` now has a section naming the pattern, the one-line check
+(`python -c "import uvicorn; print(uvicorn.__version__)"`) and the cleanup.
+
+### The conflicts that were NOT this command's doing
+
+`datasets 4.4.1 requires requests>=2.32.2`, `langchain-community 0.3.27 requires
+langchain>=0.3.26` — both already true before the install. pip reports every conflict it
+can see in the environment, not only the ones the current command caused, which reads as
+though one command broke four things.
