@@ -102,6 +102,8 @@ import threading
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Protocol, Sequence, runtime_checkable
 
+from .. import keyshape
+
 LOGGER = logging.getLogger("afni_rai.gateway.providers")
 
 # Environment variable names, in one place so the docs above and the code below
@@ -894,6 +896,18 @@ def from_env(env: dict[str, str] | None = None,
         # A repeated provider would mean the same keys tried twice, which is a
         # config mistake rather than extra resilience.
         raise ValueError(f"{ENV_PROVIDER}={raw!r} repeats a provider")
+
+    # A key of the WRONG SHAPE is indistinguishable here from a right one: the
+    # link builds, the chain reports, and the failure surfaces three layers away
+    # as `unjudged` on every Stage-3 rail. One line at boot, and nothing is
+    # skipped for it - the vendor's 401 stays the authority. See keyshape.py.
+    for var, shape in keyshape.report(env).items():
+        if shape.suspect:
+            LOGGER.warning(
+                "%s is set but does not look right: %s. %s This key is still "
+                "TRIED - only the vendor can say whether it works - but if every "
+                "judge rail reports unjudged, start here.",
+                var, shape.detail, shape.remedy)
 
     timeout = _timeout_from_env(env=env)
     links: list[tuple[JudgeProvider, str, int]] = []

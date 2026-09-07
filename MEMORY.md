@@ -2888,3 +2888,68 @@ opposite. `AFNI_TARGET_API_KEY` was present in `.env` but empty.
 **1273 tests pass.** Verified against a real 401 endpoint: both warnings fire, the chain
 stays `gemini[0]`, and the browser shows `local preferred, refused the key` with no page
 errors. All four provider tests fail without the fix.
+
+---
+
+### 2026-09-07 — The .env, and the eleven variables the template never mentioned
+**Type:** Bug Fix + Enhancement
+**Ask:** "Could you please give me the updated environmental file based on the local model code
+I gave you, and anything else I missed" — with a working OpenAI-SDK snippet
+(`base_url=http://10.10.10.151:8506/v1`, `api_key="test-key-123"`,
+`model="qwen3-vl-8b-instruct"`) — plus "check the format of the keys I had already placed".
+The OpenAI and Gemini keys in the pasted file are rotated and were to be ignored.
+
+**Key format, checked:**
+- The two `sk-proj-…` OpenAI keys are the correct shape. The `", sk-proj-…"` separator with a
+  space is fine — `_keys` strips each part.
+- The Gemini value was `AQ.Ab8RN6…`. **Wrong kind of credential.** An AI Studio key is
+  `AIza` + 35 = 39 chars. `AQ.…` is an OAuth access token: a real Google credential, but this
+  platform sends the key as `?key=` on generativelanguage.googleapis.com, which takes an API
+  key only, and a token expires within the hour. Vertex AI is the OAuth path and there is no
+  Vertex adapter here. The symptom would have been every Stage-3 judge rail reporting
+  `unjudged` — three layers from the cause.
+- No key ever reached a commit: `git log -S` on both pasted shapes is empty, and the committed
+  `.env.example` has every credential line blank.
+
+**What was done:**
+- `afni_rai/keyshape.py` — shape checks for OpenAI, Google AI Studio and Azure Content Safety.
+  A WARNING at boot and in preflight (`[WARN]`, `SET BUT SUSPECT`), never a refusal: only the
+  vendor can say whether a key works. **No part of any value is ever in the output** — length
+  and a verdict only; a test asserts no 6-character run of the value survives into any message.
+  The Azure/LiteLLM/vLLM false positive is handled by dropping the expectation when
+  `OPENAI_BASE_URL` points away from api.openai.com.
+- A suspect credential does **not** change preflight's outstanding count. It is configured;
+  reporting it missing would be a second wrong answer on the first.
+- **The audit that answers "anything I missed":** `tests/test_env_manifest.py` walks the AST of
+  every module for `os.environ.get`, `env.get`, `os.environ[…]`, `ENV_* = "NAME"`, and any call
+  handed the environment — that last rule is what catches `_keys(env, "OPENAI_API_KEYS", …)`,
+  which a `.get`-only rule missed. **Eleven variables were read by the code and absent from
+  `.env.example`:**
+
+| Variable | Consequence of the omission |
+|---|---|
+| `LOCAL_API_KEYS` / `LOCAL_API_KEY` | The judge chain's key for a local endpoint. AFNI's endpoint needs one; the only way to find the variable was to read `providers.py`. |
+| `AZURE_CONTENT_SAFETY_ENDPOINT` / `_KEY` | The *only* configuration for `security.prompt_shields` — the rail whose console line reads `configured() is False`. Reported as unconfigured with no documented way to configure it. |
+| `AFNI_CORPUS_PATH`, `AFNI_BENIGN_CORPUS`, `AFNI_CORPUS_MAX_SAMPLE`, `AFNI_CORPUS_ALLOW_CLOUD` | Including the switch that governs whether harmful corpus prompts may be sent to a cloud judge. |
+| `AFNI_LOG_LEVEL` | The gateway's own log level. |
+| `OPENAI_API_KEY`, `GOOGLE_API_KEY` | Accepted single-key aliases, undocumented. |
+
+  All eleven are now in `.env.example`, and the test fails if the drift returns.
+- Two more checks on the committed template: no credential-named variable may carry a value,
+  and no active line may carry a trailing `# comment` — `load_dotenv` takes everything after
+  `=` as the value, so `AFNI_PORT=8000  # the port` would set the port to that whole string.
+
+### Files
+
+| File | Change |
+|---|---|
+| `afni_rai/keyshape.py` | new — vendor key shapes, values never echoed |
+| `afni_rai/gateway/providers.py` | one WARNING per suspect key at chain construction |
+| `afni_rai/preflight.py` | `Asset.suspect`, `[WARN]` rendering, summary line |
+| `.env.example` | the eleven missing variables, each with why it exists |
+| `tests/test_keyshape.py` | new — 27 tests |
+| `tests/test_env_manifest.py` | new — the AST audit, so the template cannot drift again |
+
+**1307 tests pass.** The delivered `.env` was validated through the real `load_dotenv`:
+39 settings, no trailing-comment traps, every name documented, all seven governance roles
+resolving to the one mailbox.

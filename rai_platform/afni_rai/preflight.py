@@ -21,6 +21,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 
+from . import keyshape
 from .models import folder_name, missing_files, model_dir
 
 
@@ -36,6 +37,12 @@ class Asset:
     detail: str = ""
     approx_size: str = ""
     notes: list[str] = field(default_factory=list)
+    #: Present, and something about it looks wrong anyway - today only a
+    #: credential whose shape does not match its vendor's published format.
+    #: Deliberately NOT folded into `present`: the thing IS configured, and
+    #: reporting it as missing would be a second wrong answer on top of the
+    #: first. It renders as [WARN] and does not change the outstanding count.
+    suspect: bool = False
 
 
 # --------------------------------------------------------------------------- #
@@ -343,14 +350,30 @@ def collect() -> list[Asset]:
          "Azure AI Content Safety. Optional - Stage 1 and 2 cover injection "
          "without it."),
     ]
+    # A SET credential is also reported on its SHAPE. "set" alone was the least
+    # useful true thing preflight could say about a key: the failure mode of a
+    # wrong-format key is every Stage-3 rail reporting `unjudged`, three layers
+    # from the cause. No part of any value is included - see keyshape.py.
+    shapes = keyshape.report(dict(os.environ))
     for var, needed_by, tenet, note in creds:
+        configured = bool(os.environ.get(var, "").strip())
+        shape = shapes.get(var)
+        detail = "set" if configured else "empty"
+        notes = [note]
+        if shape is not None:
+            detail = f"set - {shape.detail}"
+            if shape.suspect:
+                detail = f"SET BUT SUSPECT - {shape.detail}"
+                notes.append(shape.remedy)
+                notes.append("Still tried at runtime: only the vendor can say "
+                             "whether a key works, so this is a warning and "
+                             "never a refusal.")
         assets.append(Asset(
             kind="credential", name=var, needed_by=needed_by, tenet=tenet,
             where_from="your own vendor account",
             destination=".env (gitignored) - never a committed file",
-            present=bool(os.environ.get(var, "").strip()),
-            detail="set" if os.environ.get(var, "").strip() else "empty",
-            notes=[note]))
+            present=configured, detail=detail, notes=notes,
+            suspect=bool(shape is not None and shape.suspect)))
 
     # ---- the topic list ----------------------------------------------------
     # This WAS the "one item that is not a download": an outstanding decision,
@@ -419,7 +442,7 @@ def render() -> str:
         lines.append(f"{title}  ({have}/{len(rows)} present)")
         lines.append("-" * 74)
         for a in rows:
-            mark = "OK  " if a.present else "MISS"
+            mark = "MISS" if not a.present else ("WARN" if a.suspect else "OK  ")
             lines.append(f"  [{mark}] {a.name}")
             lines.append(f"         needed by : {a.needed_by}  ({a.tenet})")
             lines.append(f"         status    : {a.detail}")
@@ -436,6 +459,18 @@ def render() -> str:
     missing = [a for a in assets if not a.present]
     lines.append(f"{len(missing)} item(s) outstanding, "
                  f"{len(assets) - len(missing)} present.")
+    suspect = [a for a in assets if a.suspect]
+    if suspect:
+        # Said in the summary as well as inline, because the summary is the part
+        # people read. A wrong-shaped key is not an outstanding item - it is a
+        # present item that will fail at call time, which is worse to miss.
+        lines.append("")
+        lines.append(f"{len(suspect)} item(s) are SET but do not match the "
+                     f"format their vendor documents: "
+                     f"{', '.join(a.name for a in suspect)}. Each is still "
+                     f"tried - only the vendor can say whether a key works - "
+                     f"but this is where to look first if every Stage-3 rail "
+                     f"reports unjudged.")
     lines.append("")
     # The Stage-1 count is COUNTED, not written down. It was hardcoded at 22 and
     # went stale the moment the topic rail was mounted; a number in prose that
