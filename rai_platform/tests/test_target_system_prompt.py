@@ -146,7 +146,13 @@ class TheGuardEventDoesNotCarryIt(unittest.TestCase):
             target.ENV_BASE_URL: "http://endpoint.invalid/v1",
             target.ENV_MODEL: "m",
             target.ENV_SYSTEM_PROMPT: "SENTINEL-FRAME-DO-NOT-JUDGE-ME"})
+        # `severity` escalation so the INPUT GUARD does not block before the
+        # target is reached. This test is about where the system prompt goes, not
+        # about how deep the cascade runs: under the shipped default a clean
+        # Stage 1 escalates into Stage-2 rails that cannot judge on this host,
+        # which blocks, and the target would never be called.
         app = create_app(
+            env={"AFNI_CASCADE_ESCALATION": "severity"},
             target=target.TargetClient(
                 config,
                 transport=httpx.MockTransport(recorder.handle_request)))

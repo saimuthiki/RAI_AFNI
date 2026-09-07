@@ -602,10 +602,34 @@ class TestInTheCascade(unittest.TestCase):
                          "a stage-1 block must not leave an unjudged path")
         self.assertTrue(out.trace[-1].short_circuited)
 
-    def test_clean_text_fails_closed_only_if_a_later_stage_actually_ran(self):
-        # Clean stage 1 does not escalate, so the absent stage-2 model is never
-        # consulted and the request is allowed.
+    def test_clean_text_now_reaches_stage_2_and_fails_closed_without_it(self):
+        """REVERSED, AND THE OLD COMMENT WAS THE BUG.
+
+        It read: "Clean stage 1 does not escalate, so the absent stage-2 model
+        is never consulted and the request is allowed." That sentence describes
+        an accidental safety valve, not a design: it meant a host with no
+        Stage-2 weights ALLOWED everything that the regex tier happened to miss,
+        while the console said "expect blocks until the weights are installed".
+
+        With Stage 2 now running on every undecided request the honest behaviour
+        appears: the classifier cannot judge, reports `unjudged`, and the
+        request BLOCKS. That is loud and fixable. The previous behaviour was
+        quiet and was not.
+        """
         out = Cascade(cs.RAILS).evaluate(
+            event("Please confirm the reconciliation figures."))
+        if cs.TOXICITY_MODEL_RAIL.available():  # pragma: no cover
+            self.assertIs(out.verdict.decision, Decision.ALLOW)
+            self.assertEqual(out.verdict.unjudged, [])
+            return
+        self.assertTrue(out.verdict.unjudged,
+                        "Stage 2 cannot judge on this host, so a clean Stage 1 "
+                        "must escalate into it and report that it could not look")
+        self.assertIs(out.verdict.decision, Decision.BLOCK)
+
+    def test_the_old_behaviour_is_still_reachable_by_setting(self):
+        """For a deployment reproducing pre-change numbers, and nothing else."""
+        out = Cascade(cs.RAILS, escalation="severity").evaluate(
             event("Please confirm the reconciliation figures."))
         self.assertIs(out.verdict.decision, Decision.ALLOW)
         self.assertEqual(out.verdict.unjudged, [])

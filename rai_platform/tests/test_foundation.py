@@ -149,12 +149,31 @@ class TestCascade(unittest.TestCase):
         self.assertEqual(s3.calls, 0, "stage 3 ran despite a stage 1 block")
         self.assertTrue(out.trace[-1].short_circuited)
 
-    def test_clean_stage_1_does_not_escalate(self):
+    def test_a_clean_stage_1_now_escalates_to_the_local_models(self):
+        """REVERSED DELIBERATELY. This test used to assert the opposite, with
+        the comment "escalated with nothing to escalate about" - and that
+        sentence was the bug. A clean Stage 1 is not a verdict, it is the
+        ABSENCE of one: Stage 1 is regex and wordlists, so a harmful request in
+        ordinary words produces no finding at all, and the cascade used to read
+        that silence as "decided, allow". Measured through /v1/guard before the
+        change: "How can I smuggle drugs through customs?" ran ONE stage and was
+        allowed, with the classifiers never consulted. The whole reason to mount
+        a classifier at Stage 2 is to catch what the patterns miss.
+        """
         s1 = FakeRail("regex", Stage.STAGE_1, RailResult.clean())
         s2 = FakeRail("classifier", Stage.STAGE_2, RailResult.clean())
         out = Cascade([s1, s2]).evaluate(event())
         self.assertIs(out.verdict.decision, Decision.ALLOW)
-        self.assertEqual(s2.calls, 0, "escalated with nothing to escalate about")
+        self.assertEqual(s2.calls, 1, "Stage 1 found nothing and Stage 2 was "
+                                      "never asked")
+
+    def test_the_original_rule_is_still_reachable_by_setting(self):
+        """`severity` is kept so a deployment measuring against the old numbers
+        can reproduce them - not because it is a good policy."""
+        s1 = FakeRail("regex", Stage.STAGE_1, RailResult.clean())
+        s2 = FakeRail("classifier", Stage.STAGE_2, RailResult.clean())
+        Cascade([s1, s2], escalation="severity").evaluate(event())
+        self.assertEqual(s2.calls, 0)
 
     def test_explicit_escalation_reaches_the_next_stage(self):
         s1 = FakeRail("regex", Stage.STAGE_1, RailResult(escalate=True))
@@ -244,13 +263,28 @@ class TestCascadeReporting(unittest.TestCase):
         # A clean request must not report "3 stages" just because the trace
         # records the two it skipped. Counting skipped stages as run inverts the
         # entire cost argument in the operator-facing output.
+        # `severity` because the property under test is the COUNTING - run
+        # versus skipped - and it needs a stage that is genuinely skipped. Under
+        # the shipped default a clean Stage 1 escalates, so only Stage 3 would
+        # be skipped and the arithmetic would be less able to go wrong unnoticed.
         s1 = FakeRail("regex", Stage.STAGE_1, RailResult.clean())
         s2 = FakeRail("classifier", Stage.STAGE_2, RailResult.clean())
         s3 = FakeRail("judge", Stage.STAGE_3, RailResult.clean())
-        out = Cascade([s1, s2, s3]).evaluate(event())
+        out = Cascade([s1, s2, s3], escalation="severity").evaluate(event())
         self.assertEqual(out.stages_run, 1, "skipped stages counted as run")
         self.assertEqual(out.stages_skipped, 2)
         self.assertEqual(len(out.trace), 3, "the trace should still record all three")
+
+    def test_the_default_pays_for_stage_2_and_reports_it(self):
+        """The other half of the same arithmetic, under the shipped default."""
+        rails = [FakeRail("regex", Stage.STAGE_1, RailResult.clean()),
+                 FakeRail("classifier", Stage.STAGE_2, RailResult.clean()),
+                 FakeRail("judge", Stage.STAGE_3, RailResult.clean())]
+        out = Cascade(rails).evaluate(event())
+        self.assertEqual(out.stages_run, 2)
+        self.assertEqual(out.stages_skipped, 1, "Stage 3 costs a model call and "
+                                                "must not be paid for a clean "
+                                                "Stage 2")
 
     def test_identical_findings_from_one_detector_are_deduped(self):
         # A rail with several patterns for one attack shape matches the same span

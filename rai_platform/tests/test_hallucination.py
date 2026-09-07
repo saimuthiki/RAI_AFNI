@@ -652,11 +652,27 @@ class TestRailsAndStages(unittest.TestCase):
         names = [r.name for r in H.RAILS]
         self.assertEqual(len(names), len(set(names)))
 
-    def test_a_clean_response_produces_an_allow_on_internal_traffic(self):
-        # Stage 2 reports unjudged (no weights), so the request is
-        # blocked by design. Internal traffic is allowed and the gap is still
-        # on the record - that is the fail-loud contract, not a bug.
+    def test_a_clean_response_escalates_and_records_what_it_could_not_judge(self):
+        """The comment on this test used to describe the OPPOSITE outcome from
+        its assertion - "Stage 2 reports unjudged, so the request is blocked by
+        design" above `assertIs(decision, ALLOW)` - and the assertion was the one
+        that was true, because a clean Stage 1 never reached Stage 2 at all. The
+        comment described the intended contract; the code delivered an accident.
+
+        Now they agree. A clean Stage 1 escalates, the groundedness rail cannot
+        judge without its weights, and the response BLOCKS with the gap on the
+        record - which is the fail-loud contract the comment always claimed.
+        """
         out = Cascade(H.RAILS).evaluate(
+            event({"output": "The capital of France is Paris."}))
+        if not out.verdict.unjudged:  # pragma: no cover - provisioned machine
+            self.assertIs(out.verdict.decision, Decision.ALLOW)
+            return
+        self.assertIs(out.verdict.decision, Decision.BLOCK)
+        self.assertTrue(out.verdict.unjudged)
+
+    def test_with_the_old_setting_it_allows_as_it_used_to(self):
+        out = Cascade(H.RAILS, escalation="severity").evaluate(
             event({"output": "The capital of France is Paris."}))
         self.assertIs(out.verdict.decision, Decision.ALLOW)
 

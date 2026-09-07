@@ -66,7 +66,9 @@ from fastapi import APIRouter, Body, FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from ..cascade.engine import PROVIDER, Cascade, CascadeOutcome
+from ..cascade.engine import (
+    ENV_ESCALATION, PROVIDER, Cascade, CascadeOutcome,
+    escalation_from_env)
 from ..cascade.rail import Direction, Stage
 from ..cli import TENET_PACKAGES, load_tenets
 from ..contract.explanation import Explanation, RailAttribution, explain
@@ -476,7 +478,47 @@ class Gateway:
                 "If this is a fresh clone, Stage 1 needs nothing installed: "
                 "run `python rai_platform/cli.py rails` to see what should be "
                 "mounted, and `preflight` for anything that failed to import.")
-        self.cascade = Cascade(self.rails, resolve_threshold=self.thresholds.resolve_value)
+        self.escalation = escalation_from_env(env)
+        self.cascade = Cascade(self.rails,
+                               resolve_threshold=self.thresholds.resolve_value,
+                               escalation=self.escalation)
+        if self.escalation == "full":
+            # THE TWO THINGS THAT MAKE `full` UNUSABLE, CHECKED AT STARTUP.
+            # Under `full` every request that nothing blocks reaches Stage 3, so
+            # a Stage-3 rail that can never judge blocks 100% of traffic -
+            # `unjudged` always blocks, by design. Measured on a host with no
+            # Azure key: "What is the capital of France?" came back `block`.
+            blind = [rail.name for rail in self.rails
+                     if rail.stage is Stage.STAGE_3
+                     and _rail_available(rail)[0] is False]
+            if blind:
+                LOGGER.error(
+                    "%s=full and %d Stage-3 rail(s) CANNOT JUDGE on this host "
+                    "(%s). Under `full` every request reaches Stage 3, and a "
+                    "rail that cannot look reports `unjudged`, which always "
+                    "blocks - so EVERY REQUEST WILL BLOCK, including harmless "
+                    "ones. Configure %s, or set %s=stage2, which runs Stage 2 on "
+                    "every request and reaches Stage 3 only for severe findings.",
+                    ENV_ESCALATION, len(blind), ", ".join(blind),
+                    blind[0], ENV_ESCALATION)
+        if self.escalation == "full" and self.judge_provider is not None:
+            first = self.judge_provider.links[0]
+            if not first.startswith("local"):
+                # THE CONSEQUENCE OF `full`, SAID AT STARTUP RATHER THAN ON AN
+                # INVOICE. Under `full` a request nothing has blocked reaches
+                # Stage 3, and a Stage-3 judge call ships the TEXT to whoever
+                # serves it. With a cloud link first that is every message this
+                # gateway sees, not just the flagged ones - a data-residency
+                # change and a per-request cost, both arriving from a default.
+                LOGGER.warning(
+                    "%s=full and the first judge link is %s, which is not local: "
+                    "every request that no rail blocks will reach Stage 3, so the "
+                    "TEXT OF EVERY MESSAGE this gateway sees will be sent to %s "
+                    "and leave this network - not only the flagged ones. Set "
+                    "%s=stage2 to keep Stage 2 on every request and Stage 3 for "
+                    "severe findings only, or put a local endpoint first in the "
+                    "judge chain.",
+                    ENV_ESCALATION, first, first, ENV_ESCALATION)
         self.policy = FailurePolicy(self.thresholds)
 
         self.audit_db = env.get(ENV_AUDIT_DB) or ":memory:"
