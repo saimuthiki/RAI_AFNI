@@ -246,6 +246,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
     <li><a href="#demo"><span class="n">§</span>A 10-minute demo script</a></li>
     <li><a href="#swagger"><span class="n">§</span>Swagger, if you prefer</a></li>
     <li><a href="#run"><span class="n">§</span>Starting it up</a></li>
+    <li><a href="#auth"><span class="n">§</span>Before exposing the port</a></li>
     <li><a href="#trouble"><span class="n">§</span>When something looks wrong</a></li>
   </ul>
 </nav>
@@ -583,6 +584,26 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
         the yellow strip at the top of the page: it tells you exactly how many checks cannot
         run and why.</span>
       </div>
+      <h4>Try this, and this is what comes back</h4>
+      <p>Paste this into the box and press the button:</p>
+      <div class="shell"><span class="mono">My SSN is 123-45-6789 and my card is
+      4111111111111111. Email jane.doe@example.com, phone 555-0100.</span></div>
+      <p><b>Expected:</b> decision <span class="mono">block</span>. Three findings -
+      SSN, card, email - each marked <span class="mono">redact</span>, and each
+      reported by MORE THAN ONE detector: a regex-plus-checksum rail, the reversible
+      anonymiser, and presidio's model. That is not a bug, it is three independent
+      detectors agreeing, and the <span class="mono">fp</span> fingerprint is
+      identical across all three, which is how you know they mean the same span.</p>
+      <p><b>What you will not see:</b> the SSN. Every finding carries
+      <span class="mono">fp</span>, a fingerprint, instead of the value. A guardrail
+      that echoes the SSN it caught into your logs has defeated itself, and
+      <span class="mono">fp</span> is what a false-positive exception keys on.</p>
+
+      <h4>What is worth measuring here</h4>
+      <p>Latency, split by stage. The response carries
+      <span class="mono">latency_ms</span> for the whole decision, and the stage
+      events show where it went. Stage 1 is sub-millisecond; if a decision took
+      3 seconds, a model ran, and the stage breakdown says which.</p>
     </div>
   </article>
 
@@ -626,6 +647,29 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       <span>There is no positive or negative case on this screen — it has no inputs.
       If a number here looks wrong, it is reporting a real problem with the running
       gateway, not a display bug.</span></div>
+      <h4>The one fact on this screen that explains most surprises</h4>
+      <p>A <b>blocking</b> finding at any stage <b>stops the rest</b>. So a prompt
+      blocked at Stage 2 never reaches the Stage-3 judge. If you are trying to
+      demonstrate the judge and keep seeing
+      <span class="mono">stages_run: 2</span>, that is why - raise the threshold of
+      whichever rail is blocking first, on the Sensitivity screen.</p>
+      <p>An <b>allow</b> does NOT stop it. A stage that ran everything and found
+      nothing has not decided the request, it has failed to decide it - so the next
+      stage looks. That is <span class="mono">AFNI_CASCADE_ESCALATION</span>, and it
+      is why a harmful request phrased in ordinary words still reaches the
+      classifiers even though no pattern matched it.</p>
+
+      <h4>What each stage actually costs</h4>
+      <div class="kv">
+        <div><b>Stage 1</b> &mdash; 23 rails, pure standard library: regex,
+        wordlists, checksums. Free, sub-millisecond, runs on every request.</div>
+        <div><b>Stage 2</b> &mdash; 7 rails, local models. Tens of milliseconds of
+        CPU, no network. Runs whenever Stage 1 did not decide.</div>
+        <div><b>Stage 3</b> &mdash; 3 rails, an LLM judge. One model call. Runs on a
+        severe finding, and the call SHIPS THE TEXT to whoever serves it.</div>
+        <div><b>Offline</b> &mdash; 19 capabilities: red-team suites, SHAP,
+        benchmarks. Minutes. Never in the request path.</div>
+      </div>
     </div>
   </article>
 
@@ -704,6 +748,27 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
         <code>python rai_platform/cli.py governance --markdown</code> renders the
         same document as a file.</p>
       </div>
+      <h4>What the counts look like on a working install</h4>
+      <div class="kv">
+        <div><span class="mono">implemented</span> 27 &mdash; built, mounted, runs
+        here</div>
+        <div><span class="mono">dependency-missing</span> 7 &mdash; built, but a
+        package is absent on THIS host</div>
+        <div><span class="mono">cloud-not-configured</span> 8 &mdash; built, needs a
+        key you have not set</div>
+        <div><span class="mono">offline-only</span> 19 &mdash; real, but never in the
+        request path</div>
+        <div><span class="mono">gap</span> 4 &mdash; <b>not built</b></div>
+      </div>
+      <p>Privacy, as a worked example: 6 implemented, 1 cloud-not-configured,
+      1 offline-only, 1 gap.</p>
+
+      <h4>What is worth measuring here</h4>
+      <p><span class="mono">gap</span> is the honest column, and 4 is the number to
+      quote. A platform reporting 100% coverage would be counting things it cannot
+      do. The other three non-implemented statuses are three DIFFERENT problems with
+      three different fixes - install a package, set a key, write the code - which is
+      why they are not merged into one "missing" count.</p>
     </div>
   </article>
 
@@ -748,6 +813,22 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       <span>It has a warning triangle. Such a check is still mounted and still runs — it
       just returns "could not judge", which fails closed. It is protecting nothing while
       it looks busy, which is exactly why the console marks it so loudly.</span></div>
+      <h4>What you should see</h4>
+      <p>33 rails: 23 rails at Stage 1, 7 at Stage 2, 3 at Stage 3. By direction,
+      24 rails apply to both sides, 8 are output-only, 1 is input-only.</p>
+      <p>Every row carries an <span class="mono">evidence</span> string naming the
+      upstream file and line, for example
+      <span class="mono">llm-guard-main/llm_guard/input_scanners/toxicity.py:13-26,
+      model unitary/unbiased-toxic-roberta revision 36295dd8...</span></p>
+
+      <h4>What is worth measuring here</h4>
+      <p>The <span class="mono">mechanism</span> column is the one that decides cost:
+      <span class="mono">Keyword/Regex</span> is free,
+      <span class="mono">Classifier</span> is a local model,
+      <span class="mono">LLM-judge</span> is a model call. And a rail marked
+      <i>cannot judge</i> on this screen will contribute
+      <span class="mono">unjudged</span> to every request it runs on - which
+      blocks.</p>
     </div>
   </article>
 
@@ -870,6 +951,40 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
           only exception is one acronym with no innocent meaning.</li>
         </ul>
       </div>
+      <h4>What you should see</h4>
+      <p><span class="mono">always: 6</span>,
+      <span class="mono">optional_available: 24</span>,
+      <span class="mono">blocking_patterns: 46</span>,
+      <span class="mono">semantic_classes: 6</span>.</p>
+
+      <h4>Each ban is enforced TWO ways, not one</h4>
+      <div class="kv">
+        <div><b>46 blocking patterns</b>, Stage 1 &mdash; the exact phrasings on the
+        list: "pipe bomb", "how to make meth".</div>
+        <div><b>6 semantic classes</b>, Stage 2 &mdash; phrasings nobody listed,
+        matched by classifier.</div>
+      </div>
+      <p>That second row matters more than it looks.
+      <span class="mono">weapons_manufacture</span> lists "pipe bomb" and
+      "improvised explosive". It does <b>not</b> list "suicide vest" - and a phrase
+      list only ever catches the phrasings somebody thought of. The classifier is
+      what covers the rest.</p>
+
+      <h4>Try this</h4>
+      <p>Enable <b>Gambling advice</b>, leave it on <b>flag</b>, save, <b>restart</b>.
+      Then run <span class="mono">Which roulette strategy has the best expected
+      return?</span> through Live check. Expect <span class="mono">flag</span>, not
+      block, attributed to
+      <span class="mono">explainability.topic_scope</span>. Promote the same topic to
+      <b>blocking</b>, restart, and re-run: now <span class="mono">block</span>, and
+      <span class="mono">semantic_classes</span> in the save response goes from 6 to
+      7.</p>
+      <p><b>Topics arm on RESTART.</b> Thresholds arm on the next request; topics do
+      not. If your change appears to do nothing, restart before debugging anything
+      else.</p>
+      <p>A topic set to <b>flag</b> deliberately gets no semantic class. The
+      classifier BLOCKS on a match, so arming it for a flag-only topic would promote
+      that topic to blocking behind your back.</p>
     </div>
   </article>
 
@@ -983,6 +1098,42 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
           <b>Balanced (shipped)</b> then <b>Save</b> to undo.</li>
         </ol>
       </div>
+      <h4>What you should see</h4>
+      <p>24 thresholds, each with its <b>shipped</b> value (cited to the repository
+      it was ported from) and its <b>effective</b> value. Every detection threshold
+      is <span class="mono">lower-is-stricter</span>. Three presets:</p>
+      <div class="kv">
+        <div><span class="mono">balanced</span> &mdash; clears every override, back
+        to shipped. Touches 0.</div>
+        <div><span class="mono">strict</span> &mdash; every detection threshold
+        &times; 0.75, floor 0.25. Touches 21.</div>
+        <div><span class="mono">maximum</span> &mdash; every detection threshold to
+        0.10. Touches 21. A red-team and demonstration setting, NOT a production one:
+        at 0.10 a classifier's noise floor becomes a finding.</div>
+      </div>
+
+      <h4>Worked example &mdash; forcing a Stage-3 judge call</h4>
+      <p>This is the most common real need. A PII prompt often gets blocked at Stage
+      2 by the prompt-injection classifier, which short-circuits before the judge
+      runs. The shipped value of
+      <span class="mono">security.prompt_injection.classifier</span> is
+      <b>0.9</b>.</p>
+      <div class="shell"><span class="mono">curl -s -X PUT
+      http://127.0.0.1:8000/v1/thresholds -H 'content-type: application/json' -d
+      '{"thresholds":{"security.prompt_injection.classifier":0.99}}'</span></div>
+      <p>Re-send your PII prompt: now
+      <span class="mono">stages_run: 3</span> and the judge rails appear in the
+      findings. Then <b>put it back</b> with
+      <span class="mono">{"preset": "balanced"}</span> - 0.99 is a hole in that rail,
+      for the test and not for the demo.</p>
+      <p><b>Trap:</b> <span class="mono">thresholds</span> <b>replaces</b> the whole
+      override map, it does not merge into it. What you send is what is in force,
+      because a merge would make "remove this override" impossible to express.</p>
+
+      <h4>What is worth measuring here</h4>
+      <p>A threshold is the cheapest way to move the false-positive against
+      false-negative trade-off, and the only honest way to measure the move is to
+      re-run the Corpus screen at the SAME SEED before and after.</p>
     </div>
   </article>
 
@@ -1100,6 +1251,34 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
           block.</li>
         </ol>
       </div>
+      <h4>What you should see</h4>
+      <p>Detector <span class="mono">nudenet-320n</span>, package
+      <span class="mono">nudenet</span>, running as <b>Stage 2 - a local model, no
+      network</b>. The labels are graded rather than binary:</p>
+      <div class="kv">
+        <div><b>explicit &rarr; block</b> &mdash;
+        <span class="mono">FEMALE_GENITALIA_EXPOSED</span>,
+        <span class="mono">MALE_GENITALIA_EXPOSED</span>,
+        <span class="mono">ANUS_EXPOSED</span>,
+        <span class="mono">BUTTOCKS_EXPOSED</span>,
+        <span class="mono">FEMALE_BREAST_EXPOSED</span></div>
+        <div><b>suggestive &rarr; flag</b> &mdash; the
+        <span class="mono">_COVERED</span> variants, and
+        <span class="mono">MALE_BREAST_EXPOSED</span></div>
+        <div><b>face &rarr; flag</b> &mdash; <span class="mono">face</span></div>
+        <div><b>ignored</b> &mdash; <span class="mono">BELLY_*</span>,
+        <span class="mono">FEET_*</span>, <span class="mono">ARMPITS_*</span></div>
+      </div>
+      <p>An oversized upload is reported <span class="mono">unjudged</span> -
+      "something that could not be looked at" - rather than as an error, which is the
+      same fail-closed rule as everywhere else. The cap is
+      <span class="mono">AFNI_MEDIA_MAX_BYTES</span>, 16 MB per decoded upload by
+      default.</p>
+
+      <h4>What is NOT measured yet</h4>
+      <p>Accuracy against a labelled set. The label groups above are the detector's
+      own; nobody here has scored them against ground truth. Quote them as a
+      capability, not as a hit rate.</p>
     </div>
   </article>
 
@@ -1309,6 +1488,48 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
         when the baseline was recorded. That is the alarm you actually want — it fires when
         a code change quietly breaks a check.</p>
       </div>
+      <h4>What you should see</h4>
+      <div class="kv">
+        <div><b>Records</b> 11,369</div>
+        <div><b>With a baseline</b> 280 &mdash; only these can drift</div>
+        <div><b>Run cap</b> <span class="mono">AFNI_CORPUS_MAX_SAMPLE</span>, 500
+        shipped &mdash; a bigger pass belongs offline</div>
+        <div><b>Output-direction</b> 519 affirmative completions &mdash; what a
+        jailbroken model would have said</div>
+        <div><b>Stage 3</b> <b>off</b> unless
+        <span class="mono">AFNI_CORPUS_ALLOW_CLOUD=true</span></div>
+      </div>
+      <p>Composition, which you need in order to read any rate at all: 5,170
+      unmapped, 4,815 Profanity / Content Safety, 452 Security, 321 Hallucination /
+      Reliability, 264 Privacy, 246 Explainability &amp; Transparency, 101 Fairness
+      &amp; Bias.</p>
+      <p><b>Always choose Stratified</b> for a headline number. An unstratified draw
+      is 42% content safety, so it mostly measures one tenet.</p>
+
+      <h4>Reading a run &mdash; the thing people get backwards</h4>
+      <p><b>On this corpus an <span class="mono">allow</span> is a MISS, not a
+      pass.</b> Every record is a harmful prompt. So the number to read is the block
+      rate, and a low one is a real gap at that ceiling - open the allowed rows and
+      check which rails were even eligible.</p>
+
+      <h4>What is worth measuring here</h4>
+      <div class="kv">
+        <div><b>The seed is fixed.</b> Seed 0 means two runs are directly comparable.
+        Change one threshold, re-run the same seed, and the difference IS the
+        threshold.</div>
+        <div><b>Drift is not automatically a regression.</b> A changed verdict means
+        "read this and decide". Only then re-record with
+        <span class="mono">corpus/baseline.py --write</span>. A tool that updates its
+        own expectations cannot detect anything.</div>
+        <div><b>Errors are not blocks.</b> The Errors counter is the cascade raising -
+        a broken check, not a caught prompt.</div>
+        <div><b>Stage 3 off is the right setting.</b> These are 11,369 genuinely
+        harmful prompts; turning it on would post them to a third-party vendor under
+        your account.</div>
+      </div>
+      <p><b>Cite the record <span class="mono">id</span>, never the text</b> - see
+      <span class="mono">corpus/WARNING.md</span>. Prompts are shown truncated to 120
+      characters for the same reason.</p>
     </div>
   </article>
 
@@ -1330,6 +1551,17 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       <p>There is also a second table — <b>"Cited sources that are not one of the 23"</b> —
       listing projects a check cites that were never part of the original review. Keeping
       that visible stops the count from drifting away from the truth.</p></div>
+      <h4>What you should see</h4>
+      <p>Four adoption verdicts: <b>Adopt now</b> 10, <b>Combine with another</b> 5,
+      <b>Bench for later</b> 6, <b>Skip</b> 2.</p>
+
+      <h4>What is worth measuring here</h4>
+      <p>The <b>unlinkable</b> list - 12 capabilities that no mounted rail
+      implements, each tagged with why
+      (<span class="mono">offline-only</span>,
+      <span class="mono">cloud-not-configured</span>). That list is the honest edge
+      of the coverage claim, and it is the first thing a sceptical reviewer should be
+      shown.</p>
     </div>
   </article>
 
@@ -1376,6 +1608,15 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       and 100%. That gap is what Stage 3 and further tuning are for. If the top rung is
       barely above the middle one, your Stage-2 model weights are probably not installed
       — check the warning strip at the top of the page.</p></div>
+      <h4>What you should see</h4>
+      <p>Three rising block rates, on the same records. The honest reading is the gap
+      between the top rung and 100% - that gap is what Stage 3 and further tuning are
+      for.</p>
+
+      <h4>What is worth measuring here</h4>
+      <p>If the top rung is barely above the middle one, your Stage-2 model weights
+      are probably not installed. Check the warning strip at the top of the page
+      before concluding anything about the rails.</p>
     </div>
   </article>
 
@@ -1418,6 +1659,14 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       <p>The framework assigns owners by <b>role</b>, not by person. A register naming
       individuals is out of date the first time somebody changes team, and it invites the
       reader to treat a name as a control.</p></div>
+      <h4>What you should see</h4>
+      <p>7 tenets, 33 rails mounted, 24 thresholds listed, and a
+      <span class="mono">problems</span> array.</p>
+
+      <h4>What is worth measuring here</h4>
+      <p>The length of <span class="mono">problems</span>, over time. It is the only
+      number on this screen that is supposed to go down, and a register that reported
+      none would just mean nobody was checking.</p>
     </div>
   </article>
 </section>
@@ -1856,6 +2105,25 @@ python -m uvicorn afni_rai.gateway.app:create_app --factory --port 8080</div>
 </section>
 
 <!-- ===================================================================== -->
+<section id="auth" class="stack">
+  <h2>Before you put this anywhere but your own machine</h2>
+  <p class="sub">Two screens write to disk, and neither one asks who you are.</p>
+  <div class="prose">
+    <p>The <b>Topics</b> and <b>Sensitivity</b> screens save through
+    <span class="mono">PUT /v1/topics</span> and
+    <span class="mono">PUT /v1/thresholds</span>. Those are the only two write
+    endpoints in the platform, and they have <b>no authentication</b> — they are
+    documented as localhost operator tools, and that is the whole of their security
+    model. Anyone who can reach the port can change what gets blocked.</p>
+    <p><span class="mono">AFNI_HOST</span> defaults to
+    <span class="mono">127.0.0.1</span> for that reason. Binding
+    <span class="mono">0.0.0.0</span> exposes every prompt this gateway sees AND both
+    write endpoints, so it has to be a deliberate act with your own authentication in
+    front of it.</p>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
 <section id="trouble" class="stack">
   <h2>When something looks wrong</h2>
   <div class="tw"><table>
@@ -1886,6 +2154,37 @@ python -m uvicorn afni_rai.gateway.app:create_app --factory --port 8080</div>
       <tr><td><b>Corpus: Stage 3 greyed out</b></td>
         <td>Correct and deliberate. These are real harmful prompts and Stage 3 would send
         them to an outside vendor. It needs an explicit server-side switch.</td></tr>
+      <tr><td><b>Top bar says <code>local[nokey]</code></b></td>
+        <td>The local judge link has no credential attached. If your endpoint requires
+        one, every judge call will get a <code>401</code>. Set
+        <code>AFNI_TARGET_API_KEY</code> — the local judge inherits it.</td></tr>
+      <tr><td><b><code>local</code> is missing from the judge chain</b></td>
+        <td>The startup probe was refused (<code>401</code>/<code>403</code>), or
+        <code>LOCAL_BASE_URL</code> is set without <code>LOCAL_API_KEYS</code> —
+        setting the base URL alone switches OFF inheritance from the target block.
+        The probe reads <code>GET /models</code>, which your server may authenticate
+        differently from <code>/chat/completions</code>; see <code>docs/setup.md</code>.</td></tr>
+      <tr><td><b>Every escalated request blocks</b></td>
+        <td>A Stage-3 rail is reporting <code>unjudged</code>. Most often a judge key
+        of the wrong KIND — an <code>AQ.…</code> Google OAuth token where an
+        <code>AIza…</code> AI Studio key is needed. Startup warns about the shape.</td></tr>
+      <tr><td><b><code>stages_run</code> never reaches 3</b></td>
+        <td>Something at Stage 2 is blocking first, and a block stops the cascade. Raise
+        that rail's threshold on the <b>Sensitivity</b> screen for the test — and put it
+        back afterwards.</td></tr>
+      <tr><td><b>A topic change did nothing</b></td>
+        <td><b>Topics arm on RESTART.</b> Thresholds arm on the next request; topics do
+        not. Restart before debugging anything else.</td></tr>
+      <tr><td><b>A threshold change did nothing</b></td>
+        <td>Read <b>effective</b>, not <b>shipped</b>. And remember that
+        <code>thresholds</code> REPLACES the whole override map rather than merging into
+        it, so a second <code>PUT</code> with one key removes the others.</td></tr>
+      <tr><td><b>Harmless prompts started blocking after an upgrade</b></td>
+        <td>You are on <code>AFNI_CASCADE_ESCALATION=full</code> with a Stage-3 rail that
+        cannot judge — most often <code>security.prompt_shields</code>, which needs an
+        Azure Content Safety key. Under <code>full</code> every request reaches it, and
+        <code>unjudged</code> always blocks. Use <code>stage2</code> (the default) or
+        configure the rail. Startup logs an ERROR naming the blind rails.</td></tr>
     </tbody>
   </table></div>
 </section>
@@ -1894,10 +2193,15 @@ python -m uvicorn afni_rai.gateway.app:create_app --factory --port 8080</div>
   <p><b>Every figure in this guide was measured on a running gateway</b>, not estimated:
   the rail counts per side and per stage, the four worked verdicts, and the 280-prompt
   corpus run. Where a number depends on which machine you are on, the guide says so.</p>
+  <p><b>This is the only console guide.</b> There was briefly a second one in
+  Markdown covering the same eleven screens; it was merged into this file rather
+  than left to drift, because two documents describing one console disagree
+  eventually and nobody can tell which is wrong.</p>
   <p>Companion documents in this repository: <code>docs/architecture.md</code>
   (the request path in detail), <code>docs/setup.md</code> (installing the
-  model files), <code>docs/corpus.md</code> (what the corpus contains and
-  what it has already proved).</p>
+  model files, and every environment variable), <code>docs/corpus.md</code>
+  (what the corpus contains and what it has already proved),
+  <code>docs/request-flow.md</code> (which rail runs on which side).</p>
 </footer>
 
 </main>

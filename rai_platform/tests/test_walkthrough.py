@@ -1,10 +1,16 @@
 # -*- coding: utf-8 -*-
-"""Are the numbers in `docs/console-guide.md` the numbers the platform reports?
+"""Are the numbers in `docs/ui-walkthrough.html` the numbers the platform reports?
 
-A tab-by-tab guide is only useful while its counts are true, and counts in prose
-rot silently: nothing fails when a rail is added and the doc still says 33. The
-same argument as `test_env_manifest` - a manifest maintained by hand drifts from
-the code, and the drift is visible only to whoever is holding the manifest.
+The walkthrough is the ONE console guide, and it is only useful while its counts
+are true. Counts in prose rot silently: nothing fails when a rail is added and
+the doc still says 33. The same argument as `test_env_manifest` - a manifest
+maintained by hand drifts from the code, and the drift is visible only to
+whoever is holding the manifest.
+
+There was briefly a second guide, `docs/console-guide.md`, covering the same
+eleven screens in Markdown. It was merged into the HTML and deleted rather than
+kept: two documents describing one console disagree eventually, and then nobody
+can tell which one is wrong. This file moved with the content.
 
 WHAT IS PINNED AND WHAT IS NOT. Only host-INDEPENDENT numbers. `implemented` and
 `dependency-missing` in the coverage totals move with which model weights are
@@ -19,7 +25,8 @@ import pathlib
 import re
 import unittest
 
-_DOC = pathlib.Path(__file__).resolve().parents[2] / "docs" / "console-guide.md"
+_DOC = (pathlib.Path(__file__).resolve().parents[2]
+        / "docs" / "ui-walkthrough.html")
 
 
 def _text() -> str:
@@ -52,26 +59,23 @@ class TheGuideExists(unittest.TestCase):
 
     def test_every_console_tab_has_a_section(self):
         """A tab with no section is the gap this file was written to close - the
-        previous walkthrough covered nine of the eleven screens."""
-        views = (_DOC.parents[1] / "rai_platform" / "web" / "views")
-        text = _text().lower()
-        # view filename -> the heading it is documented under
-        headings = {"live": "live check", "architecture": "how it works",
-                    "tenets": "tenets", "rails": "rails", "topics": "topics",
-                    "sensitivity": "sensitivity", "media": "media",
-                    "corpus": "corpus", "beforeafter": "before and after",
-                    "frameworks": "frameworks", "governance": "governance"}
-        found = sorted(p.stem for p in views.glob("*.js"))
-        self.assertEqual(found, sorted(headings),
-                         "a console view was added or renamed; the guide's "
-                         "contents table has to follow")
-        for view, heading in headings.items():
+        walkthrough covered nine of the eleven screens for some time, silently."""
+        views = sorted(p.stem for p in
+                       (_DOC.parents[1] / "rai_platform" / "web" / "views")
+                       .glob("*.js"))
+        text = _text()
+        for view in views:
             with self.subTest(view=view):
-                self.assertIn(f"## {heading}", text)
+                self.assertIn(f"#/{view}", text,
+                              "a console view has no section naming its route")
 
-    def test_it_leads_with_the_status_code_rule(self):
-        """The single most misread thing about this API."""
-        self.assertIn("Read the DECISION, not the HTTP status", _flat())
+    def test_it_warns_that_the_write_endpoints_have_no_auth(self):
+        """`PUT /v1/topics` and `PUT /v1/thresholds` are the only writes in the
+        platform and neither asks who you are. That belongs in the guide people
+        read before exposing a port, not only in a docstring."""
+        flat = _flat()
+        self.assertIn("no authentication", flat)
+        self.assertIn("PUT /v1/topics", flat)
 
 
 class TheWalkthroughCoversEveryScreenToo(unittest.TestCase):
@@ -84,7 +88,7 @@ class TheWalkthroughCoversEveryScreenToo(unittest.TestCase):
     believes they have seen the whole product.
     """
 
-    HTML = _DOC.parent / "ui-walkthrough.html"
+    HTML = _DOC
 
     def views(self) -> list[str]:
         return sorted(path.stem for path in
@@ -137,7 +141,7 @@ class TheRailCountsMatch(unittest.TestCase):
         """
         total = len(self.rows)
         flat = _flat()
-        self.assertIn(f"**What you should see:** {total} rails", flat)
+        self.assertIn(f"<p>{total} rails:", flat)
         for wrong in (total - 1, total + 1):
             with self.subTest(wrong=wrong):
                 self.assertNotIn(f"{wrong} rails", flat)
@@ -147,8 +151,8 @@ class TheRailCountsMatch(unittest.TestCase):
         by_stage = Counter(r["stage"] for r in self.rows)
         self.assertIn(f"{by_stage[1]} rails at Stage 1, {by_stage[2]} at "
                       f"Stage 2, {by_stage[3]} at Stage 3", _flat())
-        # And in the cascade table, where the cost of each stage is stated.
-        self.assertIn(f"| 1 | {by_stage[1]} rails", _text())
+        # And in the cascade cost list, where what each stage buys is stated.
+        self.assertIn(f"Stage 1</b> &mdash; {by_stage[1]} rails", _flat())
 
     def test_the_per_direction_split(self):
         from collections import Counter
@@ -161,28 +165,28 @@ class TheTopicCountsMatch(unittest.TestCase):
 
     def test_the_four_counts(self):
         counts = _client().get("/v1/topics").json()["counts"]
-        text = _text()
+        flat = _flat()
         for key in ("always", "optional_available", "blocking_patterns",
                     "semantic_classes"):
             with self.subTest(key=key):
-                self.assertIn(f"`{key}: {counts[key]}`", text)
+                self.assertIn(f"{key}: {counts[key]}", flat)
 
     def test_the_guide_says_topics_need_a_restart(self):
         """The most common "my change did nothing" on these screens."""
-        self.assertIn("Topics arm on RESTART", _text())
+        self.assertIn("Topics arm on RESTART", _flat())
 
 
 class TheThresholdCountsMatch(unittest.TestCase):
 
     def test_the_number_of_thresholds_and_the_presets(self):
         body = _client().get("/v1/thresholds").json()
-        text = _text()
-        self.assertIn(f"{len(body['thresholds'])} thresholds", text)
+        flat = _flat()
+        self.assertIn(f"{len(body['thresholds'])} thresholds", flat)
         for preset in body["presets"]:
             with self.subTest(preset=preset["name"]):
-                self.assertIn(f"`{preset['name']}`", text)
+                self.assertIn(preset["name"], flat)
                 if preset["touches"]:
-                    self.assertIn(str(preset["touches"]), text)
+                    self.assertIn(f"Touches {preset['touches']}", flat)
 
     def test_the_shipped_injection_threshold_in_the_worked_example(self):
         """The example tells the reader to raise this above a measured 0.9847,
@@ -190,10 +194,10 @@ class TheThresholdCountsMatch(unittest.TestCase):
         body = _client().get("/v1/thresholds").json()
         row = next(t for t in body["thresholds"]
                    if t["key"] == "security.prompt_injection.classifier")
-        self.assertIn(f"= **{row['shipped']}**", _text())
+        self.assertIn(f"is <b>{row['shipped']}</b>", _flat())
 
     def test_it_warns_that_the_override_map_replaces(self):
-        self.assertIn("**replaces** the whole override map", _flat())
+        self.assertIn("<b>replaces</b> the whole override map", _flat())
 
 
 class TheCorpusFiguresMatch(unittest.TestCase):
@@ -202,28 +206,34 @@ class TheCorpusFiguresMatch(unittest.TestCase):
         self.body = _client().get("/v1/corpus").json()
 
     def test_the_record_and_baseline_counts(self):
-        text = _text()
-        self.assertIn(f"{self.body['records']:,}", text)
-        self.assertIn(f"{self.body['baselined']} — only these can drift", text)
+        flat = _flat()
+        self.assertIn(f"{self.body['records']:,}", flat)
+        self.assertIn(f"{self.body['baselined']} &mdash; only these can drift",
+                      flat)
 
     def test_the_per_tenet_table_is_complete_and_exact(self):
-        text = _text()
+        flat = _flat()
         for row in self.body["tenets"]:
+            if row["tenet"] == "(unmapped)":
+                self.assertIn(f"{row['records']:,} unmapped", flat)
+                continue
             with self.subTest(tenet=row["tenet"]):
-                self.assertIn(f"| {row['tenet']} | {row['records']:,} |", text)
+                self.assertIn(f"{row['records']:,} "
+                              f"{row['tenet'].replace('&', '&amp;')}", flat)
 
     def test_the_output_direction_count(self):
         out = next(d["records"] for d in self.body["directions"]
                    if d["direction"] == "output")
-        self.assertIn(f"{out} affirmative completions", _text())
+        self.assertIn(f"{out} affirmative completions", _flat())
 
     def test_it_says_an_allow_is_a_miss(self):
         """The one sentence that stops a reader celebrating a 98% allow rate on
         a corpus where every record is a harmful prompt."""
-        self.assertIn("an `allow` is a MISS", _text())
+        self.assertIn("an <span class=\"mono\">allow</span> is a MISS", _text())
 
     def test_it_carries_the_handling_rule(self):
-        self.assertIn("Cite the record `id`, never the text", _text())
+        self.assertIn("Cite the record", _flat())
+        self.assertIn("never the text", _flat())
         self.assertFalse(self.body["cloud_allowed"],
                          "AFNI_CORPUS_ALLOW_CLOUD is on; the guide says it is "
                          "off and explains why it should be")
@@ -233,37 +243,38 @@ class TheFrameworkAndCoverageFiguresMatch(unittest.TestCase):
 
     def test_the_adoption_group_sizes(self):
         body = _client().get("/v1/repositories").json()
-        text = _text()
+        flat = _flat()
         for group in body["groups"]:
             with self.subTest(verdict=group["adoption"]):
-                self.assertIn(f"| {group['adoption']} | {len(group['repos'])} |",
-                              text)
+                self.assertIn(f"<b>{group['adoption']}</b> "
+                              f"{len(group['repos'])}", flat)
 
     def test_the_unlinkable_count(self):
         body = _client().get("/v1/repositories").json()
-        self.assertIn(f"{len(body['unlinkable'])} of them", _text())
+        self.assertIn(f"{len(body['unlinkable'])} capabilities", _flat())
 
     def test_the_structural_gap_count(self):
         """`gap` is "not built", which no install changes - unlike
         `implemented` and `dependency-missing`, which the guide marks as
         host-dependent rather than pinning here."""
         totals = _client().get("/v1/coverage").json()["totals"]
-        self.assertIn(f"| `gap` | {totals['gap']} | **not built** |", _text())
+        self.assertIn(f"gap</span> {totals['gap']} &mdash; <b>not built</b>",
+                      _flat())
 
 
 class TheMediaFiguresMatch(unittest.TestCase):
 
     def test_the_detector_and_every_label_group(self):
         body = _client().get("/v1/media").json()
-        text = _text()
-        self.assertIn(f"`{body['detector']}`", text)
-        self.assertIn(f"`{body['package']}`", text)
+        flat = _flat()
+        for value in (body["detector"], body["package"]):
+            self.assertIn(value, flat)
         for label in body["labels"]["explicit_block"]:
             with self.subTest(label=label):
-                self.assertIn(f"`{label}`", text)
+                self.assertIn(label, flat)
 
     def test_it_says_oversized_is_unjudged_not_an_error(self):
-        self.assertIn("reported `unjudged`", _text())
+        self.assertIn("reported <span class=\"mono\">unjudged</span>", _text())
 
 
 class TheGovernanceGuidanceIsRight(unittest.TestCase):
@@ -271,8 +282,7 @@ class TheGovernanceGuidanceIsRight(unittest.TestCase):
     def test_it_steers_to_contact_rather_than_domain(self):
         """DOMAIN generates seven aliases. If they do not exist, the register
         carries seven bouncing addresses."""
-        text = _text()
-        self.assertIn("Set **CONTACT** unless those seven aliases actually "
+        self.assertIn("use <b>CONTACT</b> unless the seven aliases really "
                       "exist", _flat())
 
     def test_the_counts_match(self):
@@ -285,15 +295,15 @@ class TheGovernanceGuidanceIsRight(unittest.TestCase):
 class TheTroubleshootingTableIsUsable(unittest.TestCase):
 
     def test_it_names_the_real_symptoms_seen_on_afnis_host(self):
-        text = _text()
-        for symptom in ("local[nokey]", "topics arm on **restart**",
-                        "`stages_run` never reaches 3", "degraded"):
+        flat = _flat()
+        for symptom in ("local[nokey]", "Topics arm on RESTART",
+                        "stages_run</code> never reaches 3", "degraded"):
             with self.subTest(symptom=symptom):
-                self.assertIn(symptom, text)
+                self.assertIn(symptom, flat)
 
     def test_every_related_document_it_points_at_exists(self):
         """A guide whose "see also" is broken is worse than one with none."""
-        for match in re.findall(r"`(docs/[\w.\-]+)`", _text()):
+        for match in re.findall(r"<code>(docs/[\w.\-]+)</code>", _text()):
             with self.subTest(path=match):
                 self.assertTrue((_DOC.parents[1] / match).exists(), match)
 

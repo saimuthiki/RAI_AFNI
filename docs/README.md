@@ -15,8 +15,7 @@ holds the answer.
 | [**plan.md**](plan.md) | What to build, what is decided, and what is still open |
 | [**setup.md**](setup.md) | **[Quick start — just the commands](setup.md#quick-start)**, then the reference: every library, every model file, and where each one goes |
 | [**corpus.md**](corpus.md) | The 11,369-prompt harm corpus, **and the 178 benign messages that measure false positives** |
-| [**console-guide.md**](console-guide.md) | **All eleven console tabs**, one section each: what to click, a worked example, the expected output, and what is worth measuring |
-| [**ui-walkthrough.html**](ui-walkthrough.html) | **Open this in a browser.** The same tour in plain English, for a non-technical reader |
+| [**ui-walkthrough.html**](ui-walkthrough.html) | **Open this in a browser.** All eleven console tabs in plain English - what to click, a worked example, the expected output, and what is worth measuring on each |
 
 Two files deliberately live elsewhere:
 

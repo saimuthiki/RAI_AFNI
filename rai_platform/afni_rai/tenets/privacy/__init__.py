@@ -1008,9 +1008,36 @@ class SystemPromptLeakageRail:
 # --------------------------------------------------------------------------- #
 # Stage 2 - Presidio depth layer                                               #
 # --------------------------------------------------------------------------- #
+#: llm-guard's own `DEFAULT_ENTITY_TYPES`, minus its four regex duplicates of
+#: rails this platform already has at Stage 1 (`CREDIT_CARD_RE`, `US_SSN_RE`,
+#: `EMAIL_ADDRESS_RE`, `UUID`).
+#:
+#: `LOCATION` IS ABSENT, AND THAT IS UPSTREAM'S CHOICE RATHER THAN A GAP HERE.
+#: It was in this tuple until a benign-control payload flagged it: "What are
+#: your office hours in Amsterdam, and do you support iDEAL?" produced
+#: `privacy.pii.address` at score 0.85 on the word "Amsterdam" - actioned
+#: `redact`, on the one payload in the repository that exists to trip nothing.
+#:
+#: The upstream list this was ported from does not contain it
+#: (`references/llm-guard-main/llm-guard-main/llm_guard/input_scanners/anonymize.py:27-41`),
+#: while the recognizer behind it supports it perfectly well
+#: (`anonymize_helpers/ner_mapping.py:175`). So it is opt-in upstream, not
+#: unsupported - and the reason is visible two hundred lines further down the
+#: same file: `ner_mapping.py:202-209` folds `STREET`, `CITY`, `ZIPCODE`,
+#: `STATE`, `COUNTY` and `BUILDINGNUMBER` ALL into `LOCATION`. A bare county or
+#: city name therefore arrives as the same entity as a street address, and the
+#: published taxonomy has no coarser bucket to put it in - `LOCATION ->
+#: privacy.pii.address`
+#: (`references/openguardrails-main/.../specification/taxonomy.md:160`). In
+#: support traffic that redacts every city anyone mentions.
+#:
+#: Adding it back is one argument: `PresidioPiiRail(entities=_PRESIDIO_ENTITIES
+#: + ("LOCATION",))`. Worth doing for a deployment where a street address in
+#: prose is the risk; not worth it by default, and NOT this platform's call to
+#: make differently from the code it cites.
 _PRESIDIO_ENTITIES = (
     "CREDIT_CARD", "CRYPTO", "EMAIL_ADDRESS", "IBAN_CODE", "IP_ADDRESS",
-    "PERSON", "PHONE_NUMBER", "US_SSN", "US_BANK_NUMBER", "LOCATION",
+    "PERSON", "PHONE_NUMBER", "US_SSN", "US_BANK_NUMBER",
 )
 
 # `specification/taxonomy.md:155-163` publishes the presidio -> taxonomy mapping.
