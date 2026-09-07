@@ -166,6 +166,12 @@ def topics_router(gateway: Any) -> APIRouter:
             "saved": policy.to_dict(),
             "policy_path": str(topics.policy_path()),
             "patterns": {"flagging": len(flagging), "blocking": len(blocking)},
+            # The semantic half of the same policy, reported so the console can
+            # show that promoting a topic to BLOCKING arms a classifier for it
+            # and not only a phrase list. Flagging topics are absent by design -
+            # `ZeroShotTopics` blocks on a match, so arming it for a
+            # flag-only topic would promote that topic behind the operator.
+            "semantic_classes": len(topics.labels_for(policy)),
             "note": _reload_note(policy.to_dict() != before.to_dict()),
         })
 

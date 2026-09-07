@@ -1194,8 +1194,34 @@ class PiiLeakageJudgeRail:
         self.threshold = threshold
 
     @staticmethod
-    def dependency_available() -> bool:
+    def provenance_available() -> bool:
+        """True when `deepteam` is importable - which this rail does NOT need.
+
+        NOT NAMED `dependency_available`, and that is the fix rather than a
+        style choice. `gateway.app._rail_available` probes
+        `dependency_available` / `available` / `configured` in that order and
+        reports the first answer, so while this method carried that name the
+        console listed this rail under "rails mounted but unable to run:
+        dependency_available() is False" - on a host where it had just returned
+        a real score of 1.00 through the local judge chain. It also counted
+        toward the "2 of 33 rails cannot judge" degraded banner, which is the
+        loudest line in the product.
+
+        `deepteam` powers the PROVENANCE claim - that this rail implements
+        DeepTeam's PIIMetric, `metrics/pii/pii.py:27` - and nothing on the
+        request path. What this rail actually needs to run is a bound judge,
+        which is what `available()` reports.
+        """
         return importlib.util.find_spec("deepteam") is not None
+
+    def available(self) -> bool:
+        """Can this rail produce a verdict? Only a judge decides that.
+
+        With no judge the rail reports `unjudged`, which fails closed - so
+        False here is the honest answer and the console is right to show it.
+        With a judge bound it works whether or not `deepteam` is installed.
+        """
+        return self.judge is not None
 
     def check(self, path: str, text: str,
               ctx: CheckContext | None = None) -> RailResult:
@@ -1208,7 +1234,9 @@ class PiiLeakageJudgeRail:
             return RailResult.unjudged(
                 "no PII-leakage judge configured; DeepTeam PIIMetric "
                 "(metrics/pii/pii.py:27) requires a paid judge model"
-                + ("" if self.dependency_available() else " and deepteam is not installed")
+                + ("" if self.provenance_available()
+                   else "; deepteam is also not installed, which affects only "
+                        "the provenance claim and not this rail's ability to run")
             )
         if not text:
             return RailResult.clean()

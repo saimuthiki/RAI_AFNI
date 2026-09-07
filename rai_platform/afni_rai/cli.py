@@ -73,11 +73,24 @@ def load_tenets():
     try:
         from . import topics                                    # noqa: PLC0415
         from .tenets.explainability import TopicScopeRail        # noqa: PLC0415
-        flagging, blocking = topics.patterns_for(topics.load_policy())
+        policy = topics.load_policy()
+        flagging, blocking = topics.patterns_for(policy)
         topic_rail = TopicScopeRail(banned_keywords=flagging,
                                     blocking_keywords=blocking)
         if topic_rail.configured:
             rails.append(topic_rail)
+        # ARM THE SEMANTIC HALF OF THE SAME POLICY. `ZeroShotTopics` ships as
+        # `ZeroShotTopics()` in content_safety.RAILS - no topics - so it loaded
+        # its model, ran on every request and returned clean, every time. The
+        # already-mounted instance is REPLACED rather than added beside, because
+        # two rails with the same `name` would double every finding it makes and
+        # make the coverage count wrong.
+        labels = topics.labels_for(policy)
+        if labels:
+            from .tenets.content_safety import ZeroShotTopics  # noqa: PLC0415
+            armed = ZeroShotTopics(topics=labels)
+            rails = [armed if r.name == ZeroShotTopics.name else r
+                     for r in rails]
     except Exception as exc:  # noqa: BLE001
         # A broken topic policy must not cost every other rail. Reported, like a
         # tenet that failed to import, rather than swallowed.
