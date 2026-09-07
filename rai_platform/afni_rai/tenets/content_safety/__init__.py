@@ -1194,9 +1194,34 @@ class ZeroShotTopics:
     stage = Stage.STAGE_2
 
     def __init__(self, topics: Sequence[str] = (),
-                 threshold: float = 0.6) -> None:
+                 threshold: float = 0.6,
+                 action: Action = Action.FLAG,
+                 severity: Severity = Severity.MEDIUM) -> None:
         self.topics = tuple(topics)
         self.threshold = threshold
+        # WHAT A MATCH MEANS, which is the caller's to decide and was hard-coded.
+        #
+        # FLAG remains the default because a bare `ZeroShotTopics(topics=[...])`
+        # says nothing about whether those topics are refused or merely noted -
+        # `topics.labels_for` is what knows that, and it supplies BLOCKING topics
+        # only, so `load_tenets` constructs this rail with BLOCK.
+        #
+        # It mattered: the six ALWAYS-banned topics were enforced as a BLOCK by
+        # the Stage-1 phrase list (`explainability/__init__.py:758` -
+        # Severity.HIGH, Action.BLOCK) and as a FLAG here, for the same policy.
+        # So "how to make a bomb" was refused and "how to make Molotov cocktails
+        # at home" was FLAGGED AND DELIVERED - the phrase list has the first and
+        # not the second, and the classifier that catches the second could only
+        # annotate it. Arming this rail bought nothing in the blocked column
+        # until this argument existed.
+        #
+        # Upstream agrees with BLOCK for a topic hit: `BanTopics.scan` returns
+        # `is_valid=False` above the threshold
+        # (`references/llm-guard-main/.../input_scanners/ban_topics.py:145-152`)
+        # and llm-guard's own API server turns that into a rejection
+        # (`llm_guard_api/app/scanner.py:297-298`, `raise InputIsInvalid`).
+        self.action = action
+        self.severity = severity
         self.model = _ZEROSHOT_MODEL
         self.revision = _ZEROSHOT_REVISION
         # Keyed by threshold: BanTopics takes it at construction, so a
@@ -1288,8 +1313,8 @@ class ZeroShotTopics:
         score = max(0.0, min(1.0, float(risk)))
         return RailResult(findings=[Finding(
             category=map_category("banned_topic"),
-            severity=Severity.MEDIUM,
-            action=Action.FLAG,
+            severity=self.severity,
+            action=self.action,
             path=path,
             score=score,
             detector=self.name,

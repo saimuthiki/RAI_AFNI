@@ -87,8 +87,16 @@ def load_tenets():
         # make the coverage count wrong.
         labels = topics.labels_for(policy)
         if labels:
+            from .contract.models import Action, Severity  # noqa: PLC0415
             from .tenets.content_safety import ZeroShotTopics  # noqa: PLC0415
-            armed = ZeroShotTopics(topics=labels)
+            # BLOCK, matching the Stage-1 phrase list for the SAME topics
+            # (`tenets/explainability/__init__.py:758`). `labels_for` supplies
+            # blocking topics only - a flag-only topic gets no class at all -
+            # so a match here is a match on something this deployment refuses,
+            # and annotating it while the phrase list refuses its own half was
+            # one policy with two answers.
+            armed = ZeroShotTopics(topics=labels, action=Action.BLOCK,
+                                   severity=Severity.HIGH)
             rails = [armed if r.name == ZeroShotTopics.name else r
                      for r in rails]
     except Exception as exc:  # noqa: BLE001
