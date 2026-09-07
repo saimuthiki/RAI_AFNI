@@ -1587,6 +1587,42 @@ class TestPreferLocalReordersTheJudgeChain(unittest.TestCase):
         self.assertTrue(preference["inherited_from_target"])
         self.assertEqual(preference["model"], MODEL)
 
+    def test_the_target_api_key_is_inherited_and_actually_sent(self):
+        """The link name is the tell: `local[0]` carries a key, `local[nokey]`
+        does not. AFNI's boot log said `local[nokey]` against an endpoint that
+        requires one, which is the whole 401 in three characters.
+
+        Asserting the NAME is not enough - a key held and never sent would name
+        it identically - so this makes a judge call and checks the header
+        arrived. The stub answers with prose rather than a number, so `score`
+        raises; the request has already been recorded by then, which is the
+        thing under test.
+        """
+        chain, _ = self.chain(AFNI_JUDGE_PROVIDER="openai",
+                              OPENAI_API_KEYS="k1",
+                              AFNI_TARGET_BASE_URL=self.stub.base_url,
+                              AFNI_TARGET_MODEL=MODEL,
+                              AFNI_TARGET_API_KEY="test-key-123",
+                              AFNI_JUDGE_PREFER_LOCAL="true")
+        self.assertEqual(chain.links[0], "local[0]")
+        before = len(self.stub.requests)
+        with self.assertRaises(providers.JudgeUnavailable):
+            chain.score("rate this", "some text")
+        posts = [row for row in self.stub.requests[before:] if row[0] == "POST"]
+        self.assertTrue(posts, "the local link was never called")
+        self.assertTrue(posts[0][2],
+                        "the inherited key was not sent as an Authorization "
+                        "header - the endpoint would answer 401")
+
+    def test_no_target_key_leaves_the_local_link_keyless(self):
+        """The contrast, so the assertion above cannot pass by accident."""
+        chain, _ = self.chain(AFNI_JUDGE_PROVIDER="openai",
+                              OPENAI_API_KEYS="k1",
+                              AFNI_TARGET_BASE_URL=self.stub.base_url,
+                              AFNI_TARGET_MODEL=MODEL,
+                              AFNI_JUDGE_PREFER_LOCAL="true")
+        self.assertEqual(chain.links[0], "local[nokey]")
+
     def test_the_local_judge_actually_points_at_the_probed_endpoint(self):
         """Reordering a name is worthless if the link behind it is misconfigured,
         so this asserts the adapter's own base URL and model."""
