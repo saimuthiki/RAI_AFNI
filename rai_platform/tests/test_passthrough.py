@@ -1623,6 +1623,45 @@ class TestPreferLocalReordersTheJudgeChain(unittest.TestCase):
                               AFNI_JUDGE_PREFER_LOCAL="true")
         self.assertEqual(chain.links[0], "local[nokey]")
 
+    def test_naming_local_explicitly_survives_a_refused_probe(self):
+        """THE ESCAPE HATCH, and the reason the refusal branch can be strict.
+
+        The probe reads `GET /models`. A judge call is `POST /chat/completions`.
+        A server can authenticate the first and serve the second unauthenticated
+        - or gate `/models` behind a scope the key does not carry - and then the
+        OpenAI SDK works by hand while the probe answers 401. AFNI hit exactly
+        that ambiguity: their snippet returned a completion, their boot log
+        returned 401, and both were true of the same box.
+
+        `_prefer_local` only ever REORDERS. It never removes, so a chain that
+        already names `local` first keeps it first when the probe is refused, and
+        the operator's typed order is the authority - which is what makes it safe
+        for the refusal branch to be non-overridable.
+        """
+        gated = StubTargetServer(models_status=401)
+        try:
+            chain, _ = self.chain(
+                AFNI_JUDGE_PROVIDER="local,openai",
+                OPENAI_API_KEYS="k1",
+                LOCAL_BASE_URL=gated.base_url,
+                LOCAL_MODEL=MODEL,
+                LOCAL_API_KEYS="test-key-123",
+                AFNI_JUDGE_PREFER_LOCAL="true")
+            self.assertEqual(chain.links, ["local[0]", "openai[0]"])
+            # The preference itself was still NOT honoured - it had nothing to
+            # do, and `/healthz` must not claim credit for an order the operator
+            # typed. The two facts are independent and both are reported.
+            self.assertFalse(chain.describe()["prefer_local"]["honoured"])
+            self.assertTrue(chain.describe()["prefer_local"]["unauthorized"])
+            before = len(gated.requests)
+            with self.assertRaises(providers.JudgeUnavailable):
+                chain.score("rate this", "some text")
+            posts = [row for row in gated.requests[before:] if row[0] == "POST"]
+            self.assertTrue(posts, "the explicit local link was never called")
+            self.assertTrue(posts[0][2], "the LOCAL_API_KEYS value was not sent")
+        finally:
+            gated.close()
+
     def test_the_local_judge_actually_points_at_the_probed_endpoint(self):
         """Reordering a name is worthless if the link behind it is misconfigured,
         so this asserts the adapter's own base URL and model."""
