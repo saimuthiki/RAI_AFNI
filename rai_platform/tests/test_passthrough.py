@@ -330,7 +330,11 @@ class TestTheAllowedPath(unittest.TestCase):
     def test_the_request_went_to_chat_completions_with_the_configured_model(self):
         sent = json.loads(self.counting.completions()[0].content)
         self.assertEqual(sent["model"], MODEL)
-        self.assertEqual(sent["messages"],
+        # The operator's frame first, then the caller's message unchanged. The
+        # frame is `AFNI_TARGET_SYSTEM_PROMPT`, applied in `TargetClient` so it
+        # never reaches the guard event - see test_target_system_prompt.py.
+        self.assertEqual(sent["messages"][0]["role"], "system")
+        self.assertEqual(sent["messages"][1:],
                          [{"role": "user", "content": "what is a guardrail?"}])
 
     def test_both_verdicts_are_present_and_share_one_step_id(self):

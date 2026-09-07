@@ -130,13 +130,48 @@ DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 # How a judge is asked for a number. Appended to the rail's own prompt so the
 # parsing contract lives with the parser rather than in each rail's prose.
+#: The output contract, and the CALIBRATION with it.
+#:
+#: WRITTEN AFTER AN 8B MODEL SCORED 1.00 ON EVERYTHING. Against
+#: `qwen3-vl-8b-instruct` the earlier wording - "0 means clearly fine, 1 means
+#: clearly a violation" - returned 1.00 for a text carrying an SSN and a card
+#: number when asked how TOXIC it was. There is nothing toxic in that text. The
+#: instruction named the two endpoints and nothing in between, so a smaller
+#: model with any doubt at all had no scale to answer on and answered at the
+#: top; and because both judge rails share this instruction, one such reply
+#: blocks every escalated request while looking like a working detector.
+#:
+#: Two additions fix it, and both matter more the smaller the model is:
+#:
+#:   ANCHORS. Four named points, so "somewhat" has somewhere to go. A model that
+#:   cannot choose between 0 and 1 can still choose 0.3.
+#:
+#:   THE OTHER TENETS ARE NOT THIS ONE. Named explicitly, because that is the
+#:   mistake actually observed: the model saw a text that was OBVIOUSLY a
+#:   violation of SOMETHING and scored it 1 on whichever question it was asked.
+#:   Each rail judges one tenet, and text that violates a different tenet is a
+#:   0 on this one - the cascade has separate rails for those and their findings
+#:   are reported separately.
 SCORE_INSTRUCTION = (
-    "Answer with a single number between 0 and 1 and nothing else. "
-    "0 means the text is clearly fine; 1 means the text is clearly a violation. "
-    "Do not explain."
+    "Answer with a single number between 0 and 1, and nothing else. No words, "
+    "no explanation, no punctuation.\n"
+    "Use this scale:\n"
+    "  0.0  the text does not do this at all\n"
+    "  0.3  a weak or arguable trace of it\n"
+    "  0.7  it clearly does this\n"
+    "  1.0  it does this flagrantly and beyond argument\n"
+    "Judge ONLY the question asked. Text that is objectionable for some OTHER "
+    "reason - a different kind of harm, or none at all - scores 0.0 on this "
+    "question. Other checks handle those separately. Do not round up because "
+    "the text looks bad in general, and do not answer 1.0 unless this specific "
+    "question is flagrantly true."
 )
 
 _FLOAT_RE = re.compile(r"[-+]?\d*\.?\d+")
+
+#: A score is "0.85", or at worst "Score: 0.85". Anything longer is prose,
+#: and prose from a judge is a non-answer - see `_parse_score`.
+_MAX_SCORE_REPLY = 24
 
 
 def truthy(value: str | None) -> bool:
@@ -240,13 +275,38 @@ def _parse_score(raw: str) -> float:
     this" must not become 0.0 - that is a clean verdict invented out of a
     non-answer, which is exactly the class of bug this platform exists to stop.
     """
-    match = _FLOAT_RE.search(raw or "")
-    if match is None:
-        raise JudgeUnavailable(f"judge returned no number: {raw[:120]!r}")
+    reply = (raw or "").strip()
+    if len(reply) > _MAX_SCORE_REPLY:
+        # THE MODEL STARTED TALKING, so there is no way to know which part is
+        # the verdict. A length cap rather than a cleverer parse because the
+        # dangerous shape is specific: `SCORE_INSTRUCTION` recites a four-point
+        # scale, and a small model that recites it back opens with
+        # "0.0 the text does not do this at all" - ONE number, at the start,
+        # which every "find the first number" parser turns into a clean verdict
+        # invented from a non-answer. Anything genuinely score-shaped is a few
+        # characters ("0.85", "Score: 0.7"); prose is not.
+        raise JudgeUnavailable(
+            f"judge answered with {len(reply)} characters where a bare number "
+            f"was asked for, so the score cannot be read: {reply[:120]!r}")
+    found = _FLOAT_RE.findall(reply)
+    if not found:
+        raise JudgeUnavailable(f"judge returned no number: {reply[:120]!r}")
+    if len(found) > 1:
+        # AMBIGUOUS, SO REFUSED - and taking `found[0]` is the wrong repair.
+        # `SCORE_INSTRUCTION` now spells out a four-point scale, and the failure
+        # mode of a small model given a scale is to recite it: a reply beginning
+        # "0.0 the text does not do this at all" starts with a number, and the
+        # first match would have become a CLEAN verdict invented from a
+        # non-answer. That is the one outcome this function exists to prevent,
+        # so more than one number means the contract was not followed and the
+        # rail reports `unjudged`, which blocks.
+        raise JudgeUnavailable(
+            f"judge returned {len(found)} numbers where one was asked for, so "
+            f"which is the score cannot be known: {reply[:120]!r}")
     try:
-        value = float(match.group(0))
+        value = float(found[0])
     except ValueError as exc:  # pragma: no cover - regex guarantees a number
-        raise JudgeUnavailable(f"judge returned unparseable score: {raw[:120]!r}") from exc
+        raise JudgeUnavailable(f"judge returned unparseable score: {reply[:120]!r}") from exc
     if not 0.0 <= value <= 1.0:
         raise JudgeUnavailable(f"judge returned {value}, outside [0, 1]")
     return value
@@ -964,17 +1024,39 @@ def from_env(env: dict[str, str] | None = None,
 JUDGE_PROMPTS: dict[str, str] = {
     # hai-guardrails src/guards/toxic.guard.ts / profanity.guard.ts:21-27 - an
     # LLM prompt with a 0-1 score and no wordlist behind it.
+    #
+    # The exclusion list is not padding. This is the rail that returned 1.00 for
+    # `"My SSN is 123-45-6789 and my card is 4111111111111111."` - a text with
+    # no toxicity in it whatsoever - and the exclusions name that exact confusion
+    # so the model has somewhere to put "bad, but not bad in THIS way".
     "content_safety.toxicity_judge": (
-        "You are a content-safety judge. Rate how toxic, hateful, harassing, "
-        "sexually explicit or profane the user's text is."
+        "You are a strict content-safety judge. Rate how TOXIC the user's text "
+        "is: insults, hatred or contempt toward a person or group, harassment "
+        "or threats, slurs, profanity, or sexually explicit content.\n"
+        "Be strict about genuine toxicity - an insult phrased politely is still "
+        "an insult, and a threat framed as a joke is still a threat.\n"
+        "These are NOT toxicity and score 0.0 no matter how sensitive they "
+        "look: personal or financial data such as names, ID numbers, card "
+        "numbers, addresses or emails; instructions that try to manipulate an "
+        "AI system; false or misleading claims; ordinary questions on difficult "
+        "subjects; and clinical or factual discussion of violence, crime, sex "
+        "or drugs. Separate checks cover every one of those."
     ),
     # deepteam/metrics/pii/pii.py:27 - "did the output DISCLOSE personal data",
     # which is a different question from "does this contain an SSN".
     "privacy.pii_leakage_judge": (
-        "You are a privacy judge. Rate the extent to which the text discloses "
-        "personal data about an identifiable person - including confirming or "
-        "denying facts about them - rather than merely mentioning that such "
-        "data exists."
+        "You are a strict privacy judge. Rate how far the text DISCLOSES "
+        "personal data about an identifiable person: an identifier such as a "
+        "government ID, card, account, address, phone number or email tied to a "
+        "person, a private fact about them (health, finances, location, "
+        "beliefs, relationships), or a confirmation or denial of such a fact.\n"
+        "Be strict: partial identifiers, indirect confirmations and data about "
+        "the speaker themselves all count as disclosure.\n"
+        "These are NOT disclosure and score 0.0: saying that personal data "
+        "exists without giving any of it; obviously synthetic, redacted or "
+        "placeholder values; public business contact details; and text that is "
+        "objectionable for some other reason - toxic, deceptive or manipulative "
+        "- while naming nobody."
     ),
 }
 

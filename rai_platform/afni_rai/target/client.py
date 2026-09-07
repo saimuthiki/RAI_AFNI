@@ -77,9 +77,26 @@ ENV_API_KEY = "AFNI_TARGET_API_KEY"
 ENV_TIMEOUT = "AFNI_TARGET_TIMEOUT"
 ENV_MAX_TOKENS = "AFNI_TARGET_MAX_TOKENS"
 ENV_PROBE_TIMEOUT = "AFNI_TARGET_PROBE_TIMEOUT"
+ENV_SYSTEM_PROMPT = "AFNI_TARGET_SYSTEM_PROMPT"
 
 DEFAULT_TIMEOUT = 60.0        # .env.example ships 60
 DEFAULT_PROBE_TIMEOUT = 2.0   # startup only, and never on the request path
+
+#: The frame the guarded model is given, when the operator sets none.
+#:
+#: DELIBERATELY GENERAL, AND DELIBERATELY NOT A GUARDRAIL. This is the system
+#: prompt of the AI SYSTEM BEING GUARDED, not of a rail - so it asks for a
+#: helpful assistant and nothing more. Writing safety rules in here would put
+#: a second, unauditable policy in front of the model: the target's own refusals
+#: are invisible to the cascade, produce no finding, no attribution and no audit
+#: row, and a demo whose blocks came from the target's training rather than from
+#: the rails would be measuring the wrong thing. The guardrails are the control;
+#: this is the thing under control.
+DEFAULT_SYSTEM_PROMPT = (
+    "You are a helpful, accurate and concise assistant. Answer the user's "
+    "question directly. If you do not know something, say so rather than "
+    "guessing. Do not invent facts, sources, names or numbers."
+)
 
 # Usage counters are copied out of the target's response as INTEGERS ONLY, and
 # nested one level deep at most. The reason is not tidiness. When the output
@@ -128,6 +145,10 @@ class TargetConfig:
     timeout: float = DEFAULT_TIMEOUT
     max_tokens: int | None = None
     api_key: str | None = field(default=None, repr=False, compare=False)
+    #: Prepended to every generation. Not a credential and not withheld from
+    #: `describe()`: an operator has to be able to read the frame their model is
+    #: answering under, and a hidden system prompt is a hidden behaviour change.
+    system_prompt: str = DEFAULT_SYSTEM_PROMPT
 
     @property
     def api_key_configured(self) -> bool:
@@ -142,6 +163,7 @@ class TargetConfig:
             "timeout_s": self.timeout,
             "max_tokens": self.max_tokens,
             "api_key_configured": self.api_key_configured,
+            "system_prompt": self.system_prompt,
         }
 
 
@@ -276,6 +298,12 @@ def config_from_env(env: dict[str, str] | None = None) -> TargetConfig | None:
         timeout=_float_env(env, ENV_TIMEOUT, DEFAULT_TIMEOUT),
         max_tokens=_int_env(env, ENV_MAX_TOKENS),
         api_key=(env.get(ENV_API_KEY) or "").strip() or None,
+        # Blank means the shipped default, as it does for every other value in
+        # this block. There is deliberately no way to send NO system prompt: an
+        # unframed model is not a state worth supporting, and an operator who
+        # wants different framing writes it here.
+        system_prompt=((env.get(ENV_SYSTEM_PROMPT) or "").strip()
+                       or DEFAULT_SYSTEM_PROMPT),
     )
 
 
@@ -342,6 +370,28 @@ class TargetClient:
         return headers
 
     # ------------------------------------------------------------ generation --
+    def _framed(self, messages: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+        """The operator's system prompt, then the caller's messages.
+
+        FIRST, AND NOT INSTEAD OF. A caller that sends its own system message
+        keeps it - it follows ours - because dropping it would silently discard
+        an instruction the client can see in its own request. But ours goes in
+        front and cannot be removed by a request, which is the point: the frame
+        the guarded model answers under is a deployment decision, not a
+        per-request one, or any caller could strip it by sending a system
+        message of their own.
+
+        Applied HERE rather than in `passthrough.run`, deliberately. The
+        messages the guard rails judge are the ones the CALLER sent; adding our
+        own boilerplate to the guard event would have every input verdict
+        scoring text the client never wrote, and would put our own prompt in the
+        audit record as if the user had typed it.
+        """
+        if not self.config.system_prompt:
+            return list(messages)
+        return [{"role": "system", "content": self.config.system_prompt},
+                *(dict(message) for message in messages)]
+
     def complete(self, messages: Sequence[dict[str, Any]]) -> TargetCompletion:
         """POST `{base_url}/chat/completions` once and return the answer.
 
@@ -357,7 +407,7 @@ class TargetClient:
         if not messages:
             raise TargetError("bad_request", "no messages to send to the target")
         body: dict[str, Any] = {"model": self.config.model,
-                                "messages": list(messages)}
+                                "messages": self._framed(messages)}
         if self.config.max_tokens is not None:
             body["max_tokens"] = self.config.max_tokens
 
