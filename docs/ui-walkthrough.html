@@ -224,7 +224,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
     <li><a href="#flow"><span class="n">§</span>The whole journey</a></li>
     <li><a href="#words"><span class="n">§</span>Six words to learn</a></li>
     <li><a href="#decode"><span class="n">§</span>Reading the answer</a></li>
-    <li class="grp">The nine screens</li>
+    <li class="grp">The eleven screens</li>
     <li><a href="#v1"><span class="n">1</span>Live check</a></li>
     <li><a href="#v2"><span class="n">2</span>How it works</a></li>
     <li><a href="#v3"><span class="n">3</span>Tenets</a></li>
@@ -234,6 +234,8 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
     <li><a href="#v7"><span class="n">7</span>Media</a></li>
     <li><a href="#v8"><span class="n">8</span>Corpus</a></li>
     <li><a href="#v9"><span class="n">9</span>Frameworks</a></li>
+    <li><a href="#v10"><span class="n">10</span>Before and after</a></li>
+    <li><a href="#v11"><span class="n">11</span>Governance</a></li>
     <li class="grp">Always on screen</li>
     <li><a href="#topbar"><span class="n">§</span>Top bar &amp; warning strip</a></li>
     <li><a href="#legend"><span class="n">§</span>The left-hand legend</a></li>
@@ -461,8 +463,8 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
 
 <!-- ===================================================================== -->
 <section id="screens" class="stack-lg">
-  <h2>The nine screens, one at a time</h2>
-  <p class="sub">These are the nine items down the left-hand side of the console,
+  <h2>The eleven screens, one at a time</h2>
+  <p class="sub">These are the eleven items down the left-hand side of the console,
   in the order they appear. Click any of them; nothing on any of these screens can
   break anything.</p>
 
@@ -1328,6 +1330,94 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       <p>There is also a second table — <b>"Cited sources that are not one of the 23"</b> —
       listing projects a check cites that were never part of the original review. Keeping
       that visible stops the count from drifting away from the truth.</p></div>
+    </div>
+  </article>
+
+  <article class="view" id="v10">
+    <div class="view__head"><span class="view__n">10</span>
+      <span class="view__t">Before and after</span>
+      <span class="view__click">#/beforeafter</span></div>
+    <div class="view__body">
+      <h4>What this screen is for</h4>
+      <div class="prose"><p>This is the screen that answers "what does the guardrail
+      actually buy us?" with a number instead of an opinion. It takes a sample of the
+      harmful corpus and runs it three times: once with <b>no guardrail at all</b>, once
+      with <b>Stage 1</b>, and once with <b>Stage 1 and 2</b>. You read the three block
+      rates side by side.</p>
+
+      <h4>How to use it</h4>
+      <p>Set <b>Records per rung</b> (200 is a good demo number), leave the top rung at
+      <b>Stage 1 + 2</b>, leave <b>Stratified</b> selected, and press
+      <b>Run the comparison</b>. It takes a minute or two.</p>
+
+      <h4>Why it runs the same records at every rung</h4>
+      <p>This is the one design decision worth understanding on this screen. It would be
+      easier to draw a fresh sample for each rung — and it would also be wrong. The
+      corpus is 42% content-safety prompts, so two different draws can differ by several
+      percentage points on their own. If each rung had its own sample, part of the
+      improvement you see between rung 1 and rung 2 would be the luck of the draw rather
+      than the guardrail. Same records, every rung, so the difference is the guardrail.</p>
+
+      <h4>Always choose Stratified</h4>
+      <p>Stratified means an equal share of records per tenet. Without it, a sample is
+      mostly content safety, so the headline number mostly measures one tenet's rails and
+      quietly ignores the other six.</p>
+
+      <h4>The optional extra</h4>
+      <p>There is a tick box for an <b>end-to-end attack-success estimate</b>. It answers
+      a different question — "what would have reached the user?" — and it does so with no
+      model call at all: it runs the input guardrail against the prompts, and the output
+      guardrail against the 519 affirmative completions the corpus already contains
+      (those are what a jailbroken model would have said). It costs a second ladder, so
+      leave it off unless someone asks that question.</p>
+
+      <h4>What to expect</h4>
+      <p>Three rising block rates, and the honest reading is the gap between the top rung
+      and 100%. That gap is what Stage 3 and further tuning are for. If the top rung is
+      barely above the middle one, your Stage-2 model weights are probably not installed
+      — check the warning strip at the top of the page.</p></div>
+    </div>
+  </article>
+
+  <article class="view" id="v11">
+    <div class="view__head"><span class="view__n">11</span>
+      <span class="view__t">Governance</span>
+      <span class="view__click">#/governance</span></div>
+    <div class="view__body">
+      <h4>What this screen is for</h4>
+      <div class="prose"><p>The compliance register — the document an auditor asks for.
+      Seven tenets, each with an owning role, an escalation address, a fail mode, and the
+      rails and thresholds that back it up. Nothing on it is typed by hand: it is
+      generated from the platform that is actually running, so it cannot describe a
+      control that is not there.</p>
+
+      <h4>How to use it</h4>
+      <p>Read it. There is nothing to click. Export it, or point an auditor at the
+      <span class="mono">/v1/governance</span> endpoint behind it.</p>
+
+      <h4>Read the "problems" list first</h4>
+      <p>This is the useful part, and it is deliberately not hidden at the bottom. A
+      generated register that reported no problems would just mean nobody was checking.
+      On a fresh install it will tell you, in plain words, that no contact address is
+      configured — and it will not invent one, because a plausible-looking address that
+      goes nowhere is worse in a compliance document than a visibly unfinished one.</p>
+
+      <h4>The one setting to get right</h4>
+      <p>There are two environment variables and it is easy to pick the wrong one.</p>
+      <p><span class="mono">AFNI_GOVERNANCE_CONTACT</span> takes one real address and
+      uses it verbatim for all seven roles. <span class="mono">AFNI_GOVERNANCE_DOMAIN</span>
+      takes a domain and <i>generates</i> seven aliases from it —
+      <span class="mono">rai-privacy@</span>, <span class="mono">rai-security@</span> and
+      five more. If those aliases do not already exist at your company, you have just put
+      seven bouncing addresses into a compliance artefact.</p>
+      <p>So use <b>CONTACT</b> unless the seven aliases really exist. Either way the
+      register reports the one-shared-mailbox weakness in its own problems list, which is
+      the point: the weakness is written down instead of hidden.</p>
+
+      <h4>Why there are no people's names on it</h4>
+      <p>The framework assigns owners by <b>role</b>, not by person. A register naming
+      individuals is out of date the first time somebody changes team, and it invites the
+      reader to treat a name as a control.</p></div>
     </div>
   </article>
 </section>
