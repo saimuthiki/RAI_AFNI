@@ -200,6 +200,34 @@ def _dedupe(findings: Iterable[Finding]) -> list[Finding]:
     return out
 
 
+def _unconfigured(rail) -> bool:
+    """Does this rail declare that it needs credentials it does not have?
+
+    ONLY a callable `configured()`, and only a False from it. That is the shape
+    the optional CLOUD rails use for "this deployment has not bought this" -
+    `PromptShieldsRail.configured()` reads AZURE_CONTENT_SAFETY_ENDPOINT and
+    _KEY - and it is the same probe `gateway.app._rail_available` already
+    reports on. A `configured` PROPERTY is a different thing (the schema and
+    rubric rails use one to mean "given something to check against") and is
+    deliberately not read here.
+
+    NOT `available()` and NOT `dependency_available()`. Those mean a package or
+    a model is missing on a host where the rail WAS meant to run - a fault, and
+    a fault still reports `unjudged` and fails closed. The distinction is the
+    one the coverage report already draws between `cloud-not-configured` and
+    `dependency-missing`, and the one upstream draws in as many words:
+    `if (!API_KEY) emitAllow() // not configured -> inert, not degraded`
+    (references/openguardrails-main/.../hooks/ogr-hook.mjs:241).
+    """
+    probe = getattr(rail, "configured", None)
+    if not callable(probe):
+        return False
+    try:
+        return not probe()
+    except Exception:  # noqa: BLE001 - a broken probe must not decide a verdict
+        return False
+
+
 def _applies(rail, kind) -> bool:
     """Does this rail belong on this side of the AI system?
 
@@ -262,15 +290,19 @@ def _severe(findings: Iterable[Finding]) -> bool:
 #: WHY `full` IS NOT THE DEFAULT, THOUGH IT IS THE STRONGER POLICY. Two things
 #: happen at Stage 3 that do not happen at Stage 2.
 #:
-#: ONE - an unconfigurable Stage-3 rail poisons every request. `unjudged`
-#: ALWAYS blocks, by design, and `security.prompt_shields` reports `configured()
-#: is False` on any deployment without an Azure Content Safety key. Under `full`
-#: every request reaches it, so every request blocks. Measured: with `full` on a
-#: host with no Azure key, "What is the capital of France?" came back `block`,
-#: `stages_run 3`. A 100% block rate is not a strict guardrail, it is an outage
-#: with a rationale - and the first thing anyone does with it is switch the whole
-#: gateway off. `stage2` reaches Stage 3 only for requests something already
-#: found severe, which is where that rail's absence is worth blocking over.
+#: ONE - a Stage-3 rail that cannot judge poisons every request. `unjudged`
+#: ALWAYS blocks, by design. Measured with `full` on a host with no Azure key,
+#: before the credential gate existed: "What is the capital of France?" came
+#: back `block`, `stages_run 3`, because `security.prompt_shields` was mounted
+#: and keyless. A 100% block rate is not a strict guardrail, it is an outage
+#: with a rationale. That specific case is now handled at the source - an
+#: UNCONFIGURED optional rail is skipped per request, never `unjudged` (see the
+#: credential gate in `evaluate_iter`) - so it no longer argues for the default.
+#: What still does: a Stage-3 rail whose package or weights are missing on a
+#: host where it WAS meant to run. That is a fault, it still blocks, and under
+#: `full` it blocks everything. `stage2` reaches Stage 3 only for requests
+#: something already found severe, which is where a fault is worth blocking
+#: over.
 #:
 #: TWO - a judge call SHIPS THE TEXT to whoever serves it. With a cloud link
 #: first in the chain, `full` means every message this gateway sees leaves the
@@ -487,6 +519,29 @@ class Cascade:
                 # which stamped a coverage warning on almost every request and
                 # trained operators to ignore the loudest line in the product.
                 if not _applies(rail, event.kind):
+                    not_applicable.append(rail.name)
+                    continue
+                # Credential gate, same treatment as the direction gate above.
+                #
+                # MEASURED ON AFNI'S HOST, with the local judge and both cloud
+                # keys working: every request that reached Stage 3 came back
+                # BLOCK with "No finding blocked this. A payload path went
+                # unjudged" - because `security.prompt_shields` is mounted,
+                # needs an Azure Content Safety key nobody there has, and so
+                # returned `unjudged` on every single call. With Stage 2 now
+                # looking at every undecided request and escalating on a flag,
+                # that was most requests. A rail nobody configured was deciding
+                # every verdict, and the console's own copy already conceded the
+                # point: "fails closed without protecting anything".
+                #
+                # So an UNCONFIGURED optional rail is inert: skipped, recorded as
+                # skipped, not counted as coverage, and never an `unjudged` path.
+                # `/v1/coverage` still reports it under `cloud-not-configured`,
+                # `/v1/rails` still shows it with `available: false`, and
+                # `/healthz` names it - under its own key, because it is not a
+                # degradation. A rail that IS configured and then fails at call
+                # time is unchanged: that is a fault, and it still blocks.
+                if _unconfigured(rail):
                     not_applicable.append(rail.name)
                     continue
                 ran.append(rail.name)

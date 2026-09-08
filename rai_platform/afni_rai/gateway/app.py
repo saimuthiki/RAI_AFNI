@@ -490,7 +490,10 @@ class Gateway:
             # Azure key: "What is the capital of France?" came back `block`.
             blind = [rail.name for rail in self.rails
                      if rail.stage is Stage.STAGE_3
-                     and _rail_available(rail)[0] is False]
+                     and _rail_available(rail)[0] is False
+                     # Unconfigured is skipped, not blind - the engine's
+                     # credential gate never lets it produce an unjudged path.
+                     and _rail_available(rail)[1] != "configured() is False"]
             if blind:
                 LOGGER.error(
                     "%s=full and %d Stage-3 rail(s) CANNOT JUDGE on this host "
@@ -798,8 +801,20 @@ class Gateway:
 
     def health(self) -> dict[str, Any]:
         rows = self.rail_rows()
+        # TWO LISTS, because they are two different facts and only one is a
+        # degradation. A rail whose package or weights are missing on a host
+        # where it was meant to run will report `unjudged` and block - that is a
+        # fault, and the banner is right to shout. A rail whose only complaint is
+        # `configured() is False` is an optional cloud service nobody bought:
+        # the engine skips it per request (`cascade/engine.py`, the credential
+        # gate beside the direction gate), it never becomes an unjudged path,
+        # and calling that "degraded" put a warning strip on every install
+        # without an Azure key - which is every install so far.
         unavailable = [f"{r['name']}: {r['unavailable_reason']}"
-                       for r in rows if r["available"] is False]
+                       for r in rows if r["available"] is False
+                       and r["unavailable_reason"] != "configured() is False"]
+        not_configured = [r["name"] for r in rows if r["available"] is False
+                          and r["unavailable_reason"] == "configured() is False"]
         absent = [{"module": module, "present": False, "powers": powers}
                   for module, powers in OPTIONAL_DEPENDENCIES
                   if importlib.util.find_spec(module) is None]
@@ -823,6 +838,9 @@ class Gateway:
             "rails_mounted": len(self.rails),
             "tenets_not_loaded": list(self.problems),
             "rails_unavailable": unavailable,
+            # Skipped per request, not counted as coverage, never `unjudged`.
+            # Listed so nobody believes the capability is quietly on.
+            "rails_not_configured": not_configured,
             "judge_rails_without_a_judge": providers.unbound_judge_rails(self.rails),
             "judge_providers_skipped": list(self.judge_providers_skipped),
             "dependencies_absent": absent,

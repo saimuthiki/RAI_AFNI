@@ -105,6 +105,11 @@ const LIST_LABELS = {
   rails_unavailable: 'rails mounted but unable to run',
   judge_rails_without_a_judge: 'judge rails with no judge configured',
   tenets_not_loaded: 'tenets that failed to load',
+  // Not a degradation. An optional cloud rail with no credentials is skipped
+  // per request, recorded as skipped, and never becomes an unjudged path - the
+  // same treatment as a rail that does not apply to this direction. It is
+  // listed so nobody thinks the capability is silently on.
+  rails_not_configured: 'optional rails skipped — no credentials set',
 };
 
 function paintHealth() {
@@ -119,7 +124,13 @@ function paintHealth() {
   const degraded = String(h.status || '').toLowerCase() !== 'ok'
     && String(h.status || '').toLowerCase() !== 'healthy';
 
-  if (!degraded && !lists.length && !absent.length) { healthBox.hidden = true; clear(healthBox); return; }
+  // A gateway whose only note is "an optional rail has no key" is not degraded
+  // and gets no strip at all - a banner on every healthy install trains people
+  // to stop reading it. The unconfigured list still renders inside the strip
+  // whenever something ELSE puts the strip up.
+  const onlyUnconfigured = !degraded && !absent.length
+    && lists.every(([label]) => label === LIST_LABELS.rails_not_configured);
+  if (onlyUnconfigured) { healthBox.hidden = true; clear(healthBox); return; }
 
   const mounted = h.rails_mounted ?? null;
   const cannotRun = [].concat(h.rails_unavailable ?? []).length;

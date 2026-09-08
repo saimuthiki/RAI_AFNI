@@ -77,7 +77,7 @@ const RUNGS = [1, 2, 3, 4];
 export async function render(root) {
   clear(root);
 
-  const ui = { dir: 'prompt', dead: new Map(), stageTotals: new Map() };
+  const ui = { dir: 'prompt', dead: new Map(), noKey: new Set(), stageTotals: new Map() };
 
   root.append(pageHead(
     'Live check',
@@ -92,7 +92,18 @@ export async function render(root) {
   // were invoked", and "4 of the 7 that ran here cannot judge on this host".
   try {
     const inv = await railsWithHealth();
-    ui.dead = new Map(inv.rails.filter((r) => r.available === false)
+    // Two different facts, kept apart. `dead` is a rail whose package or weights
+    // are missing on a host where it was meant to run: it will run, return
+    // "could not judge", and fail closed - the hazard colour is earned. `noKey`
+    // is an optional cloud rail nobody bought: the engine skips it per request,
+    // it never becomes an unjudged path, and painting it as "cannot judge" put a
+    // hazard mark on every install without an Azure key.
+    const NO_KEY = 'configured() is False';
+    ui.noKey = new Set(inv.rails
+      .filter((r) => r.available === false && r.unavailable_reason === NO_KEY)
+      .map((r) => r.name));
+    ui.dead = new Map(inv.rails
+      .filter((r) => r.available === false && r.unavailable_reason !== NO_KEY)
       .map((r) => [r.name, r.unavailable_reason || 'reported unavailable']));
     ui.stageTotals = new Map([...inv.byStage].map(([s, list]) => [s, list.length]));
     ui.railTotal = inv.rails.length;
@@ -564,13 +575,15 @@ function paintStage(ui, s, stopAt) {
   r.row.dataset.state = 'ran';
   const total = ui.stageTotals.get(s.stage);
   const dead = s.railsRun.filter((n) => ui.dead.has(n));
-  // On a stage that RAN, rails_skipped means one thing only: those rails do not
-  // apply to this direction. A prompt has no answer to ground and no output
-  // contract to validate, so the output-side rails had nothing to look at. That
-  // is not a failure to look, and the engine deliberately records it as skipped
-  // rather than unjudged — otherwise every request would have fail-closed on
-  // the output rails.
-  const wrongWay = s.railsSkipped;
+  // On a stage that RAN, rails_skipped means one of two things, and the copy has
+  // to say which. Either the rail does not apply to this direction - a prompt
+  // has no answer to ground - or it is an optional cloud rail with no
+  // credentials set. Both are recorded as skipped rather than unjudged, on
+  // purpose: neither is a failure to look, and either one as unjudged would
+  // fail-close every request. Calling a no-key rail "output-side only" was
+  // simply false.
+  const noKey = s.railsSkipped.filter((n) => ui.noKey.has(n));
+  const wrongWay = s.railsSkipped.filter((n) => !ui.noKey.has(n));
   const bits = [total
     ? `${s.railsRun.length} of ${total} rails apply here`
     : `${plural(s.railsRun.length, 'rail')}`];
@@ -599,6 +612,14 @@ function paintStage(ui, s, stopAt) {
         : 'A model response is not a prompt, so the attack corpus has nothing to match it against.')
       + ' A rail that does not apply has not failed to look — the engine records it as skipped, '
       + 'never as unjudged.';
+  }
+  if (noKey.length) {
+    r.row.append(el('div', { style: 'grid-column:2' }, el('p', { class: 'rung__detail', text:
+      `${plural(noKey.length, 'optional rail')} here ${noKey.length === 1 ? 'has' : 'have'} `
+      + 'no credentials set, so the engine skipped '
+      + `${noKey.length === 1 ? 'it' : 'them'} — not asked, not counted as coverage, and never `
+      + '"could not judge". Set the key and it joins this stage; leave it and nothing here '
+      + 'blocks on its account.' })));
   }
   if (dead.length) {
     const box = el('p', { class: 'rung__detail', text:

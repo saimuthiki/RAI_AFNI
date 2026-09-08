@@ -1701,6 +1701,14 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       <div class="flat mono" style="font-size:.86rem">DEGRADED &nbsp; 7 of 32 mounted rails
       cannot judge on this host. They stay mounted, run, and return "could not judge" —
       which fails closed without protecting anything.</div>
+      <p>That sentence is about rails whose <b>package or model weights are missing</b> on a
+      machine where they were meant to run — a fault. It is <b>not</b> about an optional
+      cloud rail you simply have not bought a key for. Those are a different list,
+      <i>optional rails skipped — no credentials set</i>, they are skipped per request the
+      same way a rail that does not apply to the direction is skipped, they never become a
+      "could not judge" path, and they do not put the strip up. So a machine whose only
+      note is "no Azure key" reads <b>Gateway live</b> with no strip at all — because
+      that machine is not degraded, it has declined an option.</p>
       <p>Click <b>What exactly is missing</b> to expand it. You will get named lists:
       checks that cannot run, judge checks with no paid key configured, tenets that failed
       to load, and Python packages that are absent (each with what it powers). On the far
@@ -2180,11 +2188,19 @@ python -m uvicorn afni_rai.gateway.app:create_app --factory --port 8080</div>
         <code>thresholds</code> REPLACES the whole override map rather than merging into
         it, so a second <code>PUT</code> with one key removes the others.</td></tr>
       <tr><td><b>Harmless prompts started blocking after an upgrade</b></td>
-        <td>You are on <code>AFNI_CASCADE_ESCALATION=full</code> with a Stage-3 rail that
-        cannot judge — most often <code>security.prompt_shields</code>, which needs an
-        Azure Content Safety key. Under <code>full</code> every request reaches it, and
-        <code>unjudged</code> always blocks. Use <code>stage2</code> (the default) or
-        configure the rail. Startup logs an ERROR naming the blind rails.</td></tr>
+        <td>You are on <code>AFNI_CASCADE_ESCALATION=full</code> with a Stage-3 rail whose
+        package or weights are <b>missing</b> on this host. Under <code>full</code> every
+        request reaches it, and <code>unjudged</code> always blocks. Use
+        <code>stage2</code> (the default) or install what it needs. Startup logs an ERROR
+        naming the blind rails. This is <b>not</b> caused by an unset Azure key —
+        <code>security.prompt_shields</code> with no credentials is skipped, not blind.</td></tr>
+      <tr><td><b>Every request that reaches Stage 3 blocks, and the verdict says
+        "No finding blocked this"</b></td>
+        <td>This was <code>security.prompt_shields</code> with no Azure key, mounted and
+        returning "could not judge" on every call — a rail nobody configured deciding
+        every verdict. Fixed: an unconfigured optional rail is now skipped per request. If
+        you still see it, the rail that cannot judge is named in <b>What exactly is
+        missing</b>, and it will be one whose weights are absent, not one whose key is.</td></tr>
     </tbody>
   </table></div>
 </section>
