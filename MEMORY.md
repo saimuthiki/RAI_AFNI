@@ -3223,3 +3223,29 @@ done asap".
 - Walkthrough gains screen 12 and says "The twelve screens"; `test_walkthrough.py` counts
   sections against `web/views/*.js`, so the doc cannot fall behind the menu again. The stale
   Sensitivity nav hint "24 thresholds" → 32.
+
+### 2026-09-08 — "I just want to see the output of the target model also" — a reveal flag for withheld completions
+**Type:** Feature
+**Ask:** First real Round-trip run on AFNI's host (sample 3, the fake customer record): prompt
+cleared all three input stages (bias 0.98 flag, PII judge 0.90 / omnibus 1.00 flag), the model
+answered 1042 chars in 6.2 s, the OUTPUT guardrail blocked at Stage 2 and the customer got the
+neutral refusal. AFNI: "for the demo purpose, I just want to see the output of the target model
+also… what kind of response is being blocked by output guardrails. That brings value."
+**What was done:**
+- Read the trace first. The eleven output findings were ten redact/flag rows (SSN at chars
+  392-403, two card numbers at 472-491 and 769-788, a person name, a refusal phrase) and ONE
+  block: `security.injection.deberta_v3_v2` scoring the model's own answer as a prompt injection
+  at 1.00. The PII would have been REDACTED and passed; the block was the injection classifier
+  misfiring on structured text. Told AFNI; not changed — llm-guard runs PromptInjection as an
+  input scanner only, but NeMo's injection_detection runs on output by design, so the rail's
+  BOTH direction is a decision for AFNI (threshold, or input-only), not a defect to fix quietly.
+- Server-side flag `AFNI_REVEAL_BLOCKED_COMPLETION` (default false, never a request field),
+  modelled exactly on `AFNI_REVEAL_SUBJECT`: when on and the decision is `blocked_on_output`,
+  the ChatResponse / `final` frame carry `withheld_completion` and a fixed
+  `withheld_completion_note`; both null otherwise. Still never in a log line or the audit row.
+  Startup WARNING when on; `/healthz` reports `reveal_blocked_completion`.
+- Round-trip screen: step 3 names what carried the block and how many findings only asked for
+  redaction; with the flag on, a hazard panel "What the model actually said — withheld from
+  your customer" shows the text with every caught span highlighted and a legend of span →
+  entity → action → rails; with the flag off, a one-line hint on how to turn it on. Walkthrough
+  §12 and setup .env notes updated.

@@ -19,6 +19,21 @@ section 1 draws. The order is not an implementation detail, it IS the product:
                                key, in any frame, in any log line, in the audit
                                row. The caller gets the verdict that withheld it.
 
+THE ONE EXCEPTION, AND WHY IT IS SERVER-SIDE
+
+A demonstration has a question the default cannot answer: "what did the output
+guardrail just stop?" `AFNI_REVEAL_BLOCKED_COMPLETION` is the switch for that,
+and it sits on the same trust boundary as `AFNI_REVEAL_SUBJECT`: read from the
+server's environment by `Gateway`, default off, no request field, no header, no
+query string. When it is on and the decision is `blocked_on_output`, the
+response (and the streamed `final` frame, which is the same object) carries the
+model's text under `withheld_completion`, next to a fixed
+`withheld_completion_note` saying it was blocked and the customer did not get
+it. That is the whole extent of the exception: the text still goes into no log
+line and no audit row, `completion` stays null, and both keys are null on every
+other decision - so a console never has to guess whether a value under
+`completion` was delivered.
+
 FAIL CLOSED, EVERYWHERE
 
 Every failure on this path resolves to "no completion reaches the caller":
@@ -78,6 +93,13 @@ REFUSAL_TARGET_ERROR = ("I couldn't get an answer from the model just now. "
                         "Nothing was returned, so nothing was shown to you "
                         "unchecked.")
 
+# Fixed, so the key can never be mistaken for a delivered answer - and so the
+# console and the docs can match it verbatim.
+WITHHELD_COMPLETION_NOTE = (
+    "Shown because AFNI_REVEAL_BLOCKED_COMPLETION is on for this gateway. This "
+    "text was blocked; your customer did not receive it. Demonstration setting - "
+    "not for production.")
+
 NOTES = {
     ALLOWED:
         "both guardrails allowed this interaction",
@@ -109,7 +131,9 @@ class Passthrough:
     store and trust boundary rather than re-deriving any of them, so a
     passthrough decision is the same decision `/v1/guard` would have made about
     the same text - including the configured thresholds and fail_mode, and
-    including `AFNI_REVEAL_SUBJECT`.
+    including `AFNI_REVEAL_SUBJECT`. `AFNI_REVEAL_BLOCKED_COMPLETION` is read
+    from the same place (`gateway.reveal_blocked_completion`) and only in
+    `response()`.
     """
 
     def __init__(self, gateway: Any) -> None:
@@ -266,13 +290,30 @@ class Passthrough:
                  degraded: list[str] | None = None) -> dict[str, Any]:
         """Assemble the one object that shows all four steps.
 
-        `completion` is the ONLY key that ever carries model text, and it is
-        `None` on every decision but `allowed`. Nothing else in this object is
-        derived from the completion string.
+        Two keys can carry model text, and they are mutually exclusive:
+
+          `completion`           the delivered answer. `None` on every decision
+                                 but `allowed`.
+          `withheld_completion`  the answer the output guardrail blocked. `None`
+                                 on every decision but `blocked_on_output`, and
+                                 `None` even then unless the SERVER-side
+                                 `AFNI_REVEAL_BLOCKED_COMPLETION` flag is on
+                                 (`gateway.reveal_blocked_completion`). When it
+                                 is populated, `withheld_completion_note` says
+                                 why, in one fixed sentence.
+
+        Nothing else in this object is derived from the completion string. This
+        dict is the wire response and the streamed `final` frame; it is NOT what
+        the audit row is built from - `Gateway.finish` records from the verdict,
+        event and explanation objects before this is ever assembled - so a
+        populated `withheld_completion` reaches the caller and nowhere else.
         """
         refusal = {BLOCKED_ON_INPUT: REFUSAL_INPUT,
                    BLOCKED_ON_OUTPUT: REFUSAL_OUTPUT,
                    TARGET_ERROR: REFUSAL_TARGET_ERROR}.get(decision)
+        reveal = (decision == BLOCKED_ON_OUTPUT and completion is not None
+                  and bool(getattr(self.gateway, "reveal_blocked_completion",
+                                   False)))
         return {
             "decision": decision,
             "step_id": step_id,
@@ -284,6 +325,9 @@ class Passthrough:
             "output_explanation": (output_body or {}).get("explanation"),
             "target": target,
             "completion": completion if decision == ALLOWED else None,
+            # Flag-gated, server-side, demonstration only. See the module docstring.
+            "withheld_completion": completion if reveal else None,
+            "withheld_completion_note": WITHHELD_COMPLETION_NOTE if reveal else None,
             # "no target token was spent on this interaction". True exactly when
             # the target was never called, which is the input-block saving and
             # the not-configured case.
@@ -357,10 +401,14 @@ class Passthrough:
         if _blocked(output_body):
             LOGGER.info("event %s blocked on OUTPUT: the completion was withheld "
                         "(%d chars, not logged)", step_id, len(completion.text))
+            # The text is handed to `response()`, which puts it under
+            # `withheld_completion` ONLY when the server-side demonstration flag
+            # is on, and never under `completion`.
             return self.response(
                 decision=BLOCKED_ON_OUTPUT, step_id=step_id,
                 input_body=input_body, output_body=output_body,
-                target=target, timing=timing, degraded=degraded)
+                target=target, completion=completion.text,
+                timing=timing, degraded=degraded)
 
         return self.response(
             decision=ALLOWED, step_id=step_id, input_body=input_body,
@@ -458,7 +506,7 @@ class Passthrough:
             final = self.response(
                 decision=BLOCKED_ON_OUTPUT, step_id=step_id,
                 input_body=input_body, output_body=output_body, target=target,
-                timing=timing, degraded=degraded)
+                completion=completion.text, timing=timing, degraded=degraded)
         else:
             final = self.response(
                 decision=ALLOWED, step_id=step_id, input_body=input_body,

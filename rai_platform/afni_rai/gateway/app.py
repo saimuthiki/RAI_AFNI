@@ -16,12 +16,19 @@ The decision belongs to `cascade/engine.py`, the fail_mode belongs to
 record to `VerdictStore`. This module wires them together, turns HTTP into a
 `GuardEvent` and back, and owns exactly four things of its own:
 
-  the trust boundary   `reveal_subject` is read from the SERVER's environment and
-                       from nowhere else. There is no request parameter, no query
-                       string and no header that can turn it on. A caller must
-                       never be able to ask the gateway to echo back the secret it
-                       just caught - that would make the endpoint an exfiltration
-                       primitive for anyone who can reach it.
+  the trust boundary   `reveal_subject` and `reveal_blocked_completion` are read
+                       from the SERVER's environment and from nowhere else. There
+                       is no request parameter, no query string and no header
+                       that can turn either on. A caller must never be able to
+                       ask the gateway to echo back the secret it just caught,
+                       or the completion it just withheld - that would make the
+                       endpoint an exfiltration primitive for anyone who can
+                       reach it. `AFNI_REVEAL_SUBJECT` governs matched values in
+                       explanations; `AFNI_REVEAL_BLOCKED_COMPLETION` is the
+                       demonstration switch that lets `/v1/chat` return the text
+                       the output guardrail blocked, labelled, under
+                       `withheld_completion`. Both default off; both are
+                       reported on `/healthz`.
 
   fail closed on error If the cascade raises, this returns HTTP 200 with a BLOCK
                        verdict whose `unjudged` lists the payload paths - never a
@@ -104,6 +111,11 @@ LOGGER = logging.getLogger("afni_rai.gateway")
 # none of them is reachable from a request body.                               #
 # --------------------------------------------------------------------------- #
 ENV_REVEAL = "AFNI_REVEAL_SUBJECT"
+# Demonstration switch for the guarded passthrough: when on, `/v1/chat` and
+# `/v1/chat/stream` return the completion the output guardrail blocked, under
+# `withheld_completion`, labelled. Same trust boundary as ENV_REVEAL - server
+# environment only, never a request field. Default off.
+ENV_REVEAL_COMPLETION = "AFNI_REVEAL_BLOCKED_COMPLETION"
 ENV_AUDIT_DB = "AFNI_AUDIT_DB"
 # Aliased from the target package rather than re-spelled, so the name in an
 # error message cannot drift from the name the loader actually reads.
@@ -366,6 +378,7 @@ class Gateway:
                  verdict_store: VerdictStore | None = None,
                  judge_provider: Any | None = None,
                  reveal_subject: bool | None = None,
+                 reveal_blocked_completion: bool | None = None,
                  target: TargetClient | None = None,
                  probe: bool = True,
                  env: dict[str, str] | None = None) -> None:
@@ -593,6 +606,21 @@ class Gateway:
                 "%s is on: explanations will echo matched values (SSNs, API keys) "
                 "to every caller and into every log this response reaches",
                 ENV_REVEAL)
+        # The second switch on the same boundary. It exists so a demonstration can
+        # show WHAT the output guardrail blocked, not only that it blocked; the
+        # completion is still kept out of every log line and out of the audit row
+        # - only the `/v1/chat` response carries it, labelled. See passthrough.py.
+        self.reveal_blocked_completion = (
+            _truthy(env.get(ENV_REVEAL_COMPLETION))
+            if reveal_blocked_completion is None
+            else bool(reveal_blocked_completion))
+        if self.reveal_blocked_completion:
+            LOGGER.warning(
+                "%s is on: the text of completions the output guardrail blocked "
+                "will be returned to callers of /v1/chat under "
+                "`withheld_completion`. This is a demonstration setting - turn it "
+                "off before anyone else can reach this port",
+                ENV_REVEAL_COMPLETION)
         if self.problems:
             LOGGER.warning("tenets not loaded: %s", "; ".join(self.problems))
 
@@ -898,6 +926,7 @@ class Gateway:
             "dependencies_absent": absent,
             "judge_provider": judge,
             "reveal_subject": self.reveal_subject,
+            "reveal_blocked_completion": self.reveal_blocked_completion,
             "audit_db": self.audit_db,
             "target": target,
         }
@@ -1056,7 +1085,11 @@ def _router(gateway: Gateway) -> APIRouter:
                  response_description=(
                      "All four steps of one interaction. `completion` is present "
                      "only when both guardrails allowed it; a blocked completion "
-                     "is not in the response under any key."),
+                     "is not in the response under any key - unless the "
+                     "server-side AFNI_REVEAL_BLOCKED_COMPLETION flag is on, in "
+                     "which case it is under `withheld_completion`, labelled by "
+                     "`withheld_completion_note`. That flag is a demonstration "
+                     "setting, default off, and cannot be set by a request."),
                  responses={
                      503: {"model": Error, "description":
                            "No target is configured. `details.set` names the two "
@@ -1071,7 +1104,11 @@ def _router(gateway: Gateway) -> APIRouter:
         path from that branch to the target client. A completion the output
         guardrail blocks never reaches the caller: it is absent from the
         response, the SSE frames, the log lines and the audit row, which stores
-        fingerprints and has no column a completion could occupy.
+        fingerprints and has no column a completion could occupy. The one
+        exception is the server-side `AFNI_REVEAL_BLOCKED_COMPLETION`
+        demonstration flag, which puts the blocked text in the response under
+        `withheld_completion` - labelled, and still absent from every log line
+        and from the audit row.
 
         Every failure resolves the same way - fail closed. If either cascade
         raises, that guardrail returns a BLOCK (with `degraded` naming it, and

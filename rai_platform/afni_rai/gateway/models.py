@@ -369,11 +369,19 @@ class ChatResponse(BaseModel):
     The shape is the same whichever way the interaction went, so a console can
     render the whole journey without branching on the decision first.
 
-    `completion` is the only key that ever carries model text, and it is null on
-    every decision except `allowed`. When the output guardrail blocks, the text
-    is not in this object, not in the SSE frames, not in the log and not in the
-    audit row - the audit store keeps fingerprints and has no column it could go
-    into.
+    `completion` is the only key that carries model text by default, and it is
+    null on every decision except `allowed`. When the output guardrail blocks,
+    the text is not in this object, not in the SSE frames, not in the log and
+    not in the audit row - the audit store keeps fingerprints and has no column
+    it could go into.
+
+    The one exception is `withheld_completion`, which is always present and is
+    null unless the SERVER was started with `AFNI_REVEAL_BLOCKED_COMPLETION` on
+    and the decision is `blocked_on_output`. It is a demonstration setting - it
+    exists so an audience can see what the output guardrail stopped - and it is
+    not a request field: `extra=forbid` on `ChatRequest` rejects any attempt to
+    ask for it. `withheld_completion_note` says why the text is there whenever it
+    is, so the two keys cannot be mistaken for a delivered answer.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -395,6 +403,16 @@ class ChatResponse(BaseModel):
     target: TargetCallModel
     completion: str | None = Field(default=None, description=(
         "The model's text, present ONLY when both guardrails allowed it."))
+    withheld_completion: str | None = Field(default=None, description=(
+        "The completion the output guardrail blocked. Populated ONLY when the "
+        "server-side AFNI_REVEAL_BLOCKED_COMPLETION flag is on AND the decision "
+        "is blocked_on_output; null on every other decision and always null "
+        "when the flag is off (the default). A demonstration setting, never a "
+        "request field. The customer did not receive this text."))
+    withheld_completion_note: str | None = Field(default=None, description=(
+        "A fixed sentence explaining why `withheld_completion` is populated. "
+        "Present exactly when `withheld_completion` is - the server-side flag is "
+        "on and the decision is blocked_on_output - and null otherwise."))
     tokens_saved: bool = Field(description=(
         "True when the target was never called, so this interaction cost no "
         "target tokens. A prompt refused on the way in is the cheapest one "
@@ -528,6 +546,11 @@ class HealthResponse(BaseModel):
     rails_mounted: int
     tenets_not_loaded: list[str]
     rails_unavailable: list[str]
+    rails_not_configured: list[str] = Field(default_factory=list, description=(
+        "Mounted rails whose `configured()` is False - an optional third-party "
+        "service with no credential set. Skipped per request, not counted as "
+        "coverage and never `unjudged`; listed so nobody believes the capability "
+        "is quietly on."))
     judge_rails_without_a_judge: list[str] = Field(description=(
         "Each of these reports unjudged for every string, which blocks "
         "client-facing traffic that reaches its stage."))
@@ -546,6 +569,12 @@ class HealthResponse(BaseModel):
         "Server-side only. True means explanations echo matched values; it can "
         "only be set by the AFNI_REVEAL_SUBJECT environment variable, never by "
         "a request."))
+    reveal_blocked_completion: bool = Field(default=False, description=(
+        "Server-side only. True means /v1/chat returns the completion the "
+        "output guardrail blocked under `withheld_completion`, labelled. A "
+        "demonstration setting; it can only be set by the "
+        "AFNI_REVEAL_BLOCKED_COMPLETION environment variable, never by a "
+        "request, and it never reaches a log line or the audit row."))
     audit_db: str
     target: TargetHealth | None = Field(default=None, description=(
         "The AI system this gateway guards, if one is configured. Absent on a "
