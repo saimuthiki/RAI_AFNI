@@ -3197,3 +3197,29 @@ Then: "spawn multiple agents and get this task done asap".
 - Docs, walkthrough, .env.example, README, architecture, setup, request-flow (regenerated) all
   rewritten to the `full` default and 32 thresholds; the Live-check sample renamed
   `Clean — all three look, allows`.
+
+### 2026-09-08 — "Where can I see the subsequent steps?" — the round trip had no screen
+**Type:** Feature
+**Ask:** "I can see only input guardrails are working… if the prompt is safe, it should hit the
+target system and produce some response and then the response is again validated by the output
+rails. So where can I see that subsequent steps?" Then "spawn multiple agents and get this task
+done asap".
+**What was done:**
+- The round trip existed in the API and nowhere else: `POST /v1/chat` and `/v1/chat/stream`
+  (guard the prompt → call the target → guard the completion; four decisions: allowed,
+  blocked_on_input with the model never called, blocked_on_output with the completion withheld
+  from the response, the SSE, the logs and the audit row, target_error). The Live check screen
+  exercises one side at a time by design, so an operator could only ever see allow/block on the
+  prompt.
+- Twelfth console screen `Round trip` (`#/roundtrip`, directly after Live check) drives
+  `/v1/chat/stream`: four steps drawn as one journey — input guardrail (stage rows), the model
+  (name, latency, tokens; the text withheld until judged), output guardrail (stage rows), the
+  customer (the completion only on `allowed`, otherwise the neutral refusal). Timing per step,
+  per-side findings, `tokens_saved`. Needs a live gateway and a configured target; with none it
+  shows the healthz note naming AFNI_TARGET_BASE_URL / AFNI_TARGET_MODEL.
+- Three samples: a clean question (both allow), the jewellery-store prompt (blocked on the way
+  in, model never called), and a request for a realistic customer record with SSN and card
+  number (the OUTPUT guardrail withholds the answer).
+- Walkthrough gains screen 12 and says "The twelve screens"; `test_walkthrough.py` counts
+  sections against `web/views/*.js`, so the doc cannot fall behind the menu again. The stale
+  Sensitivity nav hint "24 thresholds" → 32.

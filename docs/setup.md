@@ -174,7 +174,7 @@ python3 rai_platform/serve.py
 
 | Open | You get |
 |---|---|
-| <http://127.0.0.1:8000/> | the operator console — nine screens |
+| <http://127.0.0.1:8000/> | the operator console — twelve screens, Live check and Round trip first |
 | <http://127.0.0.1:8000/docs> | Swagger, with a ready example per tenet |
 | <http://127.0.0.1:8000/healthz> | which rails can run right now, and why not |
 
@@ -297,7 +297,7 @@ Then in a browser:
 
 | Open | You see |
 |---|---|
-| <http://127.0.0.1:8000/> | the operator console — live streaming checks, tenets, roadmap, frameworks |
+| <http://127.0.0.1:8000/> | the operator console — live streaming checks, the guarded round trip (needs a target), tenets, frameworks |
 | <http://127.0.0.1:8000/docs> | Swagger, with a ready-made example payload per tenet |
 | <http://127.0.0.1:8000/healthz> | which rails can run right now, and which cannot, and why |
 

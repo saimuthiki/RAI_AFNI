@@ -6,6 +6,7 @@ import { probe, readBaseFromLocation, state, onSourceChange } from './api.js';
 import { el, clear, judgeChain } from './ui.js';
 
 import * as live from './views/live.js';
+import * as roundtrip from './views/roundtrip.js';
 import * as architecture from './views/architecture.js';
 import * as tenets from './views/tenets.js';
 import * as rails from './views/rails.js';
@@ -15,11 +16,11 @@ import * as media from './views/media.js';
 import * as sensitivity from './views/sensitivity.js';
 import * as frameworks from './views/frameworks.js';
 
-const VIEWS = { live, architecture, tenets, rails, topics, sensitivity, media, corpus, frameworks };
+const VIEWS = { live, roundtrip, architecture, tenets, rails, topics, sensitivity, media, corpus, frameworks };
 // The route name is a URL slug; the tab title is prose. "Architecture" is the
 // slug, "How it works" is what the nav calls it, and the two should agree.
 const TITLES = {
-  live: 'Live check', architecture: 'How it works', tenets: 'Tenets',
+  live: 'Live check', roundtrip: 'Round trip', architecture: 'How it works', tenets: 'Tenets',
   rails: 'Rails', topics: 'Topics', sensitivity: 'Sensitivity',
   media: 'Media', corpus: 'Corpus',
   frameworks: 'Frameworks',

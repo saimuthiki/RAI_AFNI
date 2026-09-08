@@ -2108,3 +2108,112 @@ td .err { color: var(--hazard-ink); font-size: var(--t-eyebrow); }
   font-variant-numeric: tabular-nums; color: var(--ink);
 }
 .govknobs__v--over { color: var(--cov-2-ink); }
+
+/* ==========================================================================
+   ROUND TRIP — prompt in, answer out, both guarded
+   ========================================================================== */
+/* Four steps drawn as ONE object, the way `.ledger` draws the three stages: a
+   1px grid on the line colour, so a step the run never reached is still part
+   of the picture. The step's state paints the inset edge, like `.stat[data-tone]`,
+   and is always accompanied by the word in `.rt__state` — never colour alone. */
+.rt {
+  display: grid; gap: 1px; grid-template-columns: repeat(4, minmax(0, 1fr));
+  background: var(--line); border: 1px solid var(--line);
+  border-radius: var(--r-md); overflow: hidden;
+}
+.rt__step {
+  position: relative; min-width: 0;
+  padding: var(--sp-4) var(--sp-4) var(--sp-4) calc(var(--sp-4) + 3px);
+  background: var(--surface); display: grid; gap: var(--sp-2); align-content: start;
+}
+.rt__step[data-state="running"]   { box-shadow: inset 3px 0 0 var(--accent); }
+.rt__step[data-state="cleared"]   { box-shadow: inset 3px 0 0 var(--allow); }
+.rt__step[data-state="blocked"]   { box-shadow: inset 3px 0 0 var(--block); }
+.rt__step[data-state="error"]     { box-shadow: inset 3px 0 0 var(--hazard); }
+.rt__step[data-state="unreached"] { background: var(--surface-2); }
+.rt__step[data-state="unreached"] .rt__name { color: var(--ink-3); text-decoration: line-through; text-decoration-thickness: 1px; }
+.rt__step[data-state="unreached"] .rt__say { color: var(--ink-3); }
+
+.rt__top { display: flex; align-items: baseline; gap: var(--sp-2); flex-wrap: wrap; }
+.rt__n {
+  flex: none; width: 1.35rem; height: 1.35rem; border-radius: 50%;
+  display: inline-grid; place-items: center;
+  font: 700 var(--t-eyebrow)/1 var(--mono); color: var(--ink-2);
+  background: var(--surface-3); border: 1px solid var(--line);
+}
+.rt__name { margin: 0; font: 650 var(--t-small)/1.3 var(--sans); letter-spacing: -0.01em; word-break: break-word; }
+.rt__lat { margin: 0; min-height: 1.2em; }
+.rt__say { margin: 0; font-size: var(--t-micro); color: var(--ink-2); line-height: 1.5; }
+.rt__detail { min-width: 0; }
+
+/* The state pill: a word first, a hue second. */
+.rt__state {
+  margin-left: auto; padding: 0.1rem 0.45rem;
+  border: 1px solid var(--line); border-radius: 999px;
+  font: 600 var(--t-eyebrow)/1.5 var(--mono); letter-spacing: 0.04em;
+  text-transform: uppercase; white-space: nowrap; color: var(--ink-3);
+}
+.rt__state[data-state="running"]   { color: var(--accent); border-color: color-mix(in oklab, var(--accent) 45%, transparent); }
+.rt__state[data-state="cleared"]   { color: var(--allow-ink); background: var(--allow-bed); border-color: color-mix(in oklab, var(--allow) 40%, transparent); }
+.rt__state[data-state="blocked"]   { color: var(--block-ink); background: var(--block-bed); border-color: color-mix(in oklab, var(--block) 40%, transparent); }
+.rt__state[data-state="error"]     { color: var(--hazard-ink); background: var(--hazard-deep); border-color: color-mix(in oklab, var(--hazard) 50%, transparent); }
+.rt__state[data-state="unreached"] { border-style: dashed; }
+
+/* The arrow sits on the seam between two steps. */
+.rt__arrow {
+  position: absolute; top: var(--sp-4); right: -0.55rem; z-index: 1;
+  font: 600 var(--t-small)/1 var(--mono); color: var(--ink-3);
+  background: var(--surface); padding: 0 1px;
+}
+
+/* Per-stage list under steps 1 and 3. A struck-through rung was never asked. */
+.rt__stages { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.rt__stages li { display: flex; align-items: baseline; gap: var(--sp-2); font: 500 var(--t-micro)/1.5 var(--mono); color: var(--ink-2); min-width: 0; }
+.rt__stages li[data-state="pending"] .rt__stagetxt { color: var(--ink-3); }
+.rt__stages li[data-state="skipped"] .rt__stagetxt { color: var(--ink-3); text-decoration: line-through; text-decoration-thickness: 1px; }
+.rt__stages li[data-state="skipped"] .stag { filter: saturate(0.55); }
+.rt__stages li[data-state="stopped"] .rt__stagetxt { color: var(--ink); }
+.rt__stagetxt { word-break: break-word; }
+.rt__unjudged { color: var(--hazard-ink); }
+
+/* Model facts once `target_done` lands. */
+.rt__kv { margin: 0; display: grid; gap: 1px var(--sp-3); grid-template-columns: auto 1fr; }
+.rt__kv > div { display: contents; }
+.rt__kv dt { color: var(--ink-3); }
+.rt__kv dd { margin: 0; color: var(--ink); word-break: break-word; }
+.rt__saved { margin: 0; font: 600 var(--t-micro)/1.5 var(--mono); color: var(--allow-ink); }
+
+/* What the customer sees. The same box carries the completion (allowed) and the
+   neutral refusal (everything else): that is the point — one slot, and only one
+   of two things can ever be in it. */
+.rt__completion {
+  margin: 0; padding: var(--sp-3); max-height: 18rem; overflow: auto;
+  white-space: pre-wrap; word-break: break-word;
+  font: 400 var(--t-small)/1.55 var(--sans); color: var(--ink);
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-sm);
+}
+.rt__completion--refusal { color: var(--ink-2); border-style: dashed; }
+
+.rt__target { margin: var(--sp-3) 0 0; word-break: break-all; }
+.rt__target b { color: var(--ink); font-weight: 650; }
+.rt__unverified { color: var(--cov-2-ink); }
+
+.rt__decision { display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap; }
+/* `.dchip--allow` / `.dchip--block` belong to the corpus screen, where polarity
+   is INVERTED on purpose (every corpus record should be blocked). On this screen
+   an allowed round trip is the good outcome, so the chip gets its own modifiers
+   rather than borrowing colours that would paint "allowed" as a miss. */
+.rt__dchip--allow { color: var(--allow-ink); background: var(--allow-bed);
+  border-color: color-mix(in oklab, var(--allow) 40%, transparent); }
+.rt__dchip--block { color: var(--block-ink); background: var(--block-bed);
+  border-color: color-mix(in oklab, var(--block) 40%, transparent); }
+
+.rt__findings { display: grid; gap: var(--sp-3); grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); }
+
+@media (max-width: 64rem) {
+  .rt { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rt__arrow { display: none; }
+}
+@media (max-width: 40rem) {
+  .rt { grid-template-columns: 1fr; }
+}

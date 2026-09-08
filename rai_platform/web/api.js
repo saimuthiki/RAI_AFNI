@@ -451,6 +451,43 @@ export async function guardStream(event, onEvent, { signal } = {}) {
   return sseStream('/v1/guard/stream', event, onEvent, { signal, classify });
 }
 
+// ------------------------------------------------------------- round trip --
+// The guarded passthrough: judge the prompt, call the model, judge the answer.
+// One request, and the frames arrive in the order the steps happen.
+
+/** Build a ChatRequest. The model is NOT a field here - it is AFNI_TARGET_MODEL
+ *  on the server, so a caller cannot route around the model the deployment was
+ *  reviewed against. The agent fields mirror `buildEvent` so both halves of the
+ *  interaction land in the audit trail under the same console identity.
+ *  `extra="forbid"` on the server: an extra key is a 422, not a shrug. */
+export function buildChatRequest({ text }) {
+  return {
+    messages: [{ role: 'user', content: text }],
+    step_id: `console-rt-${Date.now().toString(36)}`,
+    agent_id: 'rai-console',
+    agent_type: 'operator-console',
+    agent_workspace: 'console',
+    agent_user: 'operator',
+  };
+}
+
+/** POST /v1/chat/stream. Frames, in order: input `stage` frames (phase: input),
+ *  then EITHER `final` (blocked_on_input - the model was never called) OR
+ *  `target_start`, `target_done` | `target_error`, output `stage` frames
+ *  (phase: output), `final`, `done`. A cascade exception yields an `error` frame.
+ *
+ *  Uses the frame's own `event` name rather than `classify()`. That heuristic
+ *  was written for /v1/guard/stream, where the terminal frame carries a
+ *  `verdict` key; here the terminal frame is `final`, whose top-level keys are
+ *  `decision`/`input_verdict`/..., so `classify` would file it as "unknown" and
+ *  the console would drop the one frame that carries the answer. The gateway
+ *  duplicates the SSE event name into the JSON body for exactly this reason. */
+export async function chatStream(body, onEvent, { signal } = {}) {
+  return sseStream('/v1/chat/stream', body, onEvent, {
+    signal, classify: (o) => String(o.event || 'message'),
+  });
+}
+
 // ------------------------------------------------------------------ corpus --
 // The regression corpus is 11,369 records and a Stage-2 pass is 1-3 s each, so
 // the sample size is a control, not a detail. `corpusSummary()` feeds the picker
