@@ -665,7 +665,10 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
         wordlists, checksums. Free, sub-millisecond, runs on every request.</div>
         <div><b>Stage 2</b> &mdash; 7 rails, local models. Tens of milliseconds of
         CPU, no network. Runs whenever Stage 1 did not decide.</div>
-        <div><b>Stage 3</b> &mdash; 3 rails, an LLM judge. One model call. Runs on a
+        <div><b>Stage 3</b> &mdash; 4 rails, LLM judges: two ask one narrow question
+        each (toxicity, PII); one &mdash; the omnibus moderation judge, ported from the
+        Infosys Responsible AI Toolkit &mdash; asks every check at once and gets a JSON
+        object with a score per check. One model call each. Runs on a
         severe finding, and the call SHIPS THE TEXT to whoever serves it.</div>
         <div><b>Offline</b> &mdash; 19 capabilities: red-team suites, SHAP,
         benchmarks. Minutes. Never in the request path.</div>
@@ -814,8 +817,8 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       just returns "could not judge", which fails closed. It is protecting nothing while
       it looks busy, which is exactly why the console marks it so loudly.</span></div>
       <h4>What you should see</h4>
-      <p>33 rails: 23 rails at Stage 1, 7 at Stage 2, 3 at Stage 3. By direction,
-      24 rails apply to both sides, 8 are output-only, 1 is input-only.</p>
+      <p>34 rails: 23 rails at Stage 1, 7 at Stage 2, 4 at Stage 3. By direction,
+      25 rails apply to both sides, 8 are output-only, 1 is input-only.</p>
       <p>Every row carries an <span class="mono">evidence</span> string naming the
       upstream file and line, for example
       <span class="mono">llm-guard-main/llm_guard/input_scanners/toxicity.py:13-26,
@@ -1099,16 +1102,19 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
         </ol>
       </div>
       <h4>What you should see</h4>
-      <p>24 thresholds, each with its <b>shipped</b> value (cited to the repository
-      it was ported from) and its <b>effective</b> value. Every detection threshold
+      <p>31 thresholds, each with its <b>shipped</b> value (cited to the repository
+      it was ported from) and its <b>effective</b> value. Seven of them, in the <i>Omnibus judge</i>
+      group, are the omnibus moderation judge's per-check thresholds &mdash; all
+      shipped at 0.6, the value the Infosys moderation layer uses for every one of
+      its prompt-template checks. Every detection threshold
       is <span class="mono">lower-is-stricter</span>. Three presets:</p>
       <div class="kv">
         <div><span class="mono">balanced</span> &mdash; clears every override, back
         to shipped. Touches 0.</div>
         <div><span class="mono">strict</span> &mdash; every detection threshold
-        &times; 0.75, floor 0.25. Touches 21.</div>
+        &times; 0.75, floor 0.25. Touches 28.</div>
         <div><span class="mono">maximum</span> &mdash; every detection threshold to
-        0.10. Touches 21. A red-team and demonstration setting, NOT a production one:
+        0.10. Touches 28. A red-team and demonstration setting, NOT a production one:
         at 0.10 a classifier's noise floor becomes a finding.</div>
       </div>
 
@@ -1660,7 +1666,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       individuals is out of date the first time somebody changes team, and it invites the
       reader to treat a name as a control.</p></div>
       <h4>What you should see</h4>
-      <p>7 tenets, 33 rails mounted, 24 thresholds listed, and a
+      <p>7 tenets, 34 rails mounted, 31 thresholds listed, and a
       <span class="mono">problems</span> array.</p>
 
       <h4>What is worth measuring here</h4>

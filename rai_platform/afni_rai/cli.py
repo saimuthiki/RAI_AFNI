@@ -36,7 +36,13 @@ from .contract.models import Decision, EventKind, GuardEvent, LLMProtocol
 from .registry.capabilities import CapabilityRegistry
 
 TENET_PACKAGES = ("privacy", "security", "fairness", "explainability",
-                  "content_safety", "hallucination", "accountability")
+                  "content_safety", "hallucination", "accountability",
+                  # Not an eighth tenet - it declares Tenet.CONTENT_SAFETY. A
+                  # separate package because its one rail spans every tenet's
+                  # checks in one model call, and no single tenet package is the
+                  # honest home for that. The Infosys moderation layer it is
+                  # ported from is likewise one service across all of them.
+                  "moderation")
 
 
 def load_tenets():

@@ -146,6 +146,30 @@ KNOBS: tuple[Knob, ...] = (
     # ---- Reliability --------------------------------------------------------
     Knob("x.afni.rubric", "Rubric score", "Reliability",
          "The pass mark for a G-Eval style rubric."),
+
+    # ---- Omnibus judge (Stage 3, one call, every check) ---------------------
+    # Ported from the Infosys moderation layer, which uses 0.6 for every one of
+    # these. Each is a judge's self-reported 0-1 score for ONE check inside the
+    # single moderation call, so they sit in one group and share one caveat:
+    # costs a metered call, and the number is the model's opinion.
+    Knob("x.afni.omnibus.prompt_injection", "Omnibus — prompt injection",
+         "Omnibus judge", "The judge's confidence that the text is a prompt "
+         "injection. Blocks."),
+    Knob("x.afni.omnibus.jailbreak", "Omnibus — jailbreak", "Omnibus judge",
+         "The judge's confidence that the text is a jailbreak attempt. Blocks."),
+    Knob("x.afni.omnibus.privacy", "Omnibus — personal data", "Omnibus judge",
+         "The judge's confidence that the text discloses PII. Flags."),
+    Knob("x.afni.omnibus.fairness_bias", "Omnibus — bias", "Omnibus judge",
+         "The judge's confidence that the text is biased toward or against a "
+         "group. Flags.", noisy=True),
+    Knob("x.afni.omnibus.toxicity", "Omnibus — toxicity (8 metrics)",
+         "Omnibus judge", "Applied to EACH of the eight toxicity metrics the "
+         "judge returns; any one above it blocks.", noisy=True),
+    Knob("x.afni.omnibus.restricted_topic", "Omnibus — restricted topic",
+         "Omnibus judge", "The judge's confidence that the text is on one of "
+         "this deployment's blocking topics. Blocks."),
+    Knob("x.afni.omnibus.profanity", "Omnibus — profanity", "Omnibus judge",
+         "The judge's confidence that the text is profane. Flags.", noisy=True),
     Knob("x.afni.gibberish", "Gibberish", "Reliability",
          "How confident before a response is called incoherent."),
     Knob("x.afni.ban_code", "Code in a response", "Reliability",

@@ -114,6 +114,16 @@ RAIL_DEFAULTS: Mapping[str, float] = {
     "x.afni.bias.judge": 0.7,
     # deepeval G-Eval, as mounted here
     "x.afni.rubric": 0.5,
+    # Infosys moderation layer, textTemplate_service.py:495 - `threshold=0.6`,
+    # one value for every template, strictly greater-than. Seven keys rather
+    # than one so an operator can loosen one check without loosening all.
+    "x.afni.omnibus.prompt_injection": 0.6,
+    "x.afni.omnibus.jailbreak": 0.6,
+    "x.afni.omnibus.privacy": 0.6,
+    "x.afni.omnibus.fairness_bias": 0.6,
+    "x.afni.omnibus.toxicity": 0.6,
+    "x.afni.omnibus.restricted_topic": 0.6,
+    "x.afni.omnibus.profanity": 0.6,
 }
 
 # Safe Zone thresholds.go:23 - the fallback used when no key matches at all.

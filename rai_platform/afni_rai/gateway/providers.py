@@ -95,6 +95,7 @@ No network at import: httpx clients are constructed lazily on first call.
 from __future__ import annotations
 
 import copy
+import json
 import logging
 import os
 import re
@@ -310,6 +311,18 @@ class JudgeProvider(Protocol):
         rather than returning a guess."""
         ...
 
+    def complete(self, prompt: str, text: str, *, max_tokens: int) -> str:
+        """The model's reply to `prompt` over `text`, as text, unparsed.
+
+        For judges whose answer is a STRUCTURE rather than one number - the
+        omnibus moderation rail asks one question and gets a JSON object with a
+        score per check, the Infosys moderation layer's shape. The caller owns
+        parsing and owns refusing: a reply that does not parse is `unjudged`,
+        never a guess. Same fall-through rules as `score`, same credential
+        handling, same non-retryable statuses.
+        """
+        ...
+
 
 # --------------------------------------------------------------------------- #
 # Shared plumbing                                                              #
@@ -355,6 +368,71 @@ def _parse_score(raw: str) -> float:
         raise JudgeUnavailable(f"judge returned unparseable score: {reply[:120]!r}") from exc
     if not 0.0 <= value <= 1.0:
         raise JudgeUnavailable(f"judge returned {value}, outside [0, 1]")
+    return value
+
+
+def parse_json_object(raw: str, *, max_chars: int = 4000) -> dict:
+    """Pull ONE JSON object out of a model's reply, or refuse.
+
+    The omnibus moderation rail's reply is a structure - a score per check plus
+    an explanation - so it cannot go through `_parse_score`. The doctrine is the
+    same: refusing beats parsing. Anything here that is not clearly one object
+    raises `JudgeUnavailable`, which the rail turns into `unjudged`, which fails
+    closed. The failure this guards against is the one the Infosys moderation
+    layer has: its dispatcher catches a parse error, returns None, and a later
+    `sum(results, [])` raises TypeError - so a malformed reply takes the whole
+    request down rather than resolving to any verdict
+    (responsible-ai-moderationlayer/src/service/service.py:1033-1036, :1662).
+
+    TOLERANT OF FENCES, STRICT ABOUT EVERYTHING ELSE. Infosys asks the model to
+    "exclude json markers" and small models do it anyway, so a ```json fence or
+    prose around the object is stripped by taking the outermost {...}. But TWO
+    objects, a list, a scalar, or an object nested in the wrong place all refuse:
+    which one is the verdict cannot be known, and guessing is the bug.
+    """
+    reply = (raw or "").strip()
+    if not reply:
+        raise JudgeUnavailable("judge returned an empty reply where a JSON object "
+                               "was asked for")
+    if len(reply) > max_chars:
+        raise JudgeUnavailable(
+            f"judge returned {len(reply)} characters; a moderation object is a "
+            f"few hundred, so this is not one")
+    # THE WHOLE REPLY FIRST, strictly. If it parses, its type is the answer -
+    # and a list, a number or a string is a refusal, not something to dig an
+    # object out of. Slicing to the outermost braces before this check let
+    # `[{"toxicity": 90}]` through as the inner object: a model that wrapped its
+    # verdict in a list would have been read as if it had not.
+    try:
+        whole = json.loads(reply)
+    except ValueError:
+        whole = None
+    else:
+        if isinstance(whole, dict):
+            return whole
+        raise JudgeUnavailable(
+            f"judge returned JSON that is not an object: {type(whole).__name__}")
+    # Only now: a fence or prose around ONE object, which small models emit
+    # however firmly they are told not to.
+    start, end = reply.find("{"), reply.rfind("}")
+    if start < 0 or end < start:
+        raise JudgeUnavailable(f"judge returned no JSON object: {reply[:120]!r}")
+    candidate = reply[start:end + 1]
+    try:
+        value = json.loads(candidate)
+    except ValueError as exc:
+        raise JudgeUnavailable(
+            f"judge returned malformed JSON: {reply[:120]!r}") from exc
+    if not isinstance(value, dict):
+        raise JudgeUnavailable(
+            f"judge returned JSON that is not an object: {type(value).__name__}")
+    # Two top-level objects in one reply - "{...} {...}" - survive the outermost
+    # slice as a parse error above. One object with a stray trailing object does
+    # not, so the tail is checked explicitly.
+    trailing = reply[end + 1:].strip()
+    if "{" in trailing or "}" in trailing:
+        raise JudgeUnavailable("judge returned more than one JSON object; which "
+                               "is the verdict cannot be known")
     return value
 
 
@@ -470,14 +548,16 @@ class OpenAICompatibleJudge(_HttpJudge):
         self.name = name
         self._api_key = api_key
 
-    def score(self, prompt: str, text: str) -> float:
+    def _reply(self, prompt: str, text: str, max_tokens: int) -> str:
+        """One POST, the assistant text back. Both public methods go through
+        here so the two cannot drift in headers, framing or error handling."""
         headers = {"Content-Type": "application/json"}
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
         body = {
             "model": self.model,
             "temperature": 0,
-            "max_tokens": 8,
+            "max_tokens": max_tokens,
             "messages": [
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": text},
@@ -491,7 +571,13 @@ class OpenAICompatibleJudge(_HttpJudge):
         content = (choices[0].get("message") or {}).get("content")
         if not isinstance(content, str):
             raise JudgeUnavailable(f"{self.name} judge returned no message content")
-        return _parse_score(content)
+        return content
+
+    def score(self, prompt: str, text: str) -> float:
+        return _parse_score(self._reply(prompt, text, 8))
+
+    def complete(self, prompt: str, text: str, *, max_tokens: int) -> str:
+        return self._reply(prompt, text, max_tokens)
 
 
 class GeminiJudge(_HttpJudge):
@@ -516,14 +602,19 @@ class GeminiJudge(_HttpJudge):
             raise ValueError("GeminiJudge requires an API key")
         self._api_key = api_key
 
-    def score(self, prompt: str, text: str) -> float:
+    def _reply(self, prompt: str, text: str, max_tokens: int) -> str:
         url = (f"{self.base_url}/models/{self.model}:generateContent"
                f"?key={self._api_key}")
+        # `prompt` is sent AS GIVEN. This adapter used to append
+        # SCORE_INSTRUCTION itself, from before the instruction moved into
+        # `judge_system_prompt` - so Gemini was receiving the four-point scale
+        # twice, and a JSON-returning caller would have had a bare-number demand
+        # stapled onto its structured request. The OpenAI-compatible adapter
+        # never appended it; the two now send byte-identical prompt text.
         body = {
-            "system_instruction": {
-                "parts": [{"text": f"{prompt}\n\n{SCORE_INSTRUCTION}"}]},
+            "system_instruction": {"parts": [{"text": prompt}]},
             "contents": [{"role": "user", "parts": [{"text": text}]}],
-            "generationConfig": {"temperature": 0, "maxOutputTokens": 8},
+            "generationConfig": {"temperature": 0, "maxOutputTokens": max_tokens},
         }
         payload = self._post(url, json=body,
                              headers={"Content-Type": "application/json"})
@@ -534,8 +625,14 @@ class GeminiJudge(_HttpJudge):
         for part in parts:
             value = part.get("text")
             if isinstance(value, str) and value.strip():
-                return _parse_score(value)
+                return value
         raise JudgeUnavailable("gemini judge returned no text part")
+
+    def score(self, prompt: str, text: str) -> float:
+        return _parse_score(self._reply(prompt, text, 8))
+
+    def complete(self, prompt: str, text: str, *, max_tokens: int) -> str:
+        return self._reply(prompt, text, max_tokens)
 
 
 def local_judge(*, base_url: str, model: str = DEFAULT_LOCAL_MODEL,
@@ -645,11 +742,21 @@ class JudgeChain:
 
     # ----------------------------------------------------------------- score --
     def score(self, prompt: str, text: str) -> float:
+        return self._walk(lambda judge: judge.score(prompt, text))
+
+    def complete(self, prompt: str, text: str, *, max_tokens: int) -> str:
+        """Raw text from the first link that answers - the omnibus rail's call.
+        Identical fall-through to `score`, by construction: both are one
+        function with a different `call`."""
+        return self._walk(
+            lambda judge: judge.complete(prompt, text, max_tokens=max_tokens))
+
+    def _walk(self, call):
         attempts: list[JudgeAttempt] = []
         self._local.attempts = attempts
         for judge, name, index in self._links:
             try:
-                value = judge.score(prompt, text)
+                value = call(judge)
             except JudgeLinkFailed as exc:
                 attempt = JudgeAttempt(name, index, False, str(exc),
                                        getattr(exc, "status", None))
@@ -1157,6 +1264,20 @@ def bind_judges(rails: Sequence[Any], provider: JudgeProvider | None,
     prompts = JUDGE_PROMPTS if prompts is None else prompts
     out: list[Any] = []
     for rail in rails:
+        # A rail that binds ITSELF. The two narrow judge rails take a
+        # `Callable[[str], float]` built here from a prompt in JUDGE_PROMPTS. The
+        # omnibus moderation rail owns a structured prompt and a JSON reply, so
+        # it takes the provider and builds its own callable - the prompt map is
+        # not the right shape for it and pretending otherwise would put a
+        # bare-float adapter in front of a JSON reply.
+        binder = getattr(rail, "bind", None)
+        if callable(binder):
+            bound = copy.copy(rail)
+            bound.bind(provider)
+            LOGGER.info("bound %s judge to rail %s (self-binding)",
+                        getattr(provider, "name", "?"), rail.name)
+            out.append(bound)
+            continue
         prompt = prompts.get(getattr(rail, "name", ""))
         if prompt is None or not hasattr(rail, "judge"):
             out.append(rail)

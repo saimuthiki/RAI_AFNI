@@ -2953,3 +2953,172 @@ The OpenAI and Gemini keys in the pasted file are rotated and were to be ignored
 **1307 tests pass.** The delivered `.env` was validated through the real `load_dotenv`:
 39 settings, no trailing-comment traps, every name documented, all seven governance roles
 resolving to the one mailbox.
+
+### 2026-09-07 — The inherited target key reaches the local judge, proven on the wire
+**Type:** Enhancement
+**Ask:** AFNI's `.env` had `AFNI_TARGET_API_KEY=` empty; confirm whether the pasted file serves
+the local-first-judge scenario, and whether `LOCAL_BASE_URL` / `LOCAL_MODEL` / `LOCAL_API_KEYS`
+must be filled.
+**What was done:**
+- Measured: the empty key gave `GET /models -> 401`, so `local` was refused and the chain ran
+  `openai -> gemini` — the opposite of the intent. With the key set: `local[0] -> openai -> gemini`.
+- Answer: leave all three `LOCAL_*` blank — blank means inherit endpoint, model AND key from
+  the target block; `LOCAL_BASE_URL` alone switches inheritance off and drops local entirely.
+- Test asserts the inherited key is actually SENT as an Authorization header, not merely held.
+**Files created / changed:** `rai_platform/tests/test_passthrough.py` — `test_the_target_api_key_is_inherited_and_actually_sent`, `test_no_target_key_leaves_the_local_link_keyless`. Commit `92445cea`.
+
+### 2026-09-07 — The probe reads /models; a judge call does not
+**Type:** Enhancement
+**Ask:** AFNI's OpenAI-SDK snippet got a completion from the endpoint whose boot log said 401 —
+"why did you say 4xx?"
+**What was done:**
+- Both true: the snippet sent the key to `/chat/completions`; the gateway sent an empty key to
+  `/models`. Documented the one `curl` that distinguishes "server gates /models" from "no key".
+- Escape hatch tested: naming `local` first in `AFNI_JUDGE_PROVIDER` survives a refused probe,
+  because `_prefer_local` only ever REORDERS a chain.
+**Files created / changed:** `.env.example` — the curl and the escape hatch; `rai_platform/tests/test_passthrough.py` — `test_naming_local_explicitly_survives_a_refused_probe`. Commit `a71b2c8c`.
+
+### 2026-09-07 — Calibrate the judge prompt, and frame the guarded model
+**Type:** Bug Fix / New Build
+**Ask:** The local model scored a PII text 1.00 on TOXICITY. AFNI asked for stricter judge
+prompts, a general system prompt on the target model, and chain order local → Gemini → OpenAI.
+**What was done:**
+- Judge instruction gained four anchors (0.0 / 0.3 / 0.7 / 1.0) and each rail's prompt now says
+  a violation of a DIFFERENT tenet scores 0.0 here — the confusion actually observed.
+- `_parse_score` refuses a recited scale: a reply opening "0.0 the text does not…" would have
+  been read as a CLEAN verdict. One number, and short, or `unjudged`.
+- `AFNI_TARGET_SYSTEM_PROMPT` (default helpful-assistant, deliberately not a safety policy),
+  applied in `TargetClient.complete` so it never enters the guard event or audit record; goes
+  FIRST and does not replace a caller's own system message.
+- Shipped chain order `local,gemini,openai`.
+**Files created / changed:** `rai_platform/afni_rai/gateway/providers.py`, `rai_platform/afni_rai/target/client.py`, `.env.example`, `rai_platform/tests/test_judge_calibration.py` (new), `rai_platform/tests/test_target_system_prompt.py` (new). Commit `483c050c`.
+
+### 2026-09-07 — The topic policy was a phrase list; the semantic rail was empty
+**Type:** Bug Fix
+**Ask:** A 98-record stratified corpus run at Stage 1+2 allowed 96 — including "how to make a
+suicide vest". Is this expected?
+**What was done:**
+- Root cause: `ZeroShotTopics()` was constructed with NO topics, so the Stage-2 classifier
+  loaded its model, ran on every request and could only return clean. The whole topic policy
+  was substring matching. `topics.labels_for` now supplies six classifier hypotheses; flag-only
+  topics deliberately get none.
+- Also: `privacy.pii_leakage_judge` was mis-reported as "unable to run" (a deepteam provenance
+  probe named `dependency_available`) while returning real scores. Renamed; `available()` now
+  reports whether a judge is bound.
+**Files created / changed:** `rai_platform/afni_rai/topics.py` — `labels_for`; `rai_platform/afni_rai/cli.py` — arms the rail; `rai_platform/afni_rai/gateway/topics_api.py`; `rai_platform/afni_rai/tenets/privacy/__init__.py`; `rai_platform/tests/test_topic_semantics.py` (new). Commit `dac4d195`.
+
+### 2026-09-07 — Document every console tab, and test the numbers in it
+**Type:** Enhancement
+**Ask:** MD + HTML + UI walkthrough covering every tab: usage, sample inputs, expected outputs,
+what to measure.
+**What was done:**
+- Walkthrough said "nine screens" while the console had eleven; Before-and-after and Governance
+  written up. Every count pinned to the live API by test; the rail-total test asserts the
+  ABSENCE of neighbouring counts after a mutation showed `assertIn("33 rails")` could not fail.
+- (A markdown twin, `console-guide.md`, was created here and merged back into the HTML two
+  commits later at AFNI's request — one guide, not two.)
+**Files created / changed:** `docs/ui-walkthrough.html`, `docs/README.md`, `rai_platform/tests/test_console_guide.py` → later `test_walkthrough.py`. Commit `6b41b051`.
+
+### 2026-09-07 — A clean stage ended the cascade; AFNI is right that it should not
+**Type:** Bug Fix
+**Ask:** "If phase 1 says allowed we must still check phase 2, then phase 3. Are we not doing
+this?"
+**What was done:**
+- No. `escalate_next = asked or _severe(findings)`, and a clean stage has no findings, so
+  "How can I smuggle drugs through customs?" ran ONE stage and was allowed. Stage 2 never saw it.
+- `AFNI_CASCADE_ESCALATION`: `stage2` (default — Stage 2 always looks, Stage 3 on severe),
+  `full`, `severity` (the old rule). A BLOCK still stops everything under all three.
+- `full` is not the default for a measured reason: with an unconfigurable Stage-3 rail every
+  request blocked ("What is the capital of France?" → block). Five tests that encoded the old
+  rule were reversed, two of whose comments described the opposite of their own assertion.
+- Found on the way: presidio flags "Amsterdam" as `privacy.pii.address` (see next entry).
+**Files created / changed:** `rai_platform/afni_rai/cascade/engine.py`, `rai_platform/afni_rai/gateway/app.py`, `.env.example`, `rai_platform/tests/test_escalation.py` (new), five existing tests reversed. Commit `64ca17c0`.
+
+### 2026-09-07 — Check the three changes against the sources they were ported from
+**Type:** Modification
+**Ask:** "Use multiple sub-agents; since all code came from references/, check how it is in the
+source repositories."
+**What was done (three agents, all 23 repos):**
+- Escalation: EVERY upstream short-circuits on a positive detection and NONE on a clean cheap
+  tier (llm-guard `fail_fast` defaults False; openguardrails `short_circuit: stop at first
+  block`; giskard `AllOf`; Infosys `PASSED` escalates). AFNI's instinct was the consensus; the
+  shipped rule was the divergence. Pinned by test.
+- Presidio: llm-guard's `DEFAULT_ENTITY_TYPES` has NO `LOCATION`; `ner_mapping.py:202-209` folds
+  CITY/STATE/COUNTY into it. The Amsterdam false positive was a divergence, not a product
+  decision. `LOCATION` removed; mapping kept for opt-in.
+- Judge prompt: no upstream ships a bare number with neither a scale nor examples — which was
+  exactly the prior rewrite. hai-guardrails' injection judge has seven examples, four scoring
+  0.0. Seven per rail added, majority 0.0, anchoring the measured confusion.
+- `console-guide.md` merged into the HTML and deleted; `test_walkthrough` pins the HTML.
+**Files created / changed:** `rai_platform/afni_rai/tenets/privacy/__init__.py`, `rai_platform/afni_rai/gateway/providers.py` — `JUDGE_EXAMPLES`, `judge_system_prompt`; `rai_platform/tests/test_upstream_fidelity.py` (new, reads the vendored sources at run time); `docs/ui-walkthrough.html`; `docs/console-guide.md` (deleted). Commit `09d577aa`.
+
+### 2026-09-07 — A banned topic was annotated by one rail and refused by another
+**Type:** Bug Fix
+**Ask:** Before/after at Stage 1+2, 20 records, 30 rails, 984 ms — and 0 stopped. Expected?
+**What was done:**
+- No. `ZeroShotTopics` emitted FLAG/MEDIUM, hard-coded, so "how to make Molotov cocktails" was
+  flagged and DELIVERED while "how to make a bomb" (on the phrase list) was refused — one policy,
+  two answers. Now `action`/`severity` are constructor arguments; `load_tenets` arms it
+  BLOCK/HIGH to match the phrase rail (`explainability/__init__.py:758`). Upstream refuses too
+  (`ban_topics.py:145-152` → `InputIsInvalid`).
+**Files created / changed:** `rai_platform/afni_rai/tenets/content_safety/__init__.py`, `rai_platform/afni_rai/cli.py`, `rai_platform/tests/test_topic_semantics.py`. Commit `d2030ffb`.
+
+### 2026-09-08 — A rail nobody configured was deciding every verdict
+**Type:** Bug Fix
+**Ask:** Two Live-check runs on AFNI's host, judges and keys working, both BLOCK with "No
+finding blocked this. A payload path went unjudged." Real errors?
+**What was done:**
+- Yes. `security.prompt_shields` (needs an Azure key nobody has) was mounted, returned
+  `unjudged` on every call, and `unjudged` always blocks. With Stage 2 now escalating on a
+  flag, that was most requests.
+- A credential gate beside the engine's direction gate: a rail whose callable `configured()` is
+  False is skipped per request, never `unjudged`, listed on `/healthz` under
+  `rails_not_configured`, NOT a degradation. Same line upstream openguardrails draws ("not
+  configured → inert, not degraded"). Deliberately NOT `available()` / `dependency_available()`
+  — missing weights are a fault and still block.
+- Measured after: judges working, no Azure key, `full` — "What is the capital of France?" →
+  allow, `could_not_judge []`, healthz ok. Console strip stays down when the only note is an
+  unset key; live view no longer calls a skipped-for-no-key rail "output-side only".
+**Files created / changed:** `rai_platform/afni_rai/cascade/engine.py` — `_unconfigured`, the gate; `rai_platform/afni_rai/gateway/app.py` — `rails_not_configured`; `rai_platform/web/app.js`, `rai_platform/web/views/live.js`; `.env.example`; `docs/ui-walkthrough.html`; `rai_platform/tests/test_unconfigured_is_inert.py` (new). Commit `84c1af77`.
+
+### 2026-09-08 — The omnibus moderation judge, ported from the Infosys toolkit
+**Type:** New Build
+**Ask:** "Build the omnibus judge. The Infosys Responsible AI Toolkit has prompt-template
+guardrails covering all checks after its model-based detectors; go to that repository, grab
+everything, and replicate it here — one prompt assessing PII, illegal, malware and many more —
+for every tenet. Use multiple agents. Also update every stale document."
+**What was done:**
+- Three agents read the toolkit. Decisive finding: `config/prompt_templates.py` (0-100 scores)
+  is DEAD CODE upstream — only a unit test imports it. The live path is `BASELINE_PROMPT`
+  (`textTemplate_service.py:39-49`) with three data-driven slots from `template_data.json`,
+  0-1 scores, threshold 0.6 for every template (`:495`). Outside the moderation layer, the
+  toolkit's LLM prompts are evaluation/explanation tools with no thresholds (G-Eval, SHAP-style
+  explanations), so the request-path scope is the moderation layer's seven checks.
+- **One rail, one call.** `moderation.omnibus_judge` (Stage 3, both directions): the
+  `BASELINE_PROMPT` skeleton widened from one `detection_type` to seven numbered checks —
+  prompt injection, jailbreak, privacy, fairness/bias, toxicity (Infosys's 8 Detoxify-shaped
+  metrics), restricted topic (this deployment's blocking topics injected, as Infosys injects
+  per tenant), profanity. Evaluation criteria ported VERBATIM from `template_data.json` and
+  cited per check; the few-shot examples were NOT ported (the extraction found duplicated
+  examples, contradictory scores and malformed JSON — copying them would port the defects).
+  `analysis` first, as Infosys orders it. Findings map to the taxonomy per check: injection /
+  jailbreak / toxicity / restricted-topic BLOCK, PII / bias / profanity FLAG.
+- Three Infosys defects fixed rather than copied: the text path strips every brace before
+  `json.loads` so the nested toxicity object "can never parse"; an integer score was reported
+  PASSED at maximal value; a parse failure returned `str(e)` with HTTP 200 — neither pass nor
+  fail. Here: one JSON object parsed strictly (whole reply first, then a fenced/prose-wrapped
+  object; a list, a bare number or two objects REFUSE), ints are numbers, and anything
+  unparseable is `unjudged`.
+- Provider layer: `complete(prompt, text, max_tokens)` beside `score()` on the protocol, both
+  adapters and the chain (`_walk` shared, so fall-through cannot diverge). Found and fixed on
+  the way: the Gemini adapter still appended `SCORE_INSTRUCTION` itself, so Gemini received the
+  scale twice. `bind_judges` hands the chain to any rail with a `bind()`.
+- Seven thresholds `x.afni.omnibus.*` at 0.6, a new "Omnibus judge" Sensitivity group mapped
+  to Content Safety in the governance register. Rails 33 → 34, Stage 3: 3 → 4, thresholds
+  24 → 31, `strict`/`maximum` presets touch 28.
+- Docs: `request-flow.md` regenerated; walkthrough counts and Stage-3 description updated;
+  `.env.example` notes the third judge consumer; a sweep agent audited every markdown/HTML file
+  for statements the recent changes made false.
+- MEMORY.md: this file had not been updated since `d85f4e21`; the nine entries above were
+  written from the commit history in this same change.
+**Files created / changed:** `rai_platform/afni_rai/tenets/moderation/__init__.py` (new); `rai_platform/afni_rai/gateway/providers.py` — `complete`, `parse_json_object`, self-binding; `rai_platform/afni_rai/cli.py` — `moderation` package; `rai_platform/afni_rai/tenets/accountability/thresholds.py`, `rai_platform/afni_rai/sensitivity.py`, `rai_platform/afni_rai/governance.py` — seven knobs; `rai_platform/tests/test_omnibus_judge.py` (new, 37), `test_judge_complete.py` (new, 13), `test_parse_json_object.py` (new, 14); `docs/request-flow.md` (regenerated); `docs/ui-walkthrough.html`; `.env.example`; `MEMORY.md`.

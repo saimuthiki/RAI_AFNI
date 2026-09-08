@@ -353,6 +353,14 @@ def _knobs_by_tenet() -> dict[str, list[str]]:
         "Fairness": Tenet.FAIRNESS,
         "Reliability": Tenet.HALLUCINATION,
         "Not a detection": Tenet.ACCOUNTABILITY,
+        # The omnibus moderation judge's seven per-check knobs. The rail spans
+        # every tenet's checks in one call, but a knob lands under ONE tenet in
+        # the register, and the rail declares Tenet.CONTENT_SAFETY - as the
+        # Infosys moderation layer it is ported from is a content-safety
+        # service. Its prompt-injection and PII checks are therefore reported
+        # under Content Safety here, not under Security and Privacy; the
+        # per-check findings still carry their own taxonomy ids.
+        "Omnibus judge": Tenet.CONTENT_SAFETY,
     }
     # A group added to the catalogue without a tenet here would silently vanish
     # from the register, so it is loud instead.
