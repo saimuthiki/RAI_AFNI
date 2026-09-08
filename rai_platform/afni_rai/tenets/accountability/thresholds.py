@@ -102,6 +102,18 @@ RAIL_DEFAULTS: Mapping[str, float] = {
     "safety.topic_violation.zeroshot": 0.6,
     # llm-guard input_scanners/prompt_injection.py (as mounted here)
     "security.prompt_injection.classifier": 0.9,
+    # The same DeBERTa classifier, on the MODEL'S ANSWER instead of the prompt.
+    # Not an upstream number: llm-guard ships this scanner under
+    # input_scanners/ only - output_scanners/__init__.py:3-25 has no
+    # prompt-injection scanner - so there is no ported default to cite for the
+    # answer side. 0.98 rather than 0.9 because the classifier is off its
+    # training distribution here (it was trained on attack PROMPTS) and a reply
+    # that merely quotes an injected instruction scores confidently. A hit on
+    # this key annotates and never refuses; see
+    # tenets/security/__init__.py DebertaInjectionRail for the measurement that
+    # produced it (a real answer scored 1.00 and was refused, where ten PII
+    # rails wanted it redacted).
+    "security.prompt_injection.classifier.output": 0.98,
     # llm-guard anonymize_helpers default_score_threshold
     "privacy.pii.ner_score": 0.5,
     # deepteam metrics/pii/pii.py

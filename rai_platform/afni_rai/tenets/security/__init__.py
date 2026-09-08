@@ -1023,6 +1023,7 @@ class InsecureOutputRail:
 # --------------------------------------------------------------------------
 class DebertaInjectionRail:
     THRESHOLD_KEY = "security.prompt_injection.classifier"
+    OUTPUT_THRESHOLD_KEY = "security.prompt_injection.classifier.output"
     """Stage 2. LLM Guard's prompt-injection classifier.
 
     Model id and revision are LLM Guard's, not ours
@@ -1032,6 +1033,74 @@ class DebertaInjectionRail:
     every time and the coverage report records the capability as
     DEPENDENCY-missing rather than implemented. Nothing here is imported or
     downloaded at module import time.
+
+    WHY THE ANSWER SIDE ANNOTATES AND THE PROMPT SIDE REFUSES
+
+    Measured on the operator's own host, one real `/v1/chat` round trip. The
+    prompt cleared every rail. The model then answered with a 1042-character
+    FABRICATED customer record, and the OUTPUT guardrail refused to deliver it.
+    Eleven findings on that answer:
+
+      * ten `redact`/`flag` - an SSN at chars 392-403 (`privacy.region_ids` and
+        `privacy.reversible_anonymiser`), two card numbers at 472-491 and
+        769-788 (`privacy.credit_card`, `privacy.reversible_anonymiser`,
+        `presidio_ner`), a person name, and a refusal phrase;
+      * exactly ONE block - this rail, category `security.prompt_injection`,
+        action BLOCK, score **1.00**.
+
+    So every PII rail that looked at that answer wanted it MASKED, not withheld:
+    the caller would have received the record with the SSN and both card numbers
+    covered. The refusal came from a prompt-injection classifier reading the
+    MODEL'S OWN REPLY.
+
+    The operator asked whether raising the threshold fixes it. It cannot, and
+    the reason is arithmetic rather than policy: `check` goes clean only when
+    `score < threshold`, and the score is 1.00. No value in (0, 1] is above
+    1.00, so there is no configuration of the single threshold that both keeps
+    the prompt side working and lets that answer through. That is what makes
+    this a code fix rather than a tuning exercise.
+
+    UPSTREAM EVIDENCE FOR THE ASYMMETRY (read from the vendored sources here)
+
+      * LLM Guard - the repo this rail was ported from - runs this exact model
+        on PROMPTS ONLY. `PromptInjection` is exported from
+        `llm-guard-main/llm-guard-main/llm_guard/input_scanners/__init__.py:13`
+        and `:32`; the 22 scanners in
+        `llm-guard-main/llm-guard-main/llm_guard/output_scanners/__init__.py:3-25`
+        contain no prompt-injection scanner at all. The nearest output-side
+        checks are `no_refusal`, `sensitive`, `ban_code` and `code` - a
+        different question in each case.
+      * NeMo Guardrails does have an output-side capability CALLED injection
+        detection, and it is not this one: `Guardrails-develop/nemoguardrails/
+        library/injection_detection/flows.v1.co:5` runs it over `$bot_message`,
+        but the action is yara over
+        `injection_detection/yara_rules/{code,sqli,template,xss}.yara` - i.e.
+        code/SQL/XSS/template injection in generated text, OWASP LLM02, which
+        this platform already covers under `security.insecure_output`. NeMo's
+        own MODEL-based prompt-attack detector is input-side: `Guardrails-
+        develop/nemoguardrails/library/jailbreak_detection/flows.v1.co:6,20`
+        both document themselves as assessing "the user's prompt".
+      * PyRIT's injection scorers that do read model output are regexes for
+        emitted payloads, not attack classifiers: `PyRIT-main/pyrit/score/
+        true_false/regex/sql_injection_output_scorer.py:9-15` says so in as many
+        words ("SQL injection payloads emitted in LLM responses ... OWASP
+        LLM02").
+      * hai-guardrails' injection guard prompts its judge with "whether a user
+        input is safe to run" (`hai-guardrails-main/hai-guardrails-main/src/
+        guards/injection.guard.ts:100`).
+
+    No reviewed repository applies a prompt-injection CLASSIFIER to model
+    output. Doing so is out of the distribution this rail was ported for: an
+    injected instruction that the model echoes back is a symptom worth
+    RECORDING, and the attack it evidences arrived on the prompt, where this
+    same rail still blocks.
+
+    So `direction` stays `BOTH` - the rail keeps looking at both sides, because
+    removing the look would remove the signal - but on the answer it reports
+    `Action.FLAG` at `Severity.HIGH` with `block=False`, under its own
+    `OUTPUT_THRESHOLD_KEY` the operator can raise independently of the prompt
+    side. Same `category` and same `detector`, so the audit trail, the coverage
+    row and the framework mapping are unchanged.
     """
 
     name = "security.injection.deberta_v3_v2"
@@ -1048,6 +1117,17 @@ class DebertaInjectionRail:
     # card - a card can be edited, a commit cannot.
     MODEL_REVISION: str | None = "90c9989b1a342275dd0d1a95aad283c04e075671"
     source: str | None = None
+
+    #: The bar on the ANSWER side, and deliberately not the same number as the
+    #: prompt side's 0.9. Ported from the same LLM Guard default, raised because
+    #: the classifier is being asked a question it was not trained on: a model
+    #: reply that quotes or paraphrases an injected instruction scores high
+    #: without an attack being present in the reply itself. 0.98 keeps the
+    #: annotation for the near-certain cases and stops the rest becoming noise
+    #: on an output that ten other rails are already redacting. It is a
+    #: threshold like any other, so an operator who wants the old volume back
+    #: lowers it in the console; unlike the prompt side, nothing here refuses.
+    OUTPUT_THRESHOLD = 0.98
 
     @classmethod
     def dependency_available(cls) -> bool:
@@ -1117,11 +1197,27 @@ class DebertaInjectionRail:
 
     def check(self, path: str, text: str,
               ctx: CheckContext | None = None) -> RailResult:
+        # Which side of the model is this? See the class block: the same score
+        # means different things on a prompt and on a reply.
+        #
+        # `ctx is None` or `ctx.side is None` means the caller did not say, and
+        # an UNLABELLED call is treated as the strict case - it blocks, exactly
+        # as this rail did before the field existed. That is the safe way round:
+        # a bare `CheckContext()` from a test, a script or a third-party driver
+        # must never silently downgrade a CRITICAL block to a flag, whereas the
+        # reverse mistake only over-refuses on a path nobody is using.
+        on_output = ctx is not None and ctx.side is Direction.OUTPUT
         # Configured threshold, falling back to the ported default when no
-        # store is wired. THRESHOLD_KEY is resolved once per call, not per
-        # finding, so the read log carries one entry per check.
-        threshold = (ctx.threshold(self.THRESHOLD_KEY, self.threshold)
-                     if ctx is not None else self.threshold)
+        # store is wired. Exactly one key is resolved per call, not one per
+        # finding, so the read log carries one entry per check - and it is the
+        # key for THIS side, so the audit record shows which of the two bars
+        # actually decided.
+        if on_output:
+            threshold = ctx.threshold(self.OUTPUT_THRESHOLD_KEY,
+                                      self.OUTPUT_THRESHOLD)
+        else:
+            threshold = (ctx.threshold(self.THRESHOLD_KEY, self.threshold)
+                         if ctx is not None else self.threshold)
         pipe = self._load()
         if pipe is None:
             return RailResult.unjudged(self._unavailable or "classifier unavailable")
@@ -1134,6 +1230,23 @@ class DebertaInjectionRail:
         score = float(top.get("score", 0.0))
         if label != "INJECTION" or score < threshold:
             return RailResult.clean()
+        if on_output:
+            # Same category, same detector - only the consequence differs. The
+            # answer is annotated and delivered (the PII rails' redactions
+            # still apply to it); the attack this evidences arrived on the
+            # prompt, where this same rail still blocks.
+            return RailResult(
+                findings=[Finding(
+                    category="security.prompt_injection",
+                    severity=Severity.HIGH, action=Action.FLAG, path=path,
+                    score=min(score, 1.0), detector=self.name,
+                )],
+                block=False,
+                reason=(f"{self.MODEL_ID} scored INJECTION at {score:.2f} on "
+                        f"the model's own answer: annotated, not refused - the "
+                        f"classifier is trained on attack prompts, so a hit "
+                        f"here is recorded as evidence rather than treated as "
+                        f"an attack in the reply"))
         return RailResult(
             findings=[Finding(
                 category="security.prompt_injection",

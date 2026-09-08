@@ -103,7 +103,7 @@ change it.
 | **Tenets** | coverage honestly counted, plus the governance register |
 | **Rails** | every detector, its stage, its source repo and its evidence |
 | **Topics** | 6 always banned and compiled in, 24 optional and yours to pick |
-| **Sensitivity** | all 32 thresholds, the value in force, and three presets |
+| **Sensitivity** | all 33 thresholds, the value in force, and three presets |
 | **Media** | one image or video, judged locally, with the regions drawn on it |
 | **Corpus** | sample the 11,369 records — and the **guardrails off vs on** ladder |
 | **Frameworks** | 23 reviewed projects, 16 contributing |

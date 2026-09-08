@@ -731,6 +731,14 @@ every one of them only **flags** — and the request still blocks, on the
 `COULD NOT JUDGE` line rather than on any of them. Read the reason: that block is
 a coverage gap, not a detection.
 
+The rail is **asymmetric** once installed, and the two sides have their own
+thresholds: on a **prompt** it blocks at `security.prompt_injection.classifier` =
+0.9 (CRITICAL); on a **model answer** it flags at
+`security.prompt_injection.classifier.output` = 0.98 (HIGH), so the answer is
+annotated and delivered rather than withheld. Both appear on the **Sensitivity**
+screen; the reasoning, and the measured round trip behind it, is in
+`docs/architecture.md`.
+
 > **Now pinned.** This was the one model with no revision, which on a security
 > control is a supply-chain hole — upstream could replace the weights and the
 > gateway would adopt them on the next cold start with no diff anywhere. The sha

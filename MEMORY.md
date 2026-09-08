@@ -3249,3 +3249,31 @@ also… what kind of response is being blocked by output guardrails. That brings
   your customer" shows the text with every caught span highlighted and a legend of span →
   entity → action → rails; with the flag off, a one-line hint on how to turn it on. Walkthrough
   §12 and setup .env notes updated.
+
+### 2026-09-08 — A threshold cannot beat 1.00, so the injection rail became asymmetric
+**Type:** Bug Fix
+**Ask:** After the first real Round-trip run blocked a PII-laden answer, AFNI: "yeah may be some
+higher threshold value will solve this problem."
+**What was done:**
+- Checked before changing anything, and it would not have. `DebertaInjectionRail.check` goes
+  clean only when `score < threshold`; the observed score on the model's answer was **1.00**,
+  and no threshold in (0, 1] sits above it. The rail would have kept blocking at 0.99.
+- Read the trace again for what the other ten findings wanted: `redact` and `flag`. The PII
+  rails asked for the SSN and both card numbers to be MASKED and the answer delivered. The
+  block came only from the prompt-injection classifier reading the model's own reply.
+- Upstream draws the line where the fix now is: llm-guard ships
+  `protectai/deberta-v3-base-prompt-injection-v2` as an INPUT scanner only
+  (`llm_guard/input_scanners/prompt_injection.py`, with no counterpart in `output_scanners/`).
+  NeMo's `injection_detection` is yara-based code/SQL injection on output, which is a different
+  capability and is already covered here by `security.insecure_output`.
+- So the rail keeps looking at both sides but stops refusing on one: on a PROMPT unchanged
+  (0.9, BLOCK, CRITICAL); on an ANSWER a second threshold
+  `security.prompt_injection.classifier.output` at 0.98 and a FLAG at HIGH — annotated, not
+  refused. `CheckContext` gained a `side` field for it, set once per request by the engine from
+  the event kind the direction gate already reads; an unlabelled call still blocks, so nothing
+  that constructs a bare context loosened.
+- Honest cost, recorded in the docs rather than buried: an injected instruction a model echoes
+  into its answer is no longer blocked by this classifier, only flagged. Stage 1's
+  `security.indirect_injection` and `security.insecure_output` still run on the answer.
+- Thresholds 32 → 33, presets touch 30. The new knob is deliberately a second knob: 0.9 to
+  refuse a prompt, 0.98 to annotate an answer.

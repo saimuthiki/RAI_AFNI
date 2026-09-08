@@ -59,7 +59,7 @@ incoherent rather than merely wasteful:
 
 | Direction | Rails | Why |
 |---|---:|---|
-| **Both** | 25 | An SSN is an SSN whichever way it travels. A leaked API key is a leak in either direction. All PII, secret, toxicity and profanity rails are here, and pinned by name in `tests/test_direction.py` so nobody narrows them later. |
+| **Both** | 25 | An SSN is an SSN whichever way it travels. A leaked API key is a leak in either direction. All PII, secret, toxicity and profanity rails are here, and pinned by name in `tests/test_direction.py` so nobody narrows them later. One of them — the Stage-2 injection classifier — runs on both sides but does not *decide* the same way on each; see below. |
 | **Output only** | 8 | Groundedness compares an *answer* to its source — a prompt has no answer to ground. Refusal is something a model does. An invented import is something a model emits. Schema and format validators check the model's output against the caller's contract. `security.insecure_output` catches a model emitting `DROP TABLE`; a user *asking* about SQL injection is a support question. |
 | **Input only** | 1 | The confirmed-attack corpus holds attack *prompts*. |
 
@@ -69,6 +69,45 @@ Accountability's single runtime rail is input-side. That is
 architecture, not oversight, and `test_per_tenet_direction_cover_is_exactly_as_designed`
 pins the map so a deliberate asymmetry stays documented and an accidental one
 gets caught.
+
+#### One rail runs both ways and decides differently on each: `security.injection.deberta_v3_v2`
+
+Direction answers "does this rail run here at all". It does not have to mean "and
+reaches the same verdict". The Stage-2 prompt-injection classifier (model
+`protectai/deberta-v3-base-prompt-injection-v2`) is a **both**-sides rail with a
+threshold and an action *per side*:
+
+| Side | Threshold key | Shipped | Action | Severity |
+|---|---|---:|---|---|
+| Prompt | `security.prompt_injection.classifier` | 0.9 | **BLOCK** | CRITICAL |
+| Model answer | `security.prompt_injection.classifier.output` | 0.98 | **FLAG** | HIGH |
+
+**Why, and the measurement it came from.** On a real round trip on the operator's
+host the prompt cleared the input guardrail, the model returned a 1,042-character
+fabricated customer record, and the output guardrail blocked. Of **eleven** output
+findings, **ten** carried `redact` or `flag` — the SSN, two card numbers, a person
+name, a refusal phrase; the PII rails wanted the spans masked and the answer
+delivered — and exactly **one** carried a block: this classifier scoring the
+model's own answer as an injection at **1.00**. A higher threshold cannot fix a
+1.00: a rail only goes clean *below* its threshold, and nothing in (0, 1] sits
+above 1.00. So the fix is the asymmetry rather than a number, and
+`security.prompt_injection.classifier.output` exists to tune how much of that noise
+gets recorded, not to decide what blocks.
+
+**Upstream supports the asymmetry.** llm-guard ships this model as an **input
+scanner only** (`llm_guard/input_scanners/prompt_injection.py`; there is no
+prompt-injection scanner in `llm_guard/output_scanners/`). NeMo's
+`injection_detection` is a YARA rule set for code and SQL injection in an answer —
+a different capability, which this platform covers with
+`security.insecure_output`.
+
+**The consequence, stated honestly.** An injected instruction that a model echoes
+into its answer is no longer BLOCKED by this classifier; it is flagged at HIGH and
+the answer is delivered annotated. Stage 1's `security.indirect_injection` and
+`security.insecure_output` still run on the answer, and a deployment that wants a
+refusal on that path can lower
+`security.prompt_injection.classifier.output` — accepting the false-positive rate
+the 1.00 above is an example of.
 
 **Proof it works.** Same string, both directions:
 
@@ -323,7 +362,7 @@ short-circuits immediately.
 
 | Branch | Stage 1 catches | Stage 2 adds | Stage 3 adds |
 |---|---|---|---|
-| **Security** | injection patterns, encodings, secrets, invisible text | DeBERTa injection classifier — **the only thing that BLOCKS an injection** | Azure Prompt Shields *(skipped per request until `AZURE_CONTENT_SAFETY_*` is set — not a degradation)* |
+| **Security** | injection patterns, encodings, secrets, invisible text | DeBERTa injection classifier — **the only thing that BLOCKS an injection, and only on a prompt** (on a model answer the same rail flags at 0.98 instead; see [One rail runs both ways](#one-rail-runs-both-ways-and-decides-differently-on-each-securityinjectiondeberta_v3_v2)) | Azure Prompt Shields *(skipped per request until `AZURE_CONTENT_SAFETY_*` is set — not a degradation)* |
 | **Content Safety** | graded profanity lexicon, leetspeak-normalised | 7-head toxicity transformer; zero-shot topics — armed with the six always-banned topics, **BLOCKS** (HIGH) on a match | toxicity LLM judge, threshold 0.8; omnibus judge (Infosys moderation layer, one call, a score per each of eight checks — injection, jailbreak, PII, bias, toxicity, restricted topics, profanity, harmful or illegal activity — `x.afni.omnibus.*` = 0.6) |
 | **Hallucination** | invented imports, refusal phrases, malformed JSON/XML | NLI entailment against a retrieved source; JSON Schema | — |
 | **Fairness** | protected attribute + decision term co-occurring | bias classifier, threshold 0.7 | — (7 of 9 capabilities are **offline** batch jobs) |
@@ -337,6 +376,14 @@ classifier installed, a textbook injection produces four HIGH findings, none of 
 carries the block action — the request still blocks, but on the `COULD NOT JUDGE`
 line (fail-closed), not on any finding. Stage 1 alone is a **detector** for
 injection, not a **control** against it.
+
+The same sentence has a second half on the way out: on a **model answer** the
+Stage-2 classifier flags rather than blocks (0.98, HIGH), so on that side no local
+rail blocks a prompt injection at all — Stage 1's `security.indirect_injection`
+flags and escalates, and the only Security rail left that can refuse an answer for
+injection is Stage 3's `security.prompt_shields`, which is skipped per request
+until `AZURE_CONTENT_SAFETY_*` is set. That is by design, and for the reason set
+out under [One rail runs both ways](#one-rail-runs-both-ways-and-decides-differently-on-each-securityinjectiondeberta_v3_v2).
 
 ---
 

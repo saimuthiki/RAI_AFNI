@@ -164,6 +164,34 @@ class CheckContext:
     # record needs to show which threshold produced a decision, not merely that
     # some threshold did.
     reads: list[tuple[str, float, str]] = field(default_factory=list)
+    #: Which side of the model this call is - INPUT for a prompt heading to the
+    #: model, OUTPUT for a completion heading to the person, None when the
+    #: caller did not say.
+    #:
+    #: WHY A RAIL MAY NEED THIS, when `Direction` already gates whether a rail
+    #: runs at all: the gate is binary - run or do not run - and some detectors
+    #: are neither. A detector can be exactly right on a prompt and out of its
+    #: training distribution on a completion, so what has to change is not
+    #: WHETHER it looks but HOW LOUD it is allowed to be about what it saw.
+    #: `security.injection.deberta_v3_v2` is the measured case: the classifier
+    #: was trained on attack PROMPTS, and scoring a model's own answer with it
+    #: produces confident hits on text that is a symptom, not an attack - so on
+    #: that side the rail annotates at its own threshold instead of refusing,
+    #: while the prompt side is untouched.
+    #:
+    #: The alternatives are worse. Two rail classes (one per side) duplicates
+    #: the model load, the pinned revision, the dependency probe and the
+    #: coverage row, and doubles the number of names an operator has to
+    #: recognise for one capability. Sniffing the payload path with a regex
+    #: (`path.startswith("response")`) makes every rail re-derive a fact the
+    #: engine already knows from `GuardEvent.kind`, and re-derive it from a
+    #: string that the contract is free to rename.
+    #:
+    #: None MUST behave exactly as the code did before this field existed.
+    #: Callers and tests construct a bare `CheckContext()`, and a rail that
+    #: started treating "unlabelled" as "output" would quietly downgrade a
+    #: block for every one of them. Unknown means strict.
+    side: "Direction | None" = None
 
     def threshold(self, key: str, default: float) -> float:
         """Resolve `key`, falling back to the rail's own value.

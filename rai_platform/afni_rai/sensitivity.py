@@ -99,6 +99,11 @@ KNOBS: tuple[Knob, ...] = (
          "Prompt injection — classifier", "Prompt attacks",
          "The DeBERTa model's own confidence, before the category threshold.",
          noisy=True),
+    Knob("security.prompt_injection.classifier.output",
+         "Prompt injection — classifier, on the answer", "Prompt attacks",
+         "The same DeBERTa confidence, but on the model's reply, where a hit "
+         "is annotated and not refused.",
+         noisy=True),
     Knob("security.jailbreak", "Jailbreak", "Prompt attacks",
          "A message trying to escape the model's safety training.", noisy=True),
     Knob("x.afni.attack_corpus.similarity", "Repeat-attack similarity",

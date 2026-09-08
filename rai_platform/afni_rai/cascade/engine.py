@@ -32,8 +32,9 @@ import time
 from collections.abc import Callable, Generator, Iterable, Sequence
 from dataclasses import dataclass, field
 
-from ..contract.models import Action, Decision, Finding, GuardEvent, Severity, Span, Verdict
-from .rail import CheckContext, Rail, RailResult, Stage
+from ..contract.models import (
+    Action, Decision, EventKind, Finding, GuardEvent, Severity, Span, Verdict)
+from .rail import CheckContext, Direction, Rail, RailResult, Stage
 
 import logging
 
@@ -245,6 +246,26 @@ def _applies(rail, kind) -> bool:
         return direction.covers(kind)
     except AttributeError:      # someone set a plain string
         return str(direction) in ("both", str(getattr(kind, "value", kind)))
+
+
+def _side(kind) -> Direction | None:
+    """Which side of the model this request is, for `CheckContext.side`.
+
+    The SAME event-kind vocabulary the direction gate above already uses, read
+    once per request rather than once per rail: a `GuardEvent` is a prompt or a
+    completion, and no rail in the cascade can be on a different side from the
+    event it is judging. `Direction.BOTH` is deliberately never produced here -
+    BOTH is a property of a RAIL ("I belong on either side"), not of a call,
+    and handing it to a rail as "the side" would tell it nothing.
+
+    An unrecognised kind maps to None, which every rail must treat as "not
+    supplied" and handle exactly as it did before this field existed.
+    """
+    if kind is EventKind.REQUEST:
+        return Direction.INPUT
+    if kind is EventKind.RESPONSE:
+        return Direction.OUTPUT
+    return None
 
 
 def _blocking(findings: Iterable[Finding]) -> bool:
@@ -492,7 +513,13 @@ class Cascade:
         verdict" cannot be confused by a consumer.
         """
         texts = event.texts()
-        ctx = CheckContext(resolve=self._resolve)
+        # One context per request, carrying the side as well as the resolver.
+        # `_side` reads the same `event.kind` the direction gate below uses, so
+        # the two can never disagree about which way round this call is, and it
+        # is computed once rather than per rail - every rail in one cascade run
+        # is judging the same event. It may be None (an unrecognised kind), and
+        # a rail must behave as it always did in that case.
+        ctx = CheckContext(resolve=self._resolve, side=_side(event.kind))
         findings: list[Finding] = []
         modifications: list[Span] = []
         unjudged: set[str] = set()

@@ -7,7 +7,7 @@ means.
 
 It covers **seven tenets** — Privacy, Security, Fairness & Bias, Explainability
 & Transparency, Profanity / Content Safety, Hallucination / Reliability, and
-Accountability — with **32 rails**. 23 open-source frameworks were reviewed at
+Accountability — with **34 rails**. 23 open-source frameworks were reviewed at
 source level; **16 of them contribute to the running platform**. The rails are
 arranged as a **cost-ordered cascade**, so the overwhelming majority of traffic
 is judged by free, sub-millisecond checks and never touches a paid API.
@@ -574,8 +574,9 @@ flowchart LR
     S1 --> D{"confident<br/>injection pattern?"}
     D -->|"yes"| BLOCK["BLOCK"]
     D -->|"clean"| ALLOW["ALLOW"]
-    D -->|"suspicious phrasing,<br/>no known pattern"| S2["Stage 2 · deberta_v3_v2<br/>prompt-injection classifier<br/>threshold security.prompt_injection.classifier = 0.9"]
-    S2 -->|"score ≥ threshold"| BLOCK
+    D -->|"suspicious phrasing,<br/>no known pattern"| S2["Stage 2 · deberta_v3_v2<br/>prompt-injection classifier<br/>on a prompt: security.prompt_injection.classifier = 0.9<br/>on an answer: security.prompt_injection.classifier.output = 0.98"]
+    S2 -->|"prompt, score ≥ 0.9"| BLOCK
+    S2 -->|"answer, score ≥ 0.98"| FLAG["flag, HIGH — the answer is<br/>annotated, not refused"]
     S2 -->|"below"| ALLOW
     S2 -->|"weights absent"| UNJ["unjudged → fail closed"]
     S2 -->|"configured"| S3["Stage 3 · prompt_shields<br/>Azure AI Content Safety"]
@@ -585,6 +586,18 @@ flowchart LR
 Decoding happens *before* matching, so an attack that base64-encodes "ignore all
 previous instructions" is caught by the Stage-1 regex on the decoded text rather
 than sailing past it.
+
+**The Stage-2 classifier is asymmetric on purpose.** It runs on both sides, but a
+hit on a *prompt* is a BLOCK at CRITICAL (0.9) and a hit on a *model answer* is a
+FLAG at HIGH (0.98) — annotated and delivered, not refused. The reason is measured:
+on a real round trip the model returned a fabricated customer record, ten of the
+eleven output findings asked for redaction or a flag, and the one block came from
+this classifier scoring the model's own answer at **1.00** — which no threshold can
+tune away, since nothing sits above 1.00. llm-guard itself ships this model as an
+input scanner only. The consequence is stated rather than hidden: an injected
+instruction a model echoes into its answer is flagged, not blocked, and
+`security.indirect_injection` and `security.insecure_output` still read the answer.
+See `docs/architecture.md` for the full reasoning.
 
 ### Fairness & Bias
 
@@ -744,7 +757,7 @@ but something could not be judged.
 
 ```bash
 python3 rai_platform/cli.py coverage    # 65 capabilities in five states
-python3 rai_platform/cli.py rails       # 32 rails, grouped by stage, with source repo
+python3 rai_platform/cli.py rails       # 34 rails, grouped by stage, with source repo
 ```
 
 Read the `gap` and `dependency-missing` lines before you read anything else.
@@ -1074,7 +1087,8 @@ on one scale:
 |---|---:|---|
 | `safety.toxicity.classifier` | 0.5 | llm-guard's scanner default |
 | `safety.toxicity.judge` | 0.8 | hai-guardrails' judge prompt |
-| `security.prompt_injection.classifier` | 0.9 | llm-guard's DeBERTa scanner |
+| `security.prompt_injection.classifier` | 0.9 | llm-guard's DeBERTa scanner (a *prompt*; blocks) |
+| `security.prompt_injection.classifier.output` | 0.98 | the same scanner on a *model answer*; flags rather than blocks |
 | `privacy.pii.ner_score` | 0.5 | Presidio's analyzer default |
 | `privacy.system_prompt_leakage` | 0.6 | ported n-gram containment ratio |
 | `x.afni.bias.classifier` | 0.7 | llm-guard's bias scanner |

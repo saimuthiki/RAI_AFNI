@@ -382,7 +382,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
     <thead><tr><th style="width:9rem">Word</th><th>What it means, plainly</th></tr></thead>
     <tbody>
       <tr><td><b>Rail</b></td><td>One single check. "Look for a credit-card number" is one rail.
-        There are 32 of them. Think of one inspector with one job.</td></tr>
+        There are 34 of them. Think of one inspector with one job.</td></tr>
       <tr><td><b>Stage</b></td><td><em>How much this check costs.</em>
         <span class="chip c-s1">Stage 1</span> is free and instant — a pattern match, runs on
         every single message. <span class="chip c-s2">Stage 2</span> uses an AI model on your own
@@ -1024,7 +1024,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
         <b>score between 0 and 1</b>, and a threshold is the line it has to cross.
         Toxicity ships at <span class="mono">0.60</span>: a message the model
         scores 0.59 goes through, 0.61 does not.</p>
-        <p>There are <b>32 of them</b>. This screen shows every one, what it
+        <p>There are <b>33 of them</b>. This screen shows every one, what it
         judges, the number the code ships, and the number in force here.</p>
       </div>
 
@@ -1038,8 +1038,35 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       guardrail that refuses ordinary work gets switched off by the business
       inside a fortnight, which is a far worse outcome than a threshold at 0.7.
       <br><br>
-      Twelve of the 32 are marked <b>noisy</b>. That is the honest way of saying
+      Thirteen of the 33 are marked <b>noisy</b>. That is the honest way of saying
       "this is the one you will regret tightening".</span></div>
+
+      <h4>The two injection knobs, and why they are different numbers</h4>
+      <div class="prose">
+        <p>The <i>Prompt attacks</i> group has four knobs, and two of them drive the
+        same DeBERTa classifier from opposite ends of the round trip:</p>
+        <ul>
+          <li><b>Prompt injection &mdash; classifier</b>
+          (<span class="mono">security.prompt_injection.classifier</span>), shipped at
+          <span class="mono">0.9</span> &mdash; the line a <em>question</em> has to
+          cross to be <b>refused</b> outright, at CRITICAL.</li>
+          <li><b>Prompt injection &mdash; classifier, on the answer</b>
+          (<span class="mono">security.prompt_injection.classifier.output</span>),
+          shipped at <span class="mono">0.98</span> &mdash; the line the <em>model's
+          answer</em> has to cross to be <b>flagged</b>, at HIGH. Annotated and
+          delivered, not withheld.</li>
+        </ul>
+        <p>Both are marked <b>noisy</b>. They are deliberately two knobs rather than
+        one number used twice: 0.9 to refuse a prompt, 0.98 to annotate an answer. An
+        injection in a question is an attack on your system and refusing it costs
+        nothing, while the same classifier reading the model's own text scores
+        ordinary generated prose &mdash; a fabricated customer record, a long quoted
+        document &mdash; as an injection, and refusing that costs you the answer.</p>
+        <p>So the answer-side knob is there for tuning <em>how much noise you record</em>,
+        not for deciding what gets blocked: raising it cannot restore a block that no
+        longer exists on that side. <a href="#sides">Input checks vs output checks</a>
+        has the measurement this came from.</p>
+      </div>
 
       <h4>Where a threshold should live — and the answer to the question you asked</h4>
       <div class="prose">
@@ -1070,22 +1097,22 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
               <td>Always, to start. And to undo an experiment.</td></tr>
           <tr><td><b>Strict</b></td>
               <td>Every detection threshold at three quarters of its shipped
-              value. Sets 29 of the 32.</td>
+              value. Sets 30 of the 33.</td>
               <td>A high-risk application where a false refusal costs less than
               a miss.</td></tr>
           <tr><td><b>Maximum sensitivity</b></td>
-              <td>Every detection threshold at 0.10. Sets 29 of the 32.</td>
+              <td>Every detection threshold at 0.10. Sets 30 of the 33.</td>
               <td><b>A demo or a red-team exercise. Not production.</b> At 0.10
               a classifier's background noise becomes a finding.</td></tr>
         </tbody>
       </table></div>
 
       <div class="note"><span class="note__t">A preset fills the form in. It does not save.</span>
-      <span>Press <b>Strict</b> and 29 rows change on screen and nothing changes
+      <span>Press <b>Strict</b> and 30 rows change on screen and nothing changes
       on the server. You can see everything it did before committing to it, and
       <b>Discard changes</b> puts it all back. Only <b>Save</b> writes.</span></div>
 
-      <h4>Three of the 32 are not "how strict", and the presets skip them</h4>
+      <h4>Three of the 33 are not "how strict", and the presets skip them</h4>
       <div class="prose">
         <p>They are in their own group at the bottom, labelled:</p>
         <ul>
@@ -1112,7 +1139,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       <div class="prose">
         <ol>
           <li>Note that <b>Overridden here</b> at the top says <span class="mono">0</span>.</li>
-          <li>Press <b>Strict</b>. Twenty-nine rows now say <b>overridden</b> in
+          <li>Press <b>Strict</b>. Thirty rows now say <b>overridden</b> in
           amber, and <b>Save</b> becomes available. Nothing has been saved.</li>
           <li>Press <b>Discard changes</b>. Everything returns to
           <span class="mono">shipped</span>.</li>
@@ -1123,7 +1150,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
         </ol>
       </div>
       <h4>What you should see</h4>
-      <p>32 thresholds, each with its <b>shipped</b> value (cited to the repository
+      <p>33 thresholds, each with its <b>shipped</b> value (cited to the repository
       it was ported from) and its <b>effective</b> value. Eight of them, in the <i>Omnibus judge</i>
       group, are the omnibus moderation judge's per-check thresholds &mdash; seven
       from the Infosys moderation layer plus <i>harmful or illegal activity</i>, all
@@ -1134,9 +1161,9 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
         <div><span class="mono">balanced</span> &mdash; clears every override, back
         to shipped. Touches 0.</div>
         <div><span class="mono">strict</span> &mdash; every detection threshold
-        &times; 0.75, floor 0.25. Touches 29.</div>
+        &times; 0.75, floor 0.25. Touches 30.</div>
         <div><span class="mono">maximum</span> &mdash; every detection threshold to
-        0.10. Touches 29. A red-team and demonstration setting, NOT a production one:
+        0.10. Touches 30. A red-team and demonstration setting, NOT a production one:
         at 0.10 a classifier's noise floor becomes a finding.</div>
       </div>
 
@@ -1688,7 +1715,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       individuals is out of date the first time somebody changes team, and it invites the
       reader to treat a name as a control.</p></div>
       <h4>What you should see</h4>
-      <p>7 tenets, 34 rails mounted, 32 thresholds listed, and a
+      <p>7 tenets, 34 rails mounted, 33 thresholds listed, and a
       <span class="mono">problems</span> array.</p>
 
       <h4>What is worth measuring here</h4>
@@ -1739,10 +1766,15 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
             the cascade on the response side. Same stage boxes, second time round. This
             is the step the question above was asking to see. On a block, the sentence
             under the step names <em>what carried it</em> &mdash; the rail and the entity
-            &mdash; and says what every other finding asked for instead, e.g. <em>"blocked
-            by security.injection.deberta_v3_v2 (prompt_injection); 10 other findings
-            asked for redaction, not a block"</em>. Read that before blaming the PII
-            rails.</td></tr>
+            &mdash; and says what every other finding asked for instead, in the shape
+            <em>"blocked by &lt;rail&gt; (&lt;entity&gt;); N other findings asked for
+            redaction or a flag, not a block"</em>. <b>Read that before blaming the PII
+            rails:</b> the rails that find an SSN or a card number ask for
+            <em>redaction</em>, so a block on the answer comes from a rail whose action
+            really is <em>block</em> &mdash; a leaked credential, runnable code in the
+            answer, a blocking topic. The Stage-2 injection classifier is no longer one
+            of them on this side: on an answer it flags at 0.98 rather than blocking
+            (see <a href="#sides">Input checks vs output checks</a>).</td></tr>
           <tr><td><b>4 · Your customer</b></td><td>One box: what the customer sees, and nothing else. If both guardrails
             allowed, it holds the model's answer, word for word. If either blocked, or
             the model failed, it holds a short, neutral refusal sentence that names no
@@ -1808,37 +1840,54 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
           expected to block before the model. If it does not, see "what can go wrong".</span>
         </div>
         <div class="try try--warn">
-          <span class="try__lab">Tests the way out · the answer is what gets caught</span>
+          <span class="try__lab">Tests the way out · the answer is caught, annotated and delivered</span>
           <span class="try__in">Write a realistic sample customer record for testing: full name, US social security number, credit card number with expiry date, and home address.</span>
-          <span class="try__out">Expected: decision <span class="chip c-block">blocked_on_output</span> ·
-          <b>model called: yes</b> · customer box: <em>"I can't share that answer. The
-          model's response was stopped by a policy check before it reached you."</em><br>
+          <span class="try__out">Expected: decision <span class="chip c-allow">allowed</span> ·
+          <b>model called: yes</b> · a handful of output findings, every one of them asking
+          for <b>redaction</b> or a <b>flag</b> · customer box: the model's answer, with a
+          replacement span offered for each piece of personal data in it. This is
+          <b>outcome 2 &mdash; allow with redactions</b>, on the way out.<br>
           <strong>Meaning:</strong> the <em>question</em> is not harmful &mdash; asking for
           test data is ordinary &mdash; so the input guardrail allows it and the model is
           called. If the model obliges with a record containing a well-formed SSN and a
-          card number that passes the Luhn checksum, the output guardrail's SSN and card
-          rails catch them in the <em>answer</em> and the completion is withheld. You see
-          that the model answered, how many characters it produced, and which output rails
-          fired &mdash; and you never see the record.<br>
+          card number that passes the Luhn checksum, the output guardrail's SSN, card and
+          name rails catch them in the <em>answer</em> and hand back the masked
+          replacement text for each span. <b>The answer is delivered, and your application
+          has to apply those spans</b> &mdash; a caller that ignores
+          <span class="mono">modifications.spans</span> puts the SSN in front of the
+          customer, which is the whole point of outcome 2.<br>
           <strong>Read step 3 before crediting the PII rails.</strong> In a captured run
-          of this sample the SSN, the card number and the name were all found &mdash; but
-          the privacy rails asked for <em>redaction</em>, not a block. The block itself
-          came from the Stage-2 injection classifier
-          (<span class="mono">security.injection.deberta_v3_v2</span>) firing on the
-          model's <em>answer</em>: a fabricated customer record reads, to that
-          classifier, like injected text. That is still a correct withholding &mdash; the
-          record never left &mdash; but it is a different reason, and step 3's sentence
-          names it: <em>"blocked by security.injection.deberta_v3_v2 (prompt_injection);
-          10 other findings asked for redaction or a flag, not a block"</em>. With the
-          demo flag on (next section), the panel under the journey shows exactly which
-          span each rail caught and which one carried the block.<br>
+          of this sample on the operator's host the model returned a 1,042-character
+          record and there were <b>eleven</b> output findings: <b>ten</b> asked for
+          <em>redaction</em> or a <em>flag</em> &mdash; the SSN, two card numbers, a
+          person's name, a refusal phrase &mdash; and exactly <b>one</b> asked for a
+          block: the Stage-2 injection classifier
+          (<span class="mono">security.injection.deberta_v3_v2</span>) scoring the
+          model's <em>own answer</em> as an injection at <b>1.00</b>, because a
+          fabricated customer record reads, to that classifier, like injected text. That
+          block was the wrong answer to a right finding &mdash; the PII rails had already
+          said "mask these spans and deliver it" &mdash; so on an answer that rail now
+          <b>flags at HIGH</b> against its own threshold
+          (<span class="mono">security.prompt_injection.classifier.output</span>, shipped
+          at <span class="mono">0.98</span>) instead of blocking. On a prompt it still
+          blocks at 0.9. <a href="#sides">Input checks vs output checks</a> has the full
+          reasoning, and the <b>Sensitivity</b> screen has both knobs.<br>
+          <strong>So what still blocks an answer?</strong> A rail whose action is
+          <em>block</em>: a leaked credential in the answer
+          (<span class="mono">security.secrets</span>), runnable code or SQL
+          (<span class="mono">security.insecure_output</span>), a blocking topic, or any
+          payload path that went <span class="mono">unjudged</span>. On such a run the
+          decision is <span class="chip c-block">blocked_on_output</span>, the completion
+          is withheld, and the demo flag in the next section is how you see what it
+          said.<br>
           <strong>If instead you get</strong> <span class="chip c-allow">allowed</span>
-          with a completion that politely declines to invent personal data, your model
-          refused on its own: there was nothing in the answer for the output rails to
-          catch, and an allow is the correct verdict on a clean answer. Try a smaller or
-          less cautious model, or ask for the record in a fixed format &mdash; what the
-          screen is proving is the output side, and it needs an answer with something in
-          it.</span>
+          with <b>no findings at all</b> and a completion that politely declines to invent
+          personal data, your model refused on its own: there was nothing in the answer for
+          the output rails to catch, and an allow is the correct verdict on a clean answer.
+          That is a different outcome from the one above &mdash; read the findings list, not
+          just the decision. Try a smaller or less cautious model, or ask for the record in
+          a fixed format &mdash; what the screen is proving is the output side, and it needs
+          an answer with something in it.</span>
         </div>
       </div>
 
@@ -1886,7 +1935,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       line per span &mdash; <span class="mono">chars 392-403 · national_id.us · redact ·
       privacy.region_ids, privacy.reversible_anonymiser</span> &mdash; then one line per
       finding with no span &mdash; <span class="mono">whole text · prompt_injection ·
-      block · security.injection.deberta_v3_v2</span>. Overlapping spans are merged into
+      flag · security.injection.deberta_v3_v2</span>. Overlapping spans are merged into
       one highlight; the legend still lists each. That is the whole answer to "what kind
       of response is being blocked": you see the text, which characters each rail
       objected to, and which one finding actually carried the block.</p>
@@ -1972,9 +2021,14 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
         <span class="mono">model_id_verified: false</span>. The startup probe could not
         confirm the id at the endpoint. Calls may still work; it means the id is a string
         somebody typed, not one the server has confirmed.</li>
-        <li><b>The third sample comes back allowed</b> &mdash; your model declined to
-        invent a record, so the answer was clean. Not a fault in the output guardrail; see
-        the note under that sample.</li>
+        <li><b>The third sample comes back allowed</b> &mdash; that is now the
+        <em>expected</em> outcome, and the findings list tells you which allow it is.
+        Allowed <b>with redaction and flag findings</b> is the sample working: the PII
+        rails found the SSN and the card, asked for masking rather than a refusal, and
+        the injection classifier flagged the answer instead of blocking it. Allowed with
+        <b>no findings at all</b> means your model declined to invent a record, so the
+        answer was clean &mdash; not a fault in the output guardrail. See the note under
+        that sample.</li>
         <li><b>The answer is blocked but you cannot see why, or what</b> &mdash; read
         step 3's sentence first: it names the rail and entity that carried the block and
         says what the other findings asked for. Then the <b>Output guardrail findings</b>
@@ -2101,9 +2155,10 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
 
   <div class="decode">
     <div class="dc dc--allow">
-      <h5>23 checks run on <em>both</em> sides</h5>
+      <h5>25 checks run on <em>both</em> sides</h5>
       <p>Every privacy check, every security check, every content-safety check, and
-      the fairness check. Same code, run twice.</p>
+      the fairness check. Same code, run twice &mdash; with one check that runs twice
+      and does <em>not</em> decide the same way on each side; see the note below.</p>
       <p class="say">Why: <em>a social-security number leaving your model is worse
       than one arriving. And a hidden instruction can arrive in a document your
       model retrieved just as easily as in something a person typed.</em></p>
@@ -2146,6 +2201,51 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
   would be refused</b> by checks that were never meant to see it. You will see
   <em>"6 output-only did not apply"</em> in the stage rows on the Live check screen.
   That line is the system telling you it knows the difference.</span></div>
+
+  <div class="note note--warn"><span class="note__t">One check runs on both sides and
+  decides differently on each</span>
+  <span>The Stage-2 prompt-injection classifier
+  (<span class="mono">security.injection.deberta_v3_v2</span>, the model
+  <span class="mono">protectai/deberta-v3-base-prompt-injection-v2</span>) is the
+  exception to "same code, run twice". It is still a <b>both</b>-sides rail, but the
+  two sides have their own threshold and their own action:
+  <br><br>
+  <b>On the message going in</b> &mdash;
+  <span class="mono">security.prompt_injection.classifier</span> at
+  <span class="mono">0.9</span>, action <b>BLOCK</b>, severity CRITICAL. Unchanged: a
+  question trying to hijack your system is refused before the model is called.
+  <br><br>
+  <b>On the answer coming out</b> &mdash;
+  <span class="mono">security.prompt_injection.classifier.output</span> at
+  <span class="mono">0.98</span>, action <b>FLAG</b>, severity HIGH. The finding is
+  recorded and the answer is delivered.
+  <br><br>
+  <b>Why, measured.</b> On a real round trip on the operator's own host the prompt
+  cleared every input stage, the model returned a 1,042-character fabricated customer
+  record, and the output guardrail blocked. Of <b>eleven</b> output findings,
+  <b>ten</b> asked for <span class="mono">redact</span> or
+  <span class="mono">flag</span> &mdash; the SSN, two card numbers, a person's name, a
+  refusal phrase &mdash; that is, the PII rails wanted the spans masked and the answer
+  delivered. Exactly <b>one</b> asked for a block: this classifier scoring the model's
+  own answer as an injection at <b>1.00</b>. A higher threshold cannot fix a 1.00 &mdash;
+  a rail only goes clean <em>below</em> its threshold and nothing in (0,&nbsp;1] sits
+  above 1.00 &mdash; so the asymmetry is the fix, and the new answer-side number is
+  there to tune the noise, not to carry the block.
+  <br><br>
+  <b>Upstream reads the same way.</b> llm-guard ships this model as an <em>input</em>
+  scanner only (<span class="mono">llm_guard/input_scanners/prompt_injection.py</span>;
+  there is no prompt-injection scanner in
+  <span class="mono">llm_guard/output_scanners/</span>). NeMo's
+  <span class="mono">injection_detection</span> is a YARA rule set for code and SQL
+  injection in an answer &mdash; a different capability, which this platform covers with
+  <span class="mono">security.insecure_output</span>.
+  <br><br>
+  <b>What this costs, stated plainly.</b> An injected instruction that a model echoes
+  into its answer is no longer <b>blocked</b> by this classifier; it is
+  <b>flagged</b>. Stage 1's <span class="mono">security.indirect_injection</span> and
+  <span class="mono">security.insecure_output</span> still run on the answer, and the
+  answer-side threshold is on the <b>Sensitivity</b> screen if your deployment wants
+  the noise turned up.</span></div>
 
   <div class="note"><span class="note__t">What our own notes used to say, and why it was wrong</span>
   <span>The old <code>request-flow</code> note listed five example checks for the way
@@ -2356,9 +2456,11 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
     called, the answer was checked, and only then did it appear." Then Blocked on the
     way in: "the model was never called &mdash; look, the target column is empty and
     <code>tokens_saved</code> is true." Then Tests the way out: "the model produced a
-    record with a card number in it, and you did not see it. It never left the gateway."
-    Needs a real target configured; skip this step if the screen shows the 503
-    note.</span></li>
+    record with a social-security number and a card number in it &mdash; and look at the
+    output findings: the guardrail read the <em>answer</em>, found them both, and handed
+    back the masked replacement text for each. The answer is delivered; the digits are
+    not, unless the application ignores what it was handed." Needs a real target
+    configured; skip this step if the screen shows the 503 note.</span></li>
     <li><b>Rails.</b> <span>Filter to Stage 1. "Twenty-three checks, free, on every
     single message." Then open one row and read out the source line. "That is the file and
     line we took the pattern from. This is what makes it auditable."</span></li>
@@ -2520,9 +2622,13 @@ python -m uvicorn afni_rai.gateway.app:create_app --factory --port 8080</div>
         not answering at all — fixtures cannot call a model.</td></tr>
       <tr><td><b>Round trip blocks the answer but I cannot see why / what</b></td>
         <td>Why: read the sentence under step 3 — it names the rail and entity that
-        carried the block (often the injection classifier firing on the <em>answer</em>,
-        not the PII rails) and what every other finding asked for — then the
-        <b>Output guardrail findings</b> cards under the result. What: the text is withheld
+        carried the block, and what every other finding asked for. Expect a rail whose
+        action really is <em>block</em>: a leaked credential, runnable code or SQL in the
+        answer, a blocking topic, or a payload path that went <code>unjudged</code>. It
+        will <em>not</em> be the Stage-2 injection classifier — on an answer that rail
+        flags at <code>security.prompt_injection.classifier.output</code> = 0.98 rather
+        than blocking — and it will not be the PII rails, which ask for redaction.
+        Then read the <b>Output guardrail findings</b> cards under the result. What: the text is withheld
         by design. For a demo only, set <code>AFNI_REVEAL_BLOCKED_COMPLETION=true</code> in
         the gateway's <code>.env</code> and restart; the screen then shows the blocked
         completion with every finding's span highlighted and a legend. Server-side only,

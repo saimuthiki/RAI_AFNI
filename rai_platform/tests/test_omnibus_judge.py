@@ -410,19 +410,27 @@ class ThresholdsComeFromTheStore(unittest.TestCase):
                 self.assertEqual(RAIL_DEFAULTS[check.threshold_key], 0.6)
                 self.assertIn(check.threshold_key, sensitivity.BY_KEY)
 
-    def test_the_omnibus_keys_are_eight_of_thirty_two_and_presets_touch_twenty_nine(self):
+    def test_the_omnibus_keys_are_eight_of_thirty_three_and_presets_touch_thirty(self):
         """Count pins. Adding a check moves all three; a check without a knob
-        would be live in the engine and invisible on the Sensitivity screen."""
+        would be live in the engine and invisible on the Sensitivity screen.
+
+        32 -> 33 and 29 -> 30 when the prompt-injection classifier gained a
+        SECOND threshold for the answer side
+        (`security.prompt_injection.classifier.output`, shipped at 0.98). Both
+        halves of that pair are `lower-is-stricter`, so the presets touch the
+        new one too. The omnibus count is untouched at 8: the new key belongs
+        to the DeBERTa rail, not to a moderation template.
+        """
         from afni_rai import sensitivity
         from afni_rai.tenets.accountability.thresholds import RAIL_DEFAULTS
         omnibus = [k for k in RAIL_DEFAULTS if k.startswith("x.afni.omnibus.")]
         self.assertEqual(len(omnibus), 8)
-        self.assertEqual(len(sensitivity.KNOWN), 32,
+        self.assertEqual(len(sensitivity.KNOWN), 33,
                          "GLOBAL_DEFAULTS | RAIL_DEFAULTS - what /v1/thresholds lists")
-        self.assertEqual(len(sensitivity.KNOBS), 32)
+        self.assertEqual(len(sensitivity.KNOBS), 33)
         for name in ("strict", "maximum"):
             with self.subTest(preset=name):
-                self.assertEqual(len(sensitivity.preset_overrides(name)), 29)
+                self.assertEqual(len(sensitivity.preset_overrides(name)), 30)
 
 
 class AMalformedReplyIsUnjudgedNeverGuessed(unittest.TestCase):
