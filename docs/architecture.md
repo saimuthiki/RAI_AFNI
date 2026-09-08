@@ -45,7 +45,7 @@ flowchart LR
     OUT --> AUDIT
 ```
 
-Both calls hit the **same endpoint** with the same 32 rails available. What
+Both calls hit the **same endpoint** with the same 34 rails available. What
 changes is `kind`, and that decides which rails apply.
 
 **Why blocking on the way in matters commercially:** a prompt refused at the
@@ -54,17 +54,18 @@ stopped here is cheaper than one stopped after generation.
 
 #### Which rails run in which direction
 
-Nine of 32 rails are direction-specific, because running them the other way is
+Nine of 34 rails are direction-specific, because running them the other way is
 incoherent rather than merely wasteful:
 
 | Direction | Rails | Why |
 |---|---:|---|
-| **Both** | 23 | An SSN is an SSN whichever way it travels. A leaked API key is a leak in either direction. All PII, secret, toxicity and profanity rails are here, and pinned by name in `tests/test_direction.py` so nobody narrows them later. |
+| **Both** | 25 | An SSN is an SSN whichever way it travels. A leaked API key is a leak in either direction. All PII, secret, toxicity and profanity rails are here, and pinned by name in `tests/test_direction.py` so nobody narrows them later. |
 | **Output only** | 8 | Groundedness compares an *answer* to its source — a prompt has no answer to ground. Refusal is something a model does. An invented import is something a model emits. Schema and format validators check the model's output against the caller's contract. `security.insecure_output` catches a model emitting `DROP TABLE`; a user *asking* about SQL injection is a support question. |
 | **Input only** | 1 | The confirmed-attack corpus holds attack *prompts*. |
 
-Two whole tenets are therefore **output-side only** — Explainability and
-Hallucination — and Accountability's single runtime rail is input-side. That is
+Hallucination is therefore **output-side only**, Explainability nearly so (its
+format and schema rails are output-only; its topic-scope rail runs both ways), and
+Accountability's single runtime rail is input-side. That is
 architecture, not oversight, and `test_per_tenet_direction_cover_is_exactly_as_designed`
 pins the map so a deliberate asymmetry stays documented and an accidental one
 gets caught.
@@ -86,6 +87,11 @@ BLOCKED after 1 cascade stage(s) in 0ms
 ```
 
 Before the direction gate existed, the first of those was a false positive.
+
+*(Captured under the old `severity` rule. Under the default
+`AFNI_CASCADE_ESCALATION=stage2` the first reads `ALLOWED after 2 cascade stage(s)`
+on a provisioned host — Stage 2 looks at every request Stage 1 did not block — and
+BLOCKS on `COULD NOT JUDGE` on a host with no Stage-2 weights.)*
 
 #### 1b · Two ways to wire it: you call twice, or the gateway calls for you
 
@@ -170,8 +176,8 @@ platform: the runtime cost tier a request paid.
 
 ```mermaid
 flowchart LR
-    S1["Stage 1<br/>free regex<br/>sub-ms<br/>100% of traffic"] --> S2["Stage 2<br/>local model<br/>1-3 s on CPU<br/>borderline only"]
-    S2 --> S3["Stage 3<br/>paid judge<br/>1-5 s<br/>last resort"]
+    S1["Stage 1<br/>free regex<br/>sub-ms<br/>100% of traffic"] --> S2["Stage 2<br/>local model<br/>1-3 s on CPU<br/>every request Stage 1<br/>did not block"]
+    S2 --> S3["Stage 3<br/>paid judge<br/>1-5 s<br/>severe or requested<br/>findings only"]
     OFF["Offline<br/>CI and red-team<br/>NEVER in the request path"]
 ```
 
@@ -206,10 +212,10 @@ flowchart TB
 
     FAN --> T1["<b>Privacy</b><br/>8 rails · both directions"]
     FAN --> T2["<b>Security</b><br/>8 rails · both directions"]
-    FAN --> T3["<b>Content Safety</b><br/>6 rails · both directions"]
+    FAN --> T3["<b>Content Safety</b><br/>7 rails · both directions"]
     FAN --> T4["<b>Hallucination</b><br/>5 rails · OUTPUT only"]
     FAN --> T5["<b>Fairness &amp; Bias</b><br/>2 rails · both directions"]
-    FAN --> T6["<b>Explainability</b><br/>2 rails · OUTPUT only"]
+    FAN --> T6["<b>Explainability</b><br/>3 rails · 2 OUTPUT only,<br/>topic scope both"]
     FAN --> T7["<b>Accountability</b><br/>1 rail · INPUT only<br/><i>plus audit, thresholds,<br/>compliance mapping</i>"]
 
     T1 --> ENG
@@ -229,12 +235,12 @@ Rails per tenet, and the order the cascade reaches them:
 |---|---:|---:|---:|---:|---|
 | Privacy | 6 | 1 | 1 | 8 | both |
 | Security | 6 | 1 | 1 | 8 | both |
-| Profanity / Content Safety | 3 | 2 | 1 | 6 | both |
+| Profanity / Content Safety | 3 | 2 | 2 | 7 | both |
 | Hallucination / Reliability | 3 | 2 | 0 | 5 | output |
 | Fairness & Bias | 1 | 1 | 0 | 2 | both |
-| Explainability & Transparency | 2 | 0 | 0 | 2 | output |
+| Explainability & Transparency | 3 | 0 | 0 | 3 | output (topic scope: both) |
 | Accountability | 1 | 0 | 0 | 1 | input |
-| **All** | **22** | **7** | **3** | **32** | |
+| **All** | **23** | **7** | **4** | **34** | |
 
 ---
 
@@ -260,9 +266,8 @@ flowchart TB
 
     S1 --> D1{"what did Stage 1 find?"}
 
-    D1 -->|"nothing"| STOP1["<b>ALLOW</b><br/>Stages 2 and 3 never run<br/><i>this is the overwhelming majority</i>"]
     D1 -->|"a confident block<br/>e.g. a leaked API key"| STOP2["<b>BLOCK</b><br/>short-circuit — Stages 2 and 3<br/>never run, nothing is paid for"]
-    D1 -->|"HIGH severity, or a rail<br/>asked to escalate"| S2
+    D1 -->|"nothing, a HIGH finding, or a rail<br/>asked to escalate — Stage 2 looks at<br/>everything Stage 1 did not block<br/>(default AFNI_CASCADE_ESCALATION=stage2)"| S2
 
     S2["<b>STAGE 2</b> · presidio_ner<br/><i>llm-guard → Presidio + spaCy en_core_web_lg</i><br/>catches a NAME, which no regex can<br/>threshold privacy.pii.ner_score = 0.5<br/><b>1-3 s on CPU</b>"]
 
@@ -270,9 +275,9 @@ flowchart TB
     D2 -->|"entity above threshold"| BLOCK2["<b>BLOCK</b> or redact"]
     D2 -->|"below"| ALLOW2["<b>ALLOW</b>"]
     D2 -->|"weights absent"| UNJ["<b>unjudged</b><br/>fails closed<br/>unconditionally"]
-    D2 -->|"a response that looks<br/>like a leak of context"| S3
+    D2 -->|"a severe finding, or a rail<br/>asked to escalate — e.g. a response<br/>that looks like a leak of context"| S3
 
-    S3["<b>STAGE 3</b> · pii_leakage_judge<br/><i>deepteam</i> PIIMetric prompt<br/>via the judge chain:<br/>openai[0] → openai[1] → gemini[0]<br/><b>metered · 1-5 s · last resort</b>"]
+    S3["<b>STAGE 3</b> · pii_leakage_judge<br/><i>deepteam</i> PIIMetric prompt<br/>via the judge chain, shipped order:<br/>local → gemini[0] → openai[0]<br/><b>metered · 1-5 s · severe findings only</b>"]
     S3 --> BLOCK2
 ```
 
@@ -281,11 +286,15 @@ exactly:
 
 - **A confident block stops everything.** `short_circuit = True` in
   `engine.py`, and Stages 2 and 3 are recorded as skipped. Nothing is paid for.
-- **Nothing found also stops everything.** No escalation is requested, so the
-  expensive tiers never run. This is the common case and it is where the money
-  is saved.
-- **Only doubt escalates** — a rail explicitly asking (`escalate=True`), or a
-  finding severe enough that a second opinion is worth buying.
+- **Nothing found does NOT stop it.** Under the default
+  `AFNI_CASCADE_ESCALATION=stage2`, Stage 2 — local, free after warm-up — looks at
+  every request Stage 1 did not block. A clean Stage 1 is "undecided", not
+  "decided clean": Stage 1 matches patterns, and a harmful request in ordinary
+  words produces no pattern at all. (`severity` restores the old rule where a
+  clean stage ended the cascade; `full` runs Stage 3 on anything undecided too.)
+- **Only doubt reaches the paid tier** — Stage 3 runs when a rail explicitly asks
+  (`escalate=True`) or a finding is severe enough that a second opinion is worth
+  buying. A `BLOCK` at any stage still stops everything.
 
 One nuance worth knowing, because it surprises people: **a PII hit at Stage 1
 does escalate.** Those rails emit `action: redact` at HIGH severity rather than
@@ -298,8 +307,8 @@ short-circuits immediately.
 
 | Branch | Stage 1 catches | Stage 2 adds | Stage 3 adds |
 |---|---|---|---|
-| **Security** | injection patterns, encodings, secrets, invisible text | DeBERTa injection classifier — **the only thing that BLOCKS an injection** | Azure Prompt Shields *(unconfigured)* |
-| **Content Safety** | graded profanity lexicon, leetspeak-normalised | 7-head toxicity transformer; zero-shot topics | LLM judge, threshold 0.8 |
+| **Security** | injection patterns, encodings, secrets, invisible text | DeBERTa injection classifier — **the only thing that BLOCKS an injection** | Azure Prompt Shields *(skipped per request until `AZURE_CONTENT_SAFETY_*` is set — not a degradation)* |
+| **Content Safety** | graded profanity lexicon, leetspeak-normalised | 7-head toxicity transformer; zero-shot topics — armed with the six always-banned topics, **BLOCKS** (HIGH) on a match | toxicity LLM judge, threshold 0.8; omnibus judge (Infosys moderation layer, one call, a score per check, `x.afni.omnibus.*` = 0.6) |
 | **Hallucination** | invented imports, refusal phrases, malformed JSON/XML | NLI entailment against a retrieved source; JSON Schema | — |
 | **Fairness** | protected attribute + decision term co-occurring | bias classifier, threshold 0.7 | — (7 of 9 capabilities are **offline** batch jobs) |
 | **Explainability** | 10 format validators, per-field schema explanations | — | — |
@@ -308,8 +317,9 @@ short-circuits immediately.
 **Security is worth a warning.** No Stage-1 rail blocks a prompt injection — by
 design, because PyRIT documents a high false-positive rate for those patterns, so
 a regex hit buys a second opinion rather than a refusal. Without the Stage-2
-classifier installed, a textbook injection produces four HIGH findings and is still
-*allowed* — none of them carries the block action. Stage 1 alone is a **detector** for
+classifier installed, a textbook injection produces four HIGH findings, none of which
+carries the block action — the request still blocks, but on the `COULD NOT JUDGE`
+line (fail-closed), not on any finding. Stage 1 alone is a **detector** for
 injection, not a **control** against it.
 
 ---
@@ -344,6 +354,7 @@ runtime tier.
 | | 2 | `content_safety.toxicity_model` | llm-guard | adopt |
 | | 2 | `content_safety.zeroshot_topics` | llm-guard | adopt |
 | | 3 | `content_safety.toxicity_judge` | hai-guardrails | combine |
+| | 3 | `moderation.omnibus_judge` | Infosys RAI Toolkit (`moderationlayer` prompt templates) | combine |
 | **Hallucination** | 1 | `package-hallucination` | garak | adopt |
 | | 1 | `refusal-phrases` | promptfoo | adopt |
 | | 1 | `structured-output-wellformed` | Safe Zone | bench |
@@ -353,6 +364,7 @@ runtime tier.
 | | 2 | `llm_guard.bias` | llm-guard | adopt |
 | **Explainability** | 1 | `afni-format-validators` | Guardrails AI | skip |
 | | 1 | `afni-schema-explain` | Guardrails AI | skip |
+| | 1 | `afni-topic-scope` | llm-guard (BanSubstrings word match) | adopt |
 | **Accountability** | 1 | `attack-corpus-repeat` | Rebuff *(similarity from JCB)* | combine |
 
 A dash means the repo's *patterns* were ported without the repo being adopted —
@@ -390,6 +402,12 @@ ALLOWED after 1 cascade stage(s) in 0ms
 
 **That last line is the product.** 23 rails ran in under a millisecond; the two
 expensive tiers were never touched.
+
+*(Captured under the old `severity` rule. Under the default
+`AFNI_CASCADE_ESCALATION=stage2` a clean prompt reads `ALLOWED after 2 cascade
+stage(s)` on a provisioned host — the local Stage-2 models look too, the paid tier
+still does not — and on a host with no Stage-2 weights it BLOCKS on
+`COULD NOT JUDGE`, because Stage 2 now runs and cannot look.)*
 
 #### Leaked credential — blocked at Stage 1, nothing paid for
 
@@ -431,14 +449,16 @@ kind so nobody compares them naively.
 #### The same jailbreak **without** the classifier
 
 ```
-ALLOWED after 2 cascade stage(s) in 8118ms
-  COULD NOT JUDGE 1 path(s): payload.messages[0].content
-  Also flagged (did not block): 4
+BLOCKED after 2 cascade stage(s) in 5169ms
+  COULD NOT JUDGE 1 path(s): payload.messages[0].content  <- not the same as 'found nothing'
+  Also flagged (did not block): 3
+  (1 stage(s) never ran - that is the saving)
 ```
 
-**Allowed.** This is the Security warning above, made concrete: on internal
-traffic with no Stage-2 weights, a textbook injection gets through with four
-HIGH findings. Install the model.
+**Blocked — but not by any finding.** This is the Security warning above, made
+concrete: with no Stage-2 weights the HIGH findings all merely flag, and the block
+is the `COULD NOT JUDGE` line — fail-closed, unconditional since `--internal` was
+removed. A coverage gap wearing a refusal. Install the model.
 
 #### Toxicity — three tenets firing at once
 
@@ -537,7 +557,7 @@ meant nothing.
 ### 7 · Regenerate any of this yourself
 
 ```bash
-python rai_platform/cli.py rails         # 32 rails by stage, with repo and evidence
+python rai_platform/cli.py rails         # 34 rails by stage, with repo and evidence
 python rai_platform/cli.py coverage      # 65 capabilities, five states
 python rai_platform/cli.py preflight     # what is missing and where it goes
 curl -s localhost:8000/v1/rails    | python -m json.tool
@@ -580,8 +600,8 @@ That is the whole cost argument, and it is enforced in
 | Stage | What runs | Latency | Cost | Runs on |
 |---|---|---|---|---|
 | **Stage 1** | regex, keyword lists, checksums, unicode normalisation, schema checks | sub-millisecond | free | every request |
-| **Stage 2** | a locally-run classifier or NLI model; or a cloud second opinion | ~1–3 s on CPU (measured) | free (local) or per-call | borderline input only |
-| **Stage 3** | a paid API or an LLM-as-judge | ~1–5 s | per-call, the dearest | last resort |
+| **Stage 2** | a locally-run classifier or NLI model; or a cloud second opinion | ~1–3 s on CPU (measured) | free (local) or per-call | every request Stage 1 did not block (default `stage2`) |
+| **Stage 3** | a paid API or an LLM-as-judge | ~1–5 s | per-call, the dearest | severe or explicitly escalated findings |
 | **Offline** | red-team attacks, fairness metrics, drift, SHAP | unbounded | CI budget | never in the request path |
 
 Stage membership is **data, not a code decision**. It comes from
@@ -590,20 +610,24 @@ rows carries a mechanism, a cost, a latency class and a derived stage — each o
 backed by a `file:line`, model id or dependency actually read from the vendored
 source. A rail declares its stage; it does not get to invent one.
 
-### Escalation is conditional, not layered-always
+### Escalation: a block ends it, a clean stage does not
 
 A common way to build this wrong is to run every layer on every request and call
-it defence in depth. That is just paying three times for one answer.
+it defence in depth. The opposite mistake is to stop at a clean Stage 1 — Stage 1
+is regex, wordlists and checksums, and a harmful request in ordinary words produces
+no finding at all, so the Stage-2 classifiers could only ever see what the patterns
+had already flagged. `AFNI_CASCADE_ESCALATION` picks the rule; the default is
+`stage2`:
 
-A stage runs only when:
+- **`stage2` (default)** — Stage 2 looks at every request Stage 1 did not block; it
+  is local and free after warm-up. Stage 3 (paid, and it ships the text to whoever
+  serves the judge) runs only when a rail set `escalate=True` or the previous stage
+  produced a `high` or `critical` finding.
+- **`full`** — every stage looks at anything undecided, Stage 3 included.
+- **`severity`** — the original rule: a clean stage ends the cascade.
 
-- a rail in the previous stage set `escalate=True` — it saw something suspicious
-  but is not confident enough to decide, or
-- the previous stage produced a `high` or `critical` severity finding, so a
-  second opinion is worth paying for.
-
-A clean Stage 1 ends the cascade. A blocking Stage 1 finding ends it immediately.
-Both are asserted in tests rather than assumed:
+A blocking finding ends the cascade immediately under every mode, and an
+`unjudged` path escalates under every mode. Asserted in tests rather than assumed:
 
 ```python
 def test_stage_1_block_short_circuits_later_stages(self):
@@ -629,8 +653,6 @@ review. NeMo Guardrails' own jailbreak rail defaults to fail-**open**, documente
 at `references/Guardrails-develop/docs/configure-rails/guardrail-catalog/jailbreak-protection.mdx:112`.
 If a rail author can ship a fail-open default in a mature, NVIDIA-maintained
 framework, then this decision cannot be delegated to rail authors.
-
-Internal traffic fails open — but still reports. See below.
 
 #### Fail loud
 

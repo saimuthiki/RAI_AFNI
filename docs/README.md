@@ -9,7 +9,7 @@ holds the answer.
 | Read this | When you want |
 |---|---|
 | [**architecture.md**](architecture.md) | How a request travels, what the cascade does, and how the live path relates to the offline loop |
-| [**request-flow.md**](request-flow.md) | **Generated from the code.** Which of the 33 checks run on the prompt, the answer, or both — and the four outcomes |
+| [**request-flow.md**](request-flow.md) | **Generated from the code.** Which of the 34 checks run on the prompt, the answer, or both — and the four outcomes |
 | [**tenets.md**](tenets.md) | The seven tenets, the 65 capabilities under them, and the [governance register](tenets.md#the-governance-register) |
 | [**frameworks.md**](frameworks.md) | All 23 reviewed open-source projects: verdict, mechanism, and the Infosys vs NeMo comparison |
 | [**plan.md**](plan.md) | What to build, what is decided, and what is still open |
@@ -63,8 +63,8 @@ drugs?"* — allowed at Stage 1. Not a bug. Stage 1 matches **patterns**, and ha
 as protection against harmful intent.** It is data-loss and attack-pattern protection, and
 it is excellent at that, for free, on every message.
 
-**3 · Almost every check runs on both sides.** 24 of the 33 checks run on the prompt *and*
-the answer. So 25 checks see a question and **32 see an answer** — the outgoing guardrail
+**3 · Almost every check runs on both sides.** 25 of the 34 checks run on the prompt *and*
+the answer. So 26 checks see a question and **33 see an answer** — the outgoing guardrail
 is the *stricter* of the two, not a lighter afterthought.
 
 **3b · Text and images are separate routes.** `POST /v1/guard` checks text only, because a
@@ -103,7 +103,7 @@ change it.
 | **Tenets** | coverage honestly counted, plus the governance register |
 | **Rails** | every detector, its stage, its source repo and its evidence |
 | **Topics** | 6 always banned and compiled in, 24 optional and yours to pick |
-| **Sensitivity** | all 24 thresholds, the value in force, and three presets |
+| **Sensitivity** | all 31 thresholds, the value in force, and three presets |
 | **Media** | one image or video, judged locally, with the regions drawn on it |
 | **Corpus** | sample the 11,369 records — and the **guardrails off vs on** ladder |
 | **Frameworks** | 23 reviewed projects, 16 contributing |

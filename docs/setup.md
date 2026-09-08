@@ -136,7 +136,7 @@ Optional, all of it. `.env` is gitignored. Leave it empty to run without the
 Stage-3 judges.
 
 ```
-AFNI_JUDGE_PROVIDER=local,openai,gemini
+AFNI_JUDGE_PROVIDER=local,gemini,openai
 OPENAI_API_KEYS=
 GOOGLE_API_KEYS=
 LOCAL_BASE_URL=
@@ -454,7 +454,7 @@ Only three rails need these, and they are the slowest and most expensive tier.
 Put the values in `.env`, which is gitignored:
 
 ```
-AFNI_JUDGE_PROVIDER=local,openai,gemini
+AFNI_JUDGE_PROVIDER=local,gemini,openai
 LOCAL_BASE_URL=http://your-local-endpoint/v1
 LOCAL_MODEL=llama3
 OPENAI_API_KEYS=key1,key2
@@ -548,13 +548,14 @@ failure table.
 
 ### What is still not a download
 
-**The allowed / banned topic list.** `TopicScopeRail` is written and tested but
-ships with an empty lexicon, so it is not mounted; and the zero-shot rail returns
-clean when no topics are configured, weights or no weights. Every reviewed tool
-treats on-topic as deployment policy rather than a model artefact (NeMo's
-`config.yml`, DeepTeam's `TopicalGuard(allowed_topics=[...])`). What it needs, per
-application, is the list of topics that application may discuss and the ones it
-must refuse.
+**The allowed topic list.** `TopicScopeRail` is mounted with the six always-banned
+topics compiled in, and the zero-shot rail is armed with the same six as semantic
+classes (`topics.labels_for`) and BLOCKS on a match once its weights are present.
+Every reviewed tool treats on-topic as deployment policy rather than a model
+artefact (NeMo's `config.yml`, DeepTeam's `TopicalGuard(allowed_topics=[...])`).
+What the banned half does not give you is the per-application *allowed* list: the
+topics that application may discuss. That list is chosen per deployment, not
+downloaded.
 
 ---
 
@@ -775,8 +776,9 @@ per-request at all.
 | **Size** | ~500 MB |
 | **Revision** | `d825e740e0c59881cf0b0b1481ccf726b6d65341` |
 
-Zero-shot topic scoping. **Also needs the topic list** — see §5. The weights
-alone do nothing, because the rail returns clean when no topics are configured.
+Zero-shot topic scoping. Armed with the six always-banned topics as semantic
+classes (`topics.labels_for`); a match BLOCKS at severity HIGH. Optional topics
+promoted to blocking on the Topics screen are added as classes on restart.
 
 ---
 
@@ -873,16 +875,16 @@ rotation is the only remedy.
 
 ### 5 · The one item that is not a download
 
-**The allowed / banned topic list.** This is the `Ban-topics / on-topic scope`
-gap. `TopicScopeRail` is written and unit-tested but ships with an empty lexicon,
-so it is **not mounted** — and `content_safety.zeroshot_topics` returns clean
-with no topics configured, weights or no weights.
+**The allowed topic list.** The banned half of the `Ban-topics / on-topic scope`
+gap is closed: `TopicScopeRail` is mounted with the six always-banned topics, and
+`content_safety.zeroshot_topics` blocks on the same six as semantic classes once
+its weights are present. What no download closes is the per-application
+*allowed* list.
 
 Every reviewed tool treats on-topic as deployment policy, not a model artefact
-(NeMo's `config.yml`, DeepTeam's `TopicalGuard(allowed_topics=[...])`). So no
-download closes this. What it needs is, per AFNI application: **the topics that
-application is allowed to discuss, and the ones it must refuse.** Give me that
-for one application and I will wire it and mount the rail.
+(NeMo's `config.yml`, DeepTeam's `TopicalGuard(allowed_topics=[...])`). What it
+needs is, per AFNI application: **the topics that application is allowed to
+discuss.** Optional banned topics are already chosen on the Topics screen.
 
 ### 6 · Gaps no download closes
 
@@ -911,6 +913,8 @@ can gate on it.
 ### What none of this blocks
 
 **Stage 1 — 23 rails across all seven tenets — is pure Python standard library
-and needs none of the above.** Every item here is a rail that reports `unjudged`
-until it arrives, and `unjudged` fails closed — unconditionally, for every
-caller. That is honest behaviour, and it is not the same as protection.
+and needs none of the above.** Every model or package here backs a rail that
+reports `unjudged` until it arrives, and `unjudged` fails closed — unconditionally,
+for every caller. The one exception is the Azure key: `security.prompt_shields`
+without it is skipped per request and listed under `rails_not_configured` on
+`/healthz`, not a degradation. Honest behaviour is not the same as protection.

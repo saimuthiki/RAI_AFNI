@@ -35,8 +35,8 @@ the input guardrail does, plus response-specific work that has no meaning on a p
    │  INPUT GUARDRAIL — 26 rails apply                       │
    │                                                      │
    │  Stage 1  free, deterministic, 100% of prompts       │
-   │     └─ nothing conclusive? ──▶ Stage 2  local model  │
-   │            └─ still unsure? ──▶ Stage 3  paid judge  │
+   │     └─ not blocked? ───────▶ Stage 2  local model  │
+   │            └─ severe finding? ─▶ Stage 3  paid judge  │
    │                                                      │
    │  Short-circuits the moment an answer is confident.   │
    └──────────────────────────────────────────────────────┘
@@ -166,10 +166,11 @@ blocked** by the prompt-only rails and **every prompt blocked** by the eight
 response-only ones. Asserted by
 `test_direction.test_a_skipped_rail_cannot_cause_a_fail_closed_block`.
 
-**3 · Escalation is conditional, not layered-always.** Stage 2 runs only when Stage 1
-found something it was not confident enough to decide. Stage 3 runs only when Stage 2
-was still unsure. That is the cost doctrine — free checks on 100% of traffic, paid checks
-on a thin slice — and it applies identically on both sides.
+**3 · A block ends the cascade; a clean stage does not.** Under the default
+`AFNI_CASCADE_ESCALATION=stage2`, Stage 2 (local, free after warm-up) looks at every request
+Stage 1 did not block; Stage 3 (paid) runs only on a severe or explicitly escalated finding.
+`full` runs every stage on anything undecided; `severity` restores the old clean-stage-ends-it
+rule. Free checks on 100% of traffic, paid checks on a thin slice — identically on both sides.
 
 **4 · "Not safe" is not one branch.** There are four outcomes, and only two of them
 refuse:

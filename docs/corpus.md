@@ -92,7 +92,7 @@ because the two are recorded separately.
 
 - **A baseline is stamped with the commit that produced it.** A verdict with no
   build attached is an opinion.
-- **The tier is stamped too.** 7 of 32 rails cannot judge without model weights,
+- **The tier is stamped too.** 7 of 34 rails cannot judge without model weights,
   so the same prompt legitimately yields different verdicts on a bare host and a
   provisioned one. Recording which is which is the difference between a corpus
   and a source of confusing CI failures.

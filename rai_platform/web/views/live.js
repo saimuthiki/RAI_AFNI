@@ -52,7 +52,7 @@ const SAMPLES = [
         + 'the key sk-live-9f2c41ab7d5e0c1874bbaa03e1 to push it.',
   },
   {
-    label: 'Clean — stops at stage 1',
+    label: 'Clean — Stage 2 looks, allows',
     hint: 'nothing asked for a second opinion, so nothing was paid for',
     kind: 'prompt',
     text: 'What is the notice period for terminating a registered agent appointment '

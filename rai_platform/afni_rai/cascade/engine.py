@@ -319,7 +319,7 @@ ENV_ESCALATION = "AFNI_CASCADE_ESCALATION"
 
 
 def escalation_from_env(env: dict[str, str] | None = None) -> str:
-    """`AFNI_CASCADE_ESCALATION`, validated, defaulting to `full`.
+    """`AFNI_CASCADE_ESCALATION`, validated, defaulting to `stage2`.
 
     An unrecognised value is a WARNING and the default, not a raise - unlike the
     constructor. The difference is deliberate: a bad value in code is a bug to
@@ -355,7 +355,7 @@ class Cascade:
         unconfigured gateway behaves exactly as before.
 
         `escalation` is one of `ESCALATION_MODES` - see that constant for what
-        each one means and why the default is `full`. An unrecognised value
+        each one means and why the default is `stage2`. An unrecognised value
         RAISES rather than falling back: this decides how deeply every request
         is inspected, and a typo that silently halved the depth of the cascade
         is the kind of thing nobody notices until a corpus run.

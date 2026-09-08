@@ -133,9 +133,12 @@ asserted:
 23. **NOT STARTED** — Publish the platform as an internal versioned package with a
     **mandatory adoption gate**: no AI-native application reaches production without
     routing through the gateway and passing the CI tiers.
-24. **NOT STARTED** — The allowed/banned topic list per application. `TopicScopeRail` is
-    built and tested but deliberately **unmounted**, because the list is a business
-    decision, not a download.
+24. **PARTIAL** — The allowed/banned topic list per application. `TopicScopeRail` is
+    mounted with the six always-banned topics compiled in (and the zero-shot rail is
+    armed with the same six as semantic classes, blocking on a match); the 24 optional
+    topics are chosen per deployment on the console's **Topics** screen. What is still
+    open is the per-application *allowed* list, because that is a business decision,
+    not a download.
 
 ### Conditional and dropped
 
@@ -488,7 +491,7 @@ beside it.
 cannot reach a paid third-party judge. With external transport now cleared, that default
 stands for three reasons that are **not** about residency:
 
-1. **Volume.** 11,369 prompts through a paid judge, twice per prompt (two judge rails), is
+1. **Volume.** 11,369 prompts through a paid judge, three times per prompt (three judge rails), is
    a bill nobody has approved. The cap is a spend control before it is anything else.
 2. **What the content is.** Sending a vendor 11,369 requests for bomb-making and
    drug-synthesis instructions will trip their abuse detection. The likely outcome is a
@@ -532,5 +535,5 @@ analysis, and each one changed the code.
 | 5 | **Checksums missing upstream where they matter.** Infosys' Aadhaar recognizer is pattern-only at score 0.5 (no Verhoeff); safe-zone's `IBAN_TR` is shape-only (no mod-97); no reviewed repo validates NPI or DEA check digits. | Implemented here. Provenance stated honestly: the Verhoeff tables and the NPI 80840 prefix rule are published standards, **not** ported from any vendored repo. |
 | 6 | **Stdlib `xml.etree` is the only XML parser available at Stage 1** — `defusedxml` would break the zero-dependency rule. | Mitigated by refusing any `<!DOCTYPE`/`<!ENTITY>` fragment before parsing, plus a size cap; verified against a billion-laughs payload (returns in 0.1 ms without expanding). A security reviewer should still see this decision explicitly. |
 | 7 | **`stop_reason` / `finish_reason` / `model` were being judged as user content.** | Fixed. A class of bug: any field-walking guardrail does this unless it filters transport metadata, and the symptom is bizarre — a missing model dependency blocking a request because nothing could judge the string `"gpt-4o"`. |
-| 8 | **The request-flow doc described two guardrails doing unrelated jobs.** It listed five example input checks and five different output ones, transcribed from a deck slide and never reconciled. | In reality **23 of 32 rails run on both sides**; the output guardrail runs everything the input one does plus 8 response-specific rails. The doc is now generated from the rail registry, with tests asserting the counts. |
+| 8 | **The request-flow doc described two guardrails doing unrelated jobs.** It listed five example input checks and five different output ones, transcribed from a deck slide and never reconciled. | In reality **25 of 34 rails run on both sides**; the output guardrail runs everything the input one does plus 8 response-specific rails. The doc is now generated from the rail registry, with tests asserting the counts. |
 | 9 | **`/v1/rails` understated itself.** `RailInfo` is `extra="forbid"` but never declared `direction`, while the handler emitted it. | The OpenAPI document told clients the field did not exist — on the one endpoint whose job is to say which rails apply where. Declared. |

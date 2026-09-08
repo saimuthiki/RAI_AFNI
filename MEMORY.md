@@ -3122,3 +3122,34 @@ for every tenet. Use multiple agents. Also update every stale document."
 - MEMORY.md: this file had not been updated since `d85f4e21`; the nine entries above were
   written from the commit history in this same change.
 **Files created / changed:** `rai_platform/afni_rai/tenets/moderation/__init__.py` (new); `rai_platform/afni_rai/gateway/providers.py` — `complete`, `parse_json_object`, self-binding; `rai_platform/afni_rai/cli.py` — `moderation` package; `rai_platform/afni_rai/tenets/accountability/thresholds.py`, `rai_platform/afni_rai/sensitivity.py`, `rai_platform/afni_rai/governance.py` — seven knobs; `rai_platform/tests/test_omnibus_judge.py` (new, 37), `test_judge_complete.py` (new, 13), `test_parse_json_object.py` (new, 14); `docs/request-flow.md` (regenerated); `docs/ui-walkthrough.html`; `.env.example`; `MEMORY.md`.
+
+### 2026-09-08 — Every document said what the code used to do
+**Type:** Documentation
+**Ask:** "I need all the updated documents. Like the markdown files and also the HTML and also
+the UI walkthrough.. and everything Whichever is holding the stale information." Then: "try to
+complete the open items also" and "ui walkthrough also".
+**What was done:**
+- A sweep agent read every markdown and HTML file against the live API (rail counts, stage
+  sizes, direction split, threshold count, escalation rule, judge chain order, topic rail
+  state, Azure key behaviour) and reported two lists: edits it applied, and edits in the
+  files it was told not to touch.
+- Applied: 42 edits across `README.md`, `docs/README.md`, `docs/architecture.md`,
+  `docs/corpus.md`, `docs/frameworks.md`, `docs/plan.md` — 32/33 → 34 rails, "borderline
+  input only" → "whatever Stage 1 did not block", "a clean Stage 1 ends the cascade" → the
+  three `AFNI_CASCADE_ESCALATION` modes, `TopicScopeRail` "unmounted" → mounted and armed.
+- Section B by hand: 16 walkthrough passages (26 input / 33 output, "eight" output-only
+  rails, 34 checks, 31 thresholds, twelve noisy, presets touch 28 of 31, 7 of 34 need
+  weights, direction table 23/17/22 · 7/5/7 · 4/4/4); six `docs/setup.md` passages (judge
+  chain `local,gemini,openai` in two places; the topic rail is mounted and BLOCKs, the open
+  item is the per-application *allowed* list only; the Azure key is `rails_not_configured`,
+  not `unjudged`); two `engine.py` docstrings that still named `full` as the default; the
+  Live-check button label `Clean — Stage 2 looks, allows` (live.js + the walkthrough that
+  mirrors it) and the console legend string `local model · whatever Stage 1 did not block`;
+  `build_request_flow.py` item 3 and the diagram arrows ("A block ends the cascade; a clean
+  stage does not"), `docs/request-flow.md` regenerated from it; `.env.example` chain-order
+  comment.
+- Pinned by tests, so the numbers cannot drift silently again: `test_walkthrough.py`
+  (walkthrough counts against the live rail set, neighbouring counts asserted absent),
+  `test_env_manifest.py`, and the request-flow builder is the only writer of its doc.
+- Full suite after the edits: 1491 passed, 5 skipped.
+**Files created / changed:** `README.md`, `docs/README.md`, `docs/architecture.md`, `docs/corpus.md`, `docs/frameworks.md`, `docs/plan.md`, `docs/setup.md`, `docs/ui-walkthrough.html`, `docs/request-flow.md` (regenerated), `.env.example`, `rai_platform/afni_rai/cascade/engine.py` (docstrings), `rai_platform/scripts/build_request_flow.py`, `rai_platform/web/index.html`, `rai_platform/web/views/live.js`, `MEMORY.md`.

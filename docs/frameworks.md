@@ -111,7 +111,7 @@ slides 62–68 by `helpers/build_deck_methodology.py`.
 | Stage | Meaning |
 |---|---|
 | **Stage 1** | Free and deterministic — can run on every single request |
-| **Stage 2** | Local model, or a cloud second opinion on borderline input only |
+| **Stage 2** | Local model, or a cloud second opinion — runs on whatever Stage 1 did not block |
 | **Stage 3** | Paid API required, or an LLM-judge call |
 | **Delegates** | Provides a contract/taxonomy/orchestration but no detector of its own |
 | **Offline** | CI and red-team only — never in the request path |

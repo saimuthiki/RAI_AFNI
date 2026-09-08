@@ -354,8 +354,8 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
     </g>
   </svg>
   </div>
-  <figcaption>The rail counts are real: 24 checks look at a question, 31 look at
-  an answer. The answer side has ten checks the question side does not, because
+  <figcaption>The rail counts are real: 26 checks look at a question, 33 look at
+  an answer. The answer side has eight checks the question side does not, because
   they only make sense on an answer — "did the model make that fact up?", "did it
   invent a software package that does not exist?", "did it put runnable code in
   its reply?"</figcaption>
@@ -498,7 +498,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
             checked. Plain English is fine; you do not need JSON here.</td></tr>
           <tr><td><b>Five grey buttons</b></td><td>Ready-made examples, so you do not have
             to think of one: <em>Stops at stage 1</em>, <em>Escalates to stage 2</em>,
-            <em>Climbs all three</em>, <em>Clean — stops at stage 1</em>,
+            <em>Climbs all three</em>, <em>Clean — Stage 2 looks, allows</em>,
             <em>Guards the way out</em>. Click one and it fills the box for you.</td></tr>
           <tr><td><b>One line of small print</b></td><td>It says the gateway always
             fails closed. That is the whole setting, and it is not adjustable: if any
@@ -782,7 +782,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       <span class="view__click">#/rails</span></div>
     <div class="view__body">
       <h4>What this screen is for</h4>
-      <div class="prose"><p>One row for each of the 33 checks. The Tenets screen answers
+      <div class="prose"><p>One row for each of the 34 checks. The Tenets screen answers
       "are we covered"; this one answers the question an engineer asks next — <em>what
       exactly is looking at my traffic, how does it work, where did it come from, and
       can it run right now?</em></p></div>
@@ -1003,7 +1003,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
         <b>score between 0 and 1</b>, and a threshold is the line it has to cross.
         Toxicity ships at <span class="mono">0.60</span>: a message the model
         scores 0.59 goes through, 0.61 does not.</p>
-        <p>There are <b>24 of them</b>. This screen shows every one, what it
+        <p>There are <b>31 of them</b>. This screen shows every one, what it
         judges, the number the code ships, and the number in force here.</p>
       </div>
 
@@ -1017,7 +1017,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       guardrail that refuses ordinary work gets switched off by the business
       inside a fortnight, which is a far worse outcome than a threshold at 0.7.
       <br><br>
-      Nine of the 24 are marked <b>noisy</b>. That is the honest way of saying
+      Twelve of the 31 are marked <b>noisy</b>. That is the honest way of saying
       "this is the one you will regret tightening".</span></div>
 
       <h4>Where a threshold should live — and the answer to the question you asked</h4>
@@ -1049,22 +1049,22 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
               <td>Always, to start. And to undo an experiment.</td></tr>
           <tr><td><b>Strict</b></td>
               <td>Every detection threshold at three quarters of its shipped
-              value. Sets 21 of the 24.</td>
+              value. Sets 28 of the 31.</td>
               <td>A high-risk application where a false refusal costs less than
               a miss.</td></tr>
           <tr><td><b>Maximum sensitivity</b></td>
-              <td>Every detection threshold at 0.10. Sets 21 of the 24.</td>
+              <td>Every detection threshold at 0.10. Sets 28 of the 31.</td>
               <td><b>A demo or a red-team exercise. Not production.</b> At 0.10
               a classifier's background noise becomes a finding.</td></tr>
         </tbody>
       </table></div>
 
       <div class="note"><span class="note__t">A preset fills the form in. It does not save.</span>
-      <span>Press <b>Strict</b> and 21 rows change on screen and nothing changes
+      <span>Press <b>Strict</b> and 28 rows change on screen and nothing changes
       on the server. You can see everything it did before committing to it, and
       <b>Discard changes</b> puts it all back. Only <b>Save</b> writes.</span></div>
 
-      <h4>Three of the 24 are not "how strict", and the presets skip them</h4>
+      <h4>Three of the 31 are not "how strict", and the presets skip them</h4>
       <div class="prose">
         <p>They are in their own group at the bottom, labelled:</p>
         <ul>
@@ -1091,7 +1091,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       <div class="prose">
         <ol>
           <li>Note that <b>Overridden here</b> at the top says <span class="mono">0</span>.</li>
-          <li>Press <b>Strict</b>. Twenty-one rows now say <b>overridden</b> in
+          <li>Press <b>Strict</b>. Twenty-eight rows now say <b>overridden</b> in
           amber, and <b>Save</b> becomes available. Nothing has been saved.</li>
           <li>Press <b>Discard changes</b>. Everything returns to
           <span class="mono">shipped</span>.</li>
@@ -1704,7 +1704,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
     <h3 style="font-size:1.12rem">The yellow warning strip</h3>
     <div class="prose">
       <p>When something is missing you get a strip like this:</p>
-      <div class="flat mono" style="font-size:.86rem">DEGRADED &nbsp; 7 of 32 mounted rails
+      <div class="flat mono" style="font-size:.86rem">DEGRADED &nbsp; 7 of 34 mounted rails
       cannot judge on this host. They stay mounted, run, and return "could not judge" —
       which fails closed without protecting anything.</div>
       <p>That sentence is about rails whose <b>package or model weights are missing</b> on a
@@ -1741,7 +1741,7 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       <tr><td><span class="chip c-s1">1</span></td><td>a coloured numeral</td>
         <td>free · deterministic · every request</td></tr>
       <tr><td><span class="chip c-s2">2</span></td><td>a coloured numeral</td>
-        <td>local model · only if asked for</td></tr>
+        <td>local model · whatever Stage 1 did not block</td></tr>
       <tr><td><span class="chip c-s3">3</span></td><td>a coloured numeral</td>
         <td>paid judge · last resort</td></tr>
       <tr><td><span class="chip c-off">◇</span></td><td>a dashed diamond</td>
@@ -1801,10 +1801,10 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
     <thead><tr><th>Cascade stage</th><th>Checks installed</th>
       <th>Run on the message going in</th><th>Run on the answer coming out</th></tr></thead>
     <tbody>
-      <tr><td><span class="chip c-s1">1</span> free, instant</td><td>22</td><td>16</td><td>21</td></tr>
+      <tr><td><span class="chip c-s1">1</span> free, instant</td><td>23</td><td>17</td><td>22</td></tr>
       <tr><td><span class="chip c-s2">2</span> local model</td><td>7</td><td>5</td><td>7</td></tr>
-      <tr><td><span class="chip c-s3">3</span> paid AI</td><td>3</td><td>3</td><td>3</td></tr>
-      <tr><td><b>All stages</b></td><td><b>32</b></td><td><b>24</b></td><td><b>31</b></td></tr>
+      <tr><td><span class="chip c-s3">3</span> paid AI</td><td>4</td><td>4</td><td>4</td></tr>
+      <tr><td><b>All stages</b></td><td><b>34</b></td><td><b>26</b></td><td><b>33</b></td></tr>
     </tbody>
   </table></div>
 

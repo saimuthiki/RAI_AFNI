@@ -102,8 +102,10 @@ python3 rai_platform/serve.py
 
 ### Optional: turning the Stage-2 tier on
 
-Without these, the seven Stage-2 rails report `unjudged`, which fails closed on
-client-facing traffic. Full walk-through in
+Without these, the seven Stage-2 rails report `unjudged`, which fails closed — and
+because Stage 2 looks at every request Stage 1 did not block (default
+`AFNI_CASCADE_ESCALATION=stage2`), a bare install blocks every request until the
+weights are present. Full walk-through in
 [`docs/setup.md`](docs/setup.md); the short
 version is three commands and one script.
 
@@ -196,21 +198,20 @@ flowchart TD
     subgraph CASCADE["The cascade — afni_rai/cascade/engine.py"]
       direction TB
       S1["<b>STAGE 1</b> — 23 rails<br/>regex, keyword lists, checksums,<br/>unicode normalisation, schema checks<br/><b>free · sub-millisecond · every request</b>"]
-      S1 --> D1{"blocking finding,<br/>or escalate requested?"}
+      S1 --> D1{"blocking finding?"}
       D1 -->|"blocked"| VERDICT
-      D1 -->|"clean"| VERDICT
-      D1 -->|"escalate"| S2
+      D1 -->|"undecided — clean or flagged<br/>(default AFNI_CASCADE_ESCALATION=stage2)"| S2
 
       S2["<b>STAGE 2</b> — 7 rails<br/>local classifier / NLI model<br/><b>free once installed · 10–500 ms</b>"]
-      S2 --> D2{"still borderline?"}
-      D2 -->|"decided"| VERDICT
-      D2 -->|"escalate"| S3
+      S2 --> D2{"severe finding, or<br/>escalate requested?"}
+      D2 -->|"no — decided"| VERDICT
+      D2 -->|"yes"| S3
 
-      S3["<b>STAGE 3</b> — 3 rails<br/>paid API or LLM-as-judge<br/><b>metered · 1–5 s · last resort</b>"]
+      S3["<b>STAGE 3</b> — 4 rails<br/>paid API or LLM-as-judge<br/><b>metered · 1–5 s · last resort</b>"]
       S3 --> VERDICT
     end
 
-    VERDICT["Dedupe findings<br/>then decide"] --> FC{"any path unjudged<br/>AND client-facing?"}
+    VERDICT["Dedupe findings<br/>then decide"] --> FC{"any path unjudged?"}
     FC -->|"yes"| BLOCK["<b>BLOCK</b> — fail closed"]
     FC -->|"no"| DEC["allow or block on findings"]
 
@@ -227,10 +228,12 @@ flowchart TD
 
 The three things worth noticing:
 
-1. **A stage runs only if the previous one asked for it.** A clean Stage 1 ends
-   the request. A confident Stage 1 block ends it too. Running all three layers
-   on every request is not defence in depth — it is paying three times for one
-   answer.
+1. **A block ends the cascade; a clean stage does not.** Under the default
+   `AFNI_CASCADE_ESCALATION=stage2`, Stage 2 (local, free after warm-up) looks at
+   every request Stage 1 did not block, and Stage 3 (paid) runs only on a severe
+   or explicitly escalated finding. `full` runs every stage on anything undecided;
+   `severity` restores the old rule where a clean stage ended the request. A
+   confident Stage 1 block always ends it — nothing is paid for.
 2. **"Could not judge" is not "found nothing."** A rail whose model weights are
    absent, or that raised, contributes its payload path to `unjudged`. On
    client-facing traffic that blocks.
@@ -322,8 +325,8 @@ rail declares its stage; it does not get to invent one.
 | Stage | Mechanism | Latency | Cost | Runs on | Rails |
 |---|---|---|---|---|---|
 | **Stage 1** | regex, keyword lists, checksums, unicode normalisation, schema validation | sub-ms | free | 100% of requests | 23 |
-| **Stage 2** | locally-run classifier or NLI model | **~1–3 s on CPU**, 10–500 ms batched/GPU | free once installed | borderline only | 7 |
-| **Stage 3** | paid API or LLM-as-judge | ~1–5 s | metered | last resort | 3 |
+| **Stage 2** | locally-run classifier or NLI model | **~1–3 s on CPU**, 10–500 ms batched/GPU | free once installed | every request Stage 1 did not block (default `stage2`) | 7 |
+| **Stage 3** | paid API or LLM-as-judge | ~1–5 s | metered | severe or requested findings | 4 |
 | **Offline** | red-team attacks, fairness metrics, drift, SHAP | unbounded | CI budget | never in the request path | 0 mountable |
 
 **Stage 1 has zero third-party dependencies, deliberately.** Pure `re`,
@@ -336,8 +339,8 @@ compromise, or a `pip install` nobody ran.
 
 Two rules, in the engine, not in the rails:
 
-- **Fail closed** — client-facing traffic that could not be *fully* judged is
-  blocked. Internal traffic fails open but still reports.
+- **Fail closed** — traffic that could not be *fully* judged is blocked,
+  unconditionally; there is no request field or console switch that relaxes it.
 - **Fail loud** — a rail that could not run contributes its path to
   `Verdict.unjudged`. It never reads as clean. The OpenGuardrails specification
   puts it best: *a fail-closed enforcement point MUST treat a non-empty value as
@@ -427,6 +430,7 @@ reasoning inside a prompt, which is a different and much narrower thing.
 | | `content_safety.toxicity_model` | 2 | 7-head multilabel transformer | `llm-guard-main` | adopt |
 | | `content_safety.zeroshot_topics` | 2 | NLI cross-encoder | `llm-guard-main` | adopt |
 | | `content_safety.toxicity_judge` | 3 | LLM-judge | `hai-guardrails-main` | combine |
+| | `moderation.omnibus_judge` | 3 | LLM-judge — one call, a JSON object with a 0–1 score per check | `Infosys-…-Toolkit` (`moderationlayer` prompt templates) | combine |
 | **Hallucination** | `package-hallucination` | 1 | import extraction + allow-list | `garak-main` | adopt |
 | | `refusal-phrases` | 1 | prefix + word-boundary phrase lists | `promptfoo-main` | adopt |
 | | `structured-output-wellformed` | 1 | stdlib JSON/XML well-formedness | `safe-zone-main` | bench |
@@ -626,10 +630,12 @@ flowchart LR
     BAN["banned_substrings<br/>caller-supplied deny list"] --> T
 
     S2["Stage 2 · toxicity_model<br/>7-head multilabel transformer<br/>threshold safety.toxicity.classifier = 0.5"]
-    S2 --> TOP["Stage 2 · zeroshot_topics<br/>NLI cross-encoder vs caller topic labels"]
-    TOP -->|"risk score severe"| BLOCK
-    TOP -->|"borderline"| S3["Stage 3 · toxicity_judge<br/>LLM-judge, 0-1 score<br/>threshold safety.toxicity.judge = 0.8"]
+    S2 --> TOP["Stage 2 · zeroshot_topics<br/>NLI cross-encoder vs the six always-banned topics<br/>(topics.labels_for) — a match BLOCKS, severity HIGH"]
+    TOP -->|"topic match"| BLOCK
+    TOP -->|"severe or escalated finding"| S3["Stage 3 · toxicity_judge<br/>LLM-judge, 0-1 score<br/>threshold safety.toxicity.judge = 0.8"]
     S3 --> BLOCK
+    TOP -->|"severe or escalated finding"| S3B["Stage 3 · omnibus_judge<br/>Infosys moderation layer, ported<br/>one call, JSON score per check<br/>7 thresholds x.afni.omnibus.* = 0.6"]
+    S3B --> BLOCK
     S2 -->|"weights absent"| UNJ["unjudged → fail closed"]
 ```
 
@@ -825,13 +831,14 @@ You get one `stage` frame per cascade stage, then a `verdict` frame, then `done`
 
 ```
 event: stage
-data: {"stage":1,"ran":true,"rails_run":[...22 rails...],"stage_findings":4,
+data: {"stage":1,"ran":true,"rails_run":[...17 rails...],"stage_findings":4,
        "unjudged":[],"short_circuited":false,"will_escalate":true,
        "stage_latency_ms":1,"elapsed_ms":1, "findings":[...]}
 
 event: stage
 data: {"stage":3,"ran":false,"rails_skipped":["privacy.pii_leakage_judge",
-       "security.prompt_shields","content_safety.toxicity_judge"], ...}
+       "security.prompt_shields","content_safety.toxicity_judge",
+       "moderation.omnibus_judge"], ...}
 
 event: verdict
 data: {"verdict":{...}, "explanation":{...}}
@@ -973,10 +980,16 @@ every rail in that state and why:
 "status": "degraded",
 "rails_unavailable": [
   "privacy.presidio_ner: dependency_available() is False",
-  "content_safety.toxicity_model: available() is False",
-  "security.prompt_shields: configured() is False"
-]
+  "content_safety.toxicity_model: available() is False"
+],
+"rails_not_configured": ["security.prompt_shields"]
 ```
+
+`rails_not_configured` is a different list, deliberately: an optional cloud rail
+with no credential (`security.prompt_shields` without `AZURE_CONTENT_SAFETY_*`) is
+**skipped** per request, never `unjudged`, and is not a degradation. Only a rail
+whose package or weights are missing on a host where it was meant to run counts as
+`degraded`.
 
 A gap is printed first and loudest, because a finding at least means something
 looked.
@@ -992,7 +1005,7 @@ that reaches a commit is public and permanent, and rotation is the only remedy.
 ### Stage-3 judge providers — the fallback chain
 
 ```
-AFNI_JUDGE_PROVIDER=openai,gemini
+AFNI_JUDGE_PROVIDER=local,gemini,openai   # the shipped order
 AFNI_JUDGE_PREFER_LOCAL=false  # true: probe local once at boot, judge there first
 OPENAI_API_KEYS=key1,key2      # comma-separated, tried in order
 GOOGLE_API_KEYS=key1
