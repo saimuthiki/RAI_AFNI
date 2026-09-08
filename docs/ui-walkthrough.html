@@ -1737,7 +1737,12 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
             "withheld" below.</td></tr>
           <tr><td><b>3 · Output guardrail</b></td><td>The model's answer goes through
             the cascade on the response side. Same stage boxes, second time round. This
-            is the step the question above was asking to see.</td></tr>
+            is the step the question above was asking to see. On a block, the sentence
+            under the step names <em>what carried it</em> &mdash; the rail and the entity
+            &mdash; and says what every other finding asked for instead, e.g. <em>"blocked
+            by security.injection.deberta_v3_v2 (prompt_injection); 10 other findings
+            asked for redaction, not a block"</em>. Read that before blaming the PII
+            rails.</td></tr>
           <tr><td><b>4 · Your customer</b></td><td>One box: what the customer sees, and nothing else. If both guardrails
             allowed, it holds the model's answer, word for word. If either blocked, or
             the model failed, it holds a short, neutral refusal sentence that names no
@@ -1760,7 +1765,8 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
         <div><span class="chip c-block">blocked_on_output</span> &mdash; the model
         answered, the output guardrail blocked the answer, and the answer was withheld.
         The response records that the model was called, what it cost and how long it
-        took &mdash; and carries no completion under any key.</div>
+        took &mdash; and carries no completion under any key, unless the demo flag
+        described under "Seeing what was blocked" is on.</div>
         <div><span class="chip c-flag">target_error</span> &mdash; the prompt was allowed
         but the model did not answer: unreachable, timed out, refused the credential,
         returned an error. There is no completion, so the output guardrail has nothing
@@ -1814,6 +1820,18 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
           rails catch them in the <em>answer</em> and the completion is withheld. You see
           that the model answered, how many characters it produced, and which output rails
           fired &mdash; and you never see the record.<br>
+          <strong>Read step 3 before crediting the PII rails.</strong> In a captured run
+          of this sample the SSN, the card number and the name were all found &mdash; but
+          the privacy rails asked for <em>redaction</em>, not a block. The block itself
+          came from the Stage-2 injection classifier
+          (<span class="mono">security.injection.deberta_v3_v2</span>) firing on the
+          model's <em>answer</em>: a fabricated customer record reads, to that
+          classifier, like injected text. That is still a correct withholding &mdash; the
+          record never left &mdash; but it is a different reason, and step 3's sentence
+          names it: <em>"blocked by security.injection.deberta_v3_v2 (prompt_injection);
+          10 other findings asked for redaction or a flag, not a block"</em>. With the
+          demo flag on (next section), the panel under the journey shows exactly which
+          span each rail caught and which one carried the block.<br>
           <strong>If instead you get</strong> <span class="chip c-allow">allowed</span>
           with a completion that politely declines to invent personal data, your model
           refused on its own: there was nothing in the answer for the output rails to
@@ -1828,15 +1846,66 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
       <div class="note note--stop">
         <span class="note__t">A blocked completion exists nowhere you can reach</span>
         <span>When the output guardrail blocks, the model's answer is not in the response
-        under any key, not in any streamed frame, not in the server log, and not in the
-        audit row &mdash; the audit table has no column a completion could occupy, only
-        fingerprints. The <span class="mono">target_done</span> frame in the stream
+        under any key (with one server-side demo exception, next section), not in any
+        streamed frame, not in the server log, and not in the audit row &mdash; the audit
+        table has no column a completion could occupy, only fingerprints. The <span class="mono">target_done</span> frame in the stream
         carries the model's latency, its token usage and the length of the answer, and
         deliberately no text, because at that moment the guard that may stop it has not
         yet run. If the text were streamed there, the output guardrail's block would be
         theatre: the customer would already have the answer a beat before the verdict. So
         the completion appears only in the <span class="mono">final</span> frame, and only
         on <span class="mono">allowed</span>.</span>
+      </div>
+
+      <h4>Seeing what was blocked (demo only)</h4>
+      <div class="prose"><p>The product owner's request, verbatim: <em>"just for the demo
+      purpose, I just want to see the output of the target model also, and what kind of
+      response is being blocked by output guardrails &mdash; that brings value."</em> It
+      does, and there is a switch for it &mdash; on the <b>server</b>, next to
+      <span class="mono">AFNI_REVEAL_SUBJECT</span> in the gateway's
+      <span class="mono">.env</span>:</p>
+      <div class="flat mono" style="font-size:.86rem">AFNI_REVEAL_BLOCKED_COMPLETION=true</div>
+      <p>Restart the gateway. There is deliberately no request parameter and no console
+      switch: a caller must never be able to ask the gateway for the answer it just
+      withheld, for the same reason a caller cannot ask it to echo a matched secret.
+      <span class="mono">/healthz</span> reports the setting as
+      <span class="mono">reveal_blocked_completion</span>, and while it is on the Round
+      trip screen shows a yellow pill in the target line &mdash; <em>reveal on &mdash;
+      withheld completions are shown</em> &mdash; before you run anything.</p>
+      <p><b>What changes on a <span class="mono">blocked_on_output</span> run.</b> The
+      customer box is unchanged: still the neutral refusal, because that is still what
+      the customer got. Below the journey a hazard-coloured card appears, titled
+      <b>"What the model actually said &mdash; withheld from your customer"</b>. It carries,
+      in order: the server's own note verbatim (<em>"Shown because
+      AFNI_REVEAL_BLOCKED_COMPLETION is on for this gateway. This text was blocked; your
+      customer did not receive it. Demonstration setting - not for production."</em>); one
+      sentence that the text reached no customer, log line or audit row; the model's
+      completion with <b>every finding's span highlighted</b> &mdash; red underline for a
+      finding that asked to block, violet for redact, amber for flag, the same colours the
+      finding cards use, with the entity and the rail on hover; and a <b>legend</b>, one
+      line per span &mdash; <span class="mono">chars 392-403 · national_id.us · redact ·
+      privacy.region_ids, privacy.reversible_anonymiser</span> &mdash; then one line per
+      finding with no span &mdash; <span class="mono">whole text · prompt_injection ·
+      block · security.injection.deberta_v3_v2</span>. Overlapping spans are merged into
+      one highlight; the legend still lists each. That is the whole answer to "what kind
+      of response is being blocked": you see the text, which characters each rail
+      objected to, and which one finding actually carried the block.</p>
+      <p>With the flag <b>off</b> &mdash; the default &mdash; nothing about the screen
+      changes except one grey line under the customer box: <em>"To show the withheld
+      text during a demo, set AFNI_REVEAL_BLOCKED_COMPLETION=true in the gateway's .env
+      and restart. Server-side only &mdash; there is no request parameter."</em></p></div>
+      <div class="note note--stop">
+        <span class="note__t">This is a demonstration setting. Turn it off before the port is shared.</span>
+        <span>While it is on, every caller of <span class="mono">/v1/chat</span> and
+        <span class="mono">/v1/chat/stream</span> receives the blocked completion under
+        <span class="mono">withheld_completion</span> &mdash; the exact text the output
+        guardrail exists to stop. The gateway logs a WARNING at startup while it is on.
+        The text still reaches no log line and no audit row, and
+        <span class="mono">completion</span> stays null, so the ordinary contract holds
+        for any client reading only that key &mdash; but a client that reads the new key
+        has the answer. Set it for the demo, unset it, restart, and check
+        <span class="mono">/healthz</span> says <span class="mono">reveal_blocked_completion:
+        false</span> before anyone else can reach the port.</span>
       </div>
 
       <h4>Why the refusal says so little</h4>
@@ -1906,6 +1975,13 @@ figcaption{font-size:.86rem;color:var(--ink3);max-width:64ch}
         <li><b>The third sample comes back allowed</b> &mdash; your model declined to
         invent a record, so the answer was clean. Not a fault in the output guardrail; see
         the note under that sample.</li>
+        <li><b>The answer is blocked but you cannot see why, or what</b> &mdash; read
+        step 3's sentence first: it names the rail and entity that carried the block and
+        says what the other findings asked for. Then the <b>Output guardrail findings</b>
+        list on the result card, one card per finding with its rail and location. If the
+        audience needs to see the text itself, set
+        <span class="mono">AFNI_REVEAL_BLOCKED_COMPLETION=true</span> for the demo and
+        turn it off afterwards; see "Seeing what was blocked".</li>
         <li><b>The second sample reaches the model</b> &mdash; the input cascade allowed
         a prompt it should have blocked. Look at which stages ran and at the yellow strip:
         on a machine missing Stage-2 weights the classifiers cannot run, and with no judge
@@ -2442,6 +2518,15 @@ python -m uvicorn afni_rai.gateway.app:create_app --factory --port 8080</div>
         <code>/healthz</code> says <code>configured: true</code>. Every other screen works
         without them. If the screen shows the demo-fixtures banner instead, the gateway is
         not answering at all — fixtures cannot call a model.</td></tr>
+      <tr><td><b>Round trip blocks the answer but I cannot see why / what</b></td>
+        <td>Why: read the sentence under step 3 — it names the rail and entity that
+        carried the block (often the injection classifier firing on the <em>answer</em>,
+        not the PII rails) and what every other finding asked for — then the
+        <b>Output guardrail findings</b> cards under the result. What: the text is withheld
+        by design. For a demo only, set <code>AFNI_REVEAL_BLOCKED_COMPLETION=true</code> in
+        the gateway's <code>.env</code> and restart; the screen then shows the blocked
+        completion with every finding's span highlighted and a legend. Server-side only,
+        no request parameter, and off again before the port is shared.</td></tr>
       <tr><td><b>Corpus: "sample_too_large"</b></td>
         <td>You asked for more prompts than one run allows. The message names the cap. For
         a bigger pass, run <code>corpus/baseline.py</code> from the command line instead.</td></tr>

@@ -2217,3 +2217,55 @@ td .err { color: var(--hazard-ink); font-size: var(--t-eyebrow); }
 @media (max-width: 40rem) {
   .rt { grid-template-columns: 1fr; }
 }
+
+/* ---- the withheld completion — demo flag only ---------------------------- */
+/* Everything here is hazard-toned on purpose: this card exists only when
+   AFNI_REVEAL_BLOCKED_COMPLETION is on, and it must never read as part of the
+   ordinary result. Mark colours reuse the `.finding--*` action map (block /
+   redact / flag) so a highlight and its finding card agree, and every mark sets
+   `color: inherit` — the UA default for <mark> is black on yellow, which fails
+   in the dark theme. */
+.rt__reveal {
+  display: inline-block; padding: 0.1rem 0.45rem; vertical-align: baseline;
+  border: 1px solid color-mix(in oklab, var(--hazard) 55%, transparent); border-radius: 999px;
+  font: 600 var(--t-eyebrow)/1.5 var(--mono); letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--hazard-ink); background: var(--hazard-deep); white-space: nowrap;
+}
+.rt__withheld {
+  border-left: 3px solid var(--hazard);
+  background: color-mix(in oklab, var(--hazard) 5%, var(--surface));
+}
+.rt__withheld .rule__t { color: var(--hazard-ink); }
+.rt__withheld .rule__d { color: var(--hazard-ink); }
+.rt__withheld__note {
+  margin: 0; padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--hazard); border-radius: var(--r-sm);
+  background: var(--hazard-deep); color: var(--hazard-ink);
+  font-size: var(--t-small); line-height: 1.6;
+}
+.rt__completion--withheld {
+  max-height: 28rem;
+  border-color: color-mix(in oklab, var(--hazard) 45%, var(--line));
+}
+
+/* A marked span. The tint is light enough that --ink stays legible over it in
+   both themes; the 2px underline in the full-strength action colour carries
+   the identity, so the tint never has to. */
+.rt__mark {
+  color: inherit; padding: 0 1px; border-radius: 2px;
+  background: color-mix(in oklab, var(--ink-3) 22%, transparent);
+  box-shadow: inset 0 -2px 0 var(--ink-3);
+}
+.rt__mark--block  { background: color-mix(in oklab, var(--block) 26%, transparent); box-shadow: inset 0 -2px 0 var(--block); }
+.rt__mark--redact { background: color-mix(in oklab, var(--s2) 28%, transparent);    box-shadow: inset 0 -2px 0 var(--s2); }
+.rt__mark--flag   { background: color-mix(in oklab, var(--cov-2) 28%, transparent); box-shadow: inset 0 -2px 0 var(--cov-2); }
+
+/* The legend: one line per span, then the whole-text findings. The range wears
+   the same mark as the text, so the eye can match them without reading. */
+.rt__spanlist {
+  list-style: none; margin: 0; padding: 0; display: grid; gap: 3px;
+  font: 500 var(--t-micro)/1.6 var(--mono); color: var(--ink-2);
+}
+.rt__spanlist li { display: flex; flex-wrap: wrap; gap: 0 var(--sp-2); align-items: baseline; min-width: 0; word-break: break-word; }
+.rt__spanlist .rt__mark { white-space: nowrap; }
+.rt__spanlist__rails { color: var(--ink-3); }

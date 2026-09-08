@@ -547,6 +547,8 @@ called, the output verdict, and the completion - which is present only when both
 guardrails allowed it. `POST /v1/chat/stream` streams the same four steps as
 Server-Sent Events.
 
+`AFNI_REVEAL_BLOCKED_COMPLETION=true` (default false; a sibling of `AFNI_REVEAL_SUBJECT`, server-side only, never a request field) makes a `blocked_on_output` response also carry the blocked text under `withheld_completion` with a fixed `withheld_completion_note`, so a demo audience can see *what* the output guardrail stopped; the console's Round trip screen shows it with every finding's span highlighted. It still reaches no log line and no audit row. Demo setting - turn it off and restart before anyone else can reach the port.
+
 **Check it landed:** `curl -s localhost:8000/healthz | jq .target`. `reachable`
 comes from a single startup probe, and `model_id_verified` is true only if the
 endpoint's own `/models` listing contained the id you configured - otherwise the

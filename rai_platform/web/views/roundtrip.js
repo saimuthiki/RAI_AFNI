@@ -20,8 +20,21 @@
 //     withhold the completion has not run yet. This page mirrors that: step 4
 //     renders `final.completion` only on `decision === 'allowed'`, and on every
 //     other decision it renders the neutral `refusal` — which is exactly what a
-//     customer would see. There is no code path here that prints a completion
-//     the output guardrail blocked; on the wire it is null anyway.
+//     customer would see. `completion` is null on the wire for every other
+//     decision, and step 4 never prints anything else.
+//
+//     THE ONE EXCEPTION IS A DEMO SETTING, AND IT IS DRAWN AS ONE. With the
+//     SERVER-side flag AFNI_REVEAL_BLOCKED_COMPLETION on (a sibling of
+//     AFNI_REVEAL_SUBJECT: never a request field), a `blocked_on_output` final
+//     also carries `withheld_completion` — the text the guardrail stopped — and
+//     a fixed `withheld_completion_note`. The product owner asked for it in so
+//     many words: "I just want to see the output of the target model also, and
+//     what kind of response is being blocked by output guardrails". So it is
+//     rendered — in a hazard-toned card of its own, BELOW the journey and apart
+//     from the customer box, with every finding's span marked on the text and
+//     named in a legend. Step 4 still shows only the refusal. Both keys are
+//     treated as null when absent, so a gateway without the flag draws exactly
+//     what it drew before, plus a one-line hint saying how to turn it on.
 
 import {
   el, frag, clear, pageHead, rule, field, stageTag, errorBox, claim, statRow, plural, empty,
@@ -117,7 +130,7 @@ export async function render(root) {
     return;
   }
 
-  root.append(targetStrip(target));
+  root.append(targetStrip(target, state.health?.reveal_blocked_completion === true));
 
   // ------------------------------------------------------------- compose ----
   const ui = { steps: new Map(), modelName: target?.model || null };
@@ -146,7 +159,9 @@ export async function render(root) {
     el('p', { class: 'micro mute', style: 'max-width:80ch', text:
       'The model is chosen on the server (AFNI_TARGET_MODEL), not here. Both guardrails '
       + 'fail closed. A completion the output guardrail blocks never reaches this page, '
-      + 'the logs or the audit row.' }),
+      + 'the logs or the audit row — unless the gateway’s demo flag '
+      + 'AFNI_REVEAL_BLOCKED_COMPLETION is on, in which case it is shown here, marked up, '
+      + 'and still reaches no log line and no audit row.' }),
   ]);
 
   root.append(el('section', { class: 'card card__pad', style: 'margin-top:var(--sp-4)' }, form));
@@ -158,6 +173,10 @@ export async function render(root) {
     // audible as well as visible.
     'aria-live': 'polite', 'aria-relevant': 'additions text', 'aria-atomic': 'false',
   });
+  // The withheld completion, when the demo flag sends one. Its own slot between
+  // the journey and the result card: step 4 is a quarter-width column and the
+  // customer box, and the text the customer did NOT get must not share it.
+  ui.withheld = el('div', { hidden: true });
   ui.result = el('div');
   ui.errors = el('div');
 
@@ -165,7 +184,7 @@ export async function render(root) {
   // this one is filled in per run with the endpoint and step_id.
   ui.srcLine = el('span', { class: 'rule__d', text: '' });
   root.append(el('div', { class: 'rule' }, [el('h2', { class: 'rule__t', text: 'This run' }), ui.srcLine]));
-  root.append(el('div', { class: 'stack' }, [ui.journey, ui.result, ui.errors]));
+  root.append(el('div', { class: 'stack' }, [ui.journey, ui.withheld, ui.result, ui.errors]));
 
   drawJourney(ui, 'idle');
   return;
@@ -177,6 +196,7 @@ export async function render(root) {
 
     const body = buildChatRequest({ text });
     clear(ui.result); clear(ui.errors);
+    clear(ui.withheld).hidden = true;
     drawJourney(ui, 'pending');
     setState(ui, 'in', 'running', 'judging the prompt');
     ui.srcLine.textContent = `LIVE · POST /v1/chat/stream · ${body.step_id}`;
@@ -250,10 +270,12 @@ export async function render(root) {
  *  re-fetched: one probe, one truth. `reachable` and `model_id_verified` are
  *  both printed because they are different facts — an endpoint can answer and
  *  still never have confirmed it serves the model id somebody typed. */
-function targetStrip(t) {
+function targetStrip(t, reveal) {
   if (!t) {
-    return el('p', { class: 'micro mute', text:
-      'This gateway did not report a target block on /healthz; the run will say whether one answers.' });
+    return el('p', { class: 'micro mute' }, [
+      'This gateway did not report a target block on /healthz; the run will say whether one answers. ',
+      revealPill(reveal),
+    ]);
   }
   const reach = t.reachable === true ? 'reachable at startup'
     : t.reachable === false ? 'did not answer the startup probe'
@@ -264,7 +286,23 @@ function targetStrip(t) {
     el('span', { class: 'mute', text: ` · ${t.provider || '?'} · ${t.base_url || '?'} · ${reach} · ` }),
     el('span', { class: t.model_id_verified ? '' : 'rt__unverified',
       text: t.model_id_verified ? 'model id verified' : 'model id unverified' }),
+    reveal ? el('span', { class: 'mute', text: ' · ' }) : null,
+    revealPill(reveal),
   ]);
+}
+
+/** Hazard pill for `/healthz.reveal_blocked_completion`. A demo flag that changes
+ *  what this screen prints must be visible before the first run, not discovered
+ *  when the withheld text appears. */
+function revealPill(on) {
+  if (!on) return null;
+  return el('span', {
+    class: 'rt__reveal',
+    title: 'AFNI_REVEAL_BLOCKED_COMPLETION is on for this gateway: a completion the output '
+      + 'guardrail blocks is shown on this screen, marked up. Demonstration setting — turn it '
+      + 'off before anyone else can reach the port.',
+    text: 'reveal on — withheld completions are shown',
+  });
 }
 
 /* ==========================================================================
@@ -450,7 +488,7 @@ function paintFinal(ui, f, seen, targetInfo) {
     setLatency(ui, 'out', timing.output_guard);
     if (decision === 'blocked_on_output') {
       setState(ui, 'out', 'blocked', vout.blocked_by.length
-        ? `${plural(vout.blocked_by.length, 'finding')} carried the block; the answer was withheld`
+        ? blockSentence(vout)
         : vout.could_not_judge.length
           ? 'a payload path could not be judged, which fails closed — the answer was withheld'
           : 'blocked — the answer was withheld');
@@ -474,11 +512,195 @@ function paintFinal(ui, f, seen, targetInfo) {
   } else {
     setState(ui, 'cust', decision === 'target_error' ? 'error' : 'blocked',
       'receives a neutral refusal that names no rail and no category');
-    setDetail(ui, 'cust', el('pre', { class: 'rt__completion rt__completion--refusal',
-      text: f.refusal || 'I can’t help with that request.' }));
+    const kids = [el('pre', { class: 'rt__completion rt__completion--refusal',
+      text: f.refusal || 'I can’t help with that request.' })];
+    if (decision === 'blocked_on_output') {
+      // Absent key and null key are the same fact: the flag is off. Only a
+      // string is a completion, and it goes to its own card, not this column.
+      if (typeof f.withheld_completion === 'string') {
+        clear(ui.withheld).append(withheldPanel(f, vout));
+        ui.withheld.hidden = false;
+        kids.push(el('p', { class: 'micro mute', text:
+          'The text this refusal replaced is shown under the journey, because the '
+          + 'gateway’s demo flag is on.' }));
+      } else {
+        kids.push(el('p', { class: 'micro mute', text: REVEAL_HINT }));
+      }
+    }
+    setDetail(ui, 'cust', frag(kids));
   }
 
   paintResult(ui, f, vin, vout);
+}
+
+/* ==========================================================================
+   THE WITHHELD COMPLETION — demo flag only
+   ========================================================================== */
+
+const REVEAL_HINT = 'To show the withheld text during a demo, set '
+  + 'AFNI_REVEAL_BLOCKED_COMPLETION=true in the gateway’s .env and restart. '
+  + 'Server-side only — there is no request parameter.';
+
+/** Where the output cascade sees the completion. Only a char range on THIS
+ *  path is an offset into `withheld_completion`; a range on any other path is
+ *  listed in the legend by its location and not marked. */
+const CONTENT_PATH = 'payload.choices[0].message.content';
+const LOC = /^(.*?)\s+chars\s+(\d+)-(\d+)$/;
+
+/** The three actions a finding can ask for, strongest first. The same map
+ *  `.finding--*` paints with, so a mark and its finding card agree. */
+const ACTION_RANK = { block: 3, redact: 2, flag: 1 };
+const markClass = (action) => (ACTION_RANK[action] ? action : 'flag');
+
+/** Step 3's sentence on a block: WHO carried it. In the run this was written
+ *  against the output was blocked by ONE finding — the injection classifier
+ *  firing on the model's own answer — while ten PII findings on the same text
+ *  asked only for redaction. "1 finding carried the block" hid that, and a
+ *  reader assumed the PII rails had done it. So name the carrier, and say what
+ *  everything else asked for. */
+function blockSentence(v) {
+  const who = v.blocked_by.map((f) => (f.attr?.rail
+    ? `${f.attr.rail} (${f.entity})` : String(f.entity)));
+  const others = v.also_flagged;
+  const redact = others.filter((f) => f.action === 'redact').length;
+  const flag = others.length - redact;
+  let s = who.length === 1 ? `blocked by ${who[0]}`
+    : `blocked by ${plural(who.length, 'finding')}: ${who.join(', ')}`;
+  if (!others.length) return `${s}; no other finding fired — the answer was withheld`;
+  const asked = redact && flag ? `redaction (${redact}) or a flag (${flag})`
+    : redact ? 'redaction' : 'a flag';
+  return `${s}; ${plural(others.length, 'other finding')} asked for ${asked}, not a block`;
+}
+
+/** Every output finding as the legend and the marks need it: the action the
+ *  console gives it (blocked_by is 'block', the rest what the rail asked for,
+ *  as `findingsSection` does), the rail, and a code-point span when the
+ *  location is a char range on the completion. */
+function outputFindings(v) {
+  const all = [
+    ...v.blocked_by.map((f) => ({ ...f, action: 'block' })),
+    ...v.also_flagged.map((f) => ({ ...f, action: f.action || 'flag' })),
+  ];
+  return all.map((f) => {
+    const m = f.location ? LOC.exec(String(f.location)) : null;
+    const onText = Boolean(m && m[1] === CONTENT_PATH);
+    return {
+      entity: String(f.entity || 'unknown'),
+      action: String(f.action),
+      rail: f.attr?.rail ? String(f.attr.rail) : null,
+      location: f.location ? String(f.location) : null,
+      start: onText ? Number(m[2]) : null,
+      end: onText ? Number(m[3]) : null,
+    };
+  });
+}
+
+/** The completion with every span marked. Overlapping spans fold into one
+ *  <mark>, the strongest action colours it, and the title still names every
+ *  finding underneath. Built from text nodes only: the completion is model
+ *  output, which is the definition of untrusted, and `el()` has no innerHTML.
+ *
+ *  Offsets are CODE POINTS, not UTF-16 units: the gateway's `chars N-M` are
+ *  Python string indices, and a completion with one emoji before the SSN would
+ *  otherwise put every later mark one character to the right. */
+function markedText(text, findings) {
+  const cps = Array.from(text);
+  const spans = findings
+    .filter((f) => Number.isInteger(f.start) && Number.isInteger(f.end)
+      && f.end > f.start && f.start < cps.length)
+    .map((f) => ({ ...f, start: Math.max(0, f.start), end: Math.min(cps.length, f.end) }))
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+  const merged = [];
+  for (const sp of spans) {
+    const last = merged[merged.length - 1];
+    if (last && sp.start < last.end) {
+      last.end = Math.max(last.end, sp.end);
+      last.items.push(sp);
+    } else {
+      merged.push({ start: sp.start, end: sp.end, items: [sp] });
+    }
+  }
+  const pre = el('pre', { class: 'rt__completion rt__completion--withheld' });
+  if (!cps.length) {
+    pre.append(el('span', { class: 'mute', text: '(the model returned an empty completion)' }));
+    return { pre, marked: 0 };
+  }
+  let cursor = 0;
+  for (const m of merged) {
+    if (m.start > cursor) pre.append(document.createTextNode(cps.slice(cursor, m.start).join('')));
+    const action = m.items.reduce((best, f) =>
+      ((ACTION_RANK[f.action] || 0) > (ACTION_RANK[best] || 0) ? f.action : best), m.items[0].action);
+    const title = [...new Set(m.items.map((f) =>
+      `${f.entity} · ${f.action}${f.rail ? ` · ${f.rail}` : ''}`))].join('\n');
+    pre.append(el('mark', {
+      class: `rt__mark rt__mark--${markClass(action)}`,
+      title,
+      data: { start: String(m.start), end: String(m.end) },
+      text: cps.slice(m.start, m.end).join(''),
+    }));
+    cursor = m.end;
+  }
+  if (cursor < cps.length) pre.append(document.createTextNode(cps.slice(cursor).join('')));
+  return { pre, marked: merged.length };
+}
+
+/** One line per span — "chars 392-403 · national_id.us · redact · privacy.region_ids,
+ *  privacy.reversible_anonymiser" — then one per finding with no span, "whole
+ *  text · prompt_injection · block · security.injection.deberta_v3_v2". Grouped
+ *  by span + entity + action, so three rails agreeing on one card number are
+ *  one line naming three rails, not three lines. */
+function spanLegend(findings) {
+  const groups = new Map();
+  for (const f of findings) {
+    const spanned = Number.isInteger(f.start);
+    const where = spanned ? `chars ${f.start}-${f.end}` : (f.location || 'whole text');
+    const key = `${where}|${f.entity}|${f.action}`;
+    const g = groups.get(key) || {
+      where, entity: f.entity, action: f.action, rails: new Set(),
+      start: spanned ? f.start : Infinity,
+    };
+    if (f.rail) g.rails.add(f.rail);
+    groups.set(key, g);
+  }
+  const rows = [...groups.values()].sort((a, b) => a.start - b.start
+    || (ACTION_RANK[b.action] || 0) - (ACTION_RANK[a.action] || 0)
+    || a.entity.localeCompare(b.entity));
+  return el('ul', { class: 'rt__spanlist', 'aria-label': 'Every output finding, by position in the text' },
+    rows.map((g) => el('li', {}, [
+      el('mark', { class: `rt__mark rt__mark--${markClass(g.action)} num`, text: g.where }),
+      el('span', { text: `· ${g.entity} · ${g.action} ·` }),
+      el('span', { class: 'rt__spanlist__rails',
+        text: g.rails.size ? [...g.rails].sort().join(', ') : 'rail not named' }),
+    ])));
+}
+
+/** The hazard card. Server note first and verbatim, then the one sentence that
+ *  matters about provenance, then the marked text, then the legend. */
+function withheldPanel(f, vout) {
+  const findings = vout ? outputFindings(vout) : [];
+  const { pre, marked } = markedText(f.withheld_completion, findings);
+  const spanned = findings.filter((x) => Number.isInteger(x.start)).length;
+  const note = typeof f.withheld_completion_note === 'string' ? f.withheld_completion_note.trim() : '';
+  return el('section', {
+    class: 'card card__pad stack stack--tight rt__withheld', role: 'region',
+    'aria-label': 'The withheld completion, shown because the demo flag is on',
+  }, [
+    rule('What the model actually said — withheld from your customer',
+      'AFNI_REVEAL_BLOCKED_COMPLETION on'),
+    note ? el('p', { class: 'rt__withheld__note', text: note }) : null,
+    el('p', { class: 'small', text:
+      'This text was never sent to the customer, the logs or the audit row; it is on this '
+      + 'screen only because the gateway’s demo flag is on. Each highlight is an output '
+      + 'finding, coloured by what the rail asked for, and the legend under the text names '
+      + 'them all — including the one that carried the block.' }),
+    pre,
+    el('p', { class: 'micro mute', text: findings.length
+      ? `${plural(findings.length, 'output finding')}: ${spanned} with a character range `
+        + `(${plural(marked, 'highlighted span')} after overlaps are merged), `
+        + `${findings.length - spanned} on the whole text.`
+      : 'The output guardrail sent no findings for this text.' }),
+    findings.length ? spanLegend(findings) : null,
+  ]);
 }
 
 /* ==========================================================================
