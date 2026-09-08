@@ -1335,9 +1335,12 @@ class ToxicityJudge:
     the same idea with a paid default judge.
 
     No judge is wired in by default, and that is the honest state: a judge means
-    a paid API key AFNI has not configured here. Unconfigured, the rail is
-    `unjudged`, so fail-closed will block the request rather than let
-    it through unexamined.
+    a model endpoint or API key this deployment has not configured. With no
+    judge bound the rail is NOT CONFIGURED - `configured()` is False, and the
+    engine's credential gate skips it per request rather than letting it turn
+    every request into an `unjudged` block (see `_unconfigured` in
+    `cascade/engine.py`). Asked directly, `check()` still answers `unjudged`:
+    the gate lives in the engine, not here.
     """
 
     judge: Callable[[str], float] | None = None
@@ -1347,6 +1350,21 @@ class ToxicityJudge:
     tenet: Tenet = TENET
 
     def available(self) -> bool:
+        return self.judge is not None
+
+    def configured(self) -> bool:
+        """Is a judge bound? This is the credential gate's probe.
+
+        The same shape `security.prompt_shields` uses for "this deployment has
+        not bought this": the engine's `_unconfigured(rail)` reads ONLY a
+        callable `configured()` and skips the rail per request when it is
+        False - never `unjudged`, listed on `/healthz` under
+        `rails_not_configured`, not a degradation. `available()` is kept as
+        is for the console and coverage report.
+
+        not configured -> inert, not degraded; configured but failing at call
+        time -> unjudged -> fail closed, untouched.
+        """
         return self.judge is not None
 
     def check(self, path: str, text: str,

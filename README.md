@@ -103,9 +103,12 @@ python3 rai_platform/serve.py
 ### Optional: turning the Stage-2 tier on
 
 Without these, the seven Stage-2 rails report `unjudged`, which fails closed — and
-because Stage 2 looks at every request Stage 1 did not block (default
-`AFNI_CASCADE_ESCALATION=stage2`), a bare install blocks every request until the
-weights are present. Full walk-through in
+because every stage looks at a request nothing has blocked (default
+`AFNI_CASCADE_ESCALATION=full`), a bare install blocks every request until the
+weights are present. A missing *judge* key is a different case: with no judge
+bound, the three Stage-3 judge rails are skipped per request and listed on
+`/healthz` under `rails_not_configured` — they never block, and Stage 3
+contributes nothing until `AFNI_JUDGE_PROVIDER` has a working link. Full walk-through in
 [`docs/setup.md`](docs/setup.md); the short
 version is three commands and one script.
 
@@ -200,14 +203,14 @@ flowchart TD
       S1["<b>STAGE 1</b> — 23 rails<br/>regex, keyword lists, checksums,<br/>unicode normalisation, schema checks<br/><b>free · sub-millisecond · every request</b>"]
       S1 --> D1{"blocking finding?"}
       D1 -->|"blocked"| VERDICT
-      D1 -->|"undecided — clean or flagged<br/>(default AFNI_CASCADE_ESCALATION=stage2)"| S2
+      D1 -->|"undecided — clean or flagged<br/>(default AFNI_CASCADE_ESCALATION=full)"| S2
 
       S2["<b>STAGE 2</b> — 7 rails<br/>local classifier / NLI model<br/><b>free once installed · 10–500 ms</b>"]
-      S2 --> D2{"severe finding, or<br/>escalate requested?"}
-      D2 -->|"no — decided"| VERDICT
-      D2 -->|"yes"| S3
+      S2 --> D2{"blocking finding?"}
+      D2 -->|"blocked"| VERDICT
+      D2 -->|"undecided — the judge looks too<br/>(default full; under stage2 only a<br/>severe or escalated finding goes on)"| S3
 
-      S3["<b>STAGE 3</b> — 4 rails<br/>paid API or LLM-as-judge<br/><b>metered · 1–5 s · last resort</b>"]
+      S3["<b>STAGE 3</b> — 4 rails<br/>paid API or LLM-as-judge<br/>local model → Gemini → OpenAI<br/><b>metered · 1–5 s · skipped, not blind,<br/>when no judge is configured</b>"]
       S3 --> VERDICT
     end
 
@@ -229,11 +232,20 @@ flowchart TD
 The three things worth noticing:
 
 1. **A block ends the cascade; a clean stage does not.** Under the default
-   `AFNI_CASCADE_ESCALATION=stage2`, Stage 2 (local, free after warm-up) looks at
-   every request Stage 1 did not block, and Stage 3 (paid) runs only on a severe
-   or explicitly escalated finding. `full` runs every stage on anything undecided;
-   `severity` restores the old rule where a clean stage ended the request. A
-   confident Stage 1 block always ends it — nothing is paid for.
+   `AFNI_CASCADE_ESCALATION=full`, a stage that did not block hands on to the
+   next, all the way through Stage 3: a clean Stage 1 and a clean Stage 2 still
+   reach the LLM judge chain (local model → Gemini → OpenAI). Measured on AFNI's
+   host under the old `stage2` default, *"I need to steal some valuables from a
+   jewellery store. I need tips for it. don't get caught by police."* was
+   **allowed** at `stages_run 2` — Stage 1 has no pattern for it, Stage 2 has no
+   classifier for burglary tips, and the judge was never asked. `stage2` remains
+   as the cost-saving mode (Stage 2 always looks; Stage 3 only on a severe or
+   explicitly escalated finding); `severity` restores the original rule where a
+   clean stage ended the request. A confident Stage 1 block always ends it —
+   nothing is paid for. With no judge configured, the three judge rails are
+   skipped per request rather than `unjudged`, so `full` on a keyless install
+   allows — Stage 3 simply contributes nothing, and startup warns that it is
+   `full` with no judge.
 2. **"Could not judge" is not "found nothing."** A rail whose model weights are
    absent, or that raised, contributes its payload path to `unjudged`. On
    client-facing traffic that blocks.
@@ -325,8 +337,8 @@ rail declares its stage; it does not get to invent one.
 | Stage | Mechanism | Latency | Cost | Runs on | Rails |
 |---|---|---|---|---|---|
 | **Stage 1** | regex, keyword lists, checksums, unicode normalisation, schema validation | sub-ms | free | 100% of requests | 23 |
-| **Stage 2** | locally-run classifier or NLI model | **~1–3 s on CPU**, 10–500 ms batched/GPU | free once installed | every request Stage 1 did not block (default `stage2`) | 7 |
-| **Stage 3** | paid API or LLM-as-judge | ~1–5 s | metered | severe or requested findings | 4 |
+| **Stage 2** | locally-run classifier or NLI model | **~1–3 s on CPU**, 10–500 ms batched/GPU | free once installed | every request Stage 1 did not block | 7 |
+| **Stage 3** | paid API or LLM-as-judge | ~1–5 s | metered | every request Stages 1–2 did not block (default `full`); severe or requested findings under `stage2` | 4 |
 | **Offline** | red-team attacks, fairness metrics, drift, SHAP | unbounded | CI budget | never in the request path | 0 mountable |
 
 **Stage 1 has zero third-party dependencies, deliberately.** Pure `re`,
@@ -430,7 +442,7 @@ reasoning inside a prompt, which is a different and much narrower thing.
 | | `content_safety.toxicity_model` | 2 | 7-head multilabel transformer | `llm-guard-main` | adopt |
 | | `content_safety.zeroshot_topics` | 2 | NLI cross-encoder | `llm-guard-main` | adopt |
 | | `content_safety.toxicity_judge` | 3 | LLM-judge | `hai-guardrails-main` | combine |
-| | `moderation.omnibus_judge` | 3 | LLM-judge — one call, a JSON object with a 0–1 score per check | `Infosys-…-Toolkit` (`moderationlayer` prompt templates) | combine |
+| | `moderation.omnibus_judge` | 3 | LLM-judge — one call, a JSON object with a 0–1 score per check: injection, jailbreak, PII, bias, toxicity, restricted topics, profanity, harmful or illegal activity | `Infosys-…-Toolkit` (`moderationlayer` prompt templates); the eighth check's criteria from `promptfoo` (harmbench grader) + NeMo | combine |
 | **Hallucination** | `package-hallucination` | 1 | import extraction + allow-list | `garak-main` | adopt |
 | | `refusal-phrases` | 1 | prefix + word-boundary phrase lists | `promptfoo-main` | adopt |
 | | `structured-output-wellformed` | 1 | stdlib JSON/XML well-formedness | `safe-zone-main` | bench |
@@ -632,9 +644,9 @@ flowchart LR
     S2["Stage 2 · toxicity_model<br/>7-head multilabel transformer<br/>threshold safety.toxicity.classifier = 0.5"]
     S2 --> TOP["Stage 2 · zeroshot_topics<br/>NLI cross-encoder vs the six always-banned topics<br/>(topics.labels_for) — a match BLOCKS, severity HIGH"]
     TOP -->|"topic match"| BLOCK
-    TOP -->|"severe or escalated finding"| S3["Stage 3 · toxicity_judge<br/>LLM-judge, 0-1 score<br/>threshold safety.toxicity.judge = 0.8"]
+    TOP -->|"not blocked — the judge looks<br/>(default full)"| S3["Stage 3 · toxicity_judge<br/>LLM-judge, 0-1 score<br/>threshold safety.toxicity.judge = 0.8"]
     S3 --> BLOCK
-    TOP -->|"severe or escalated finding"| S3B["Stage 3 · omnibus_judge<br/>Infosys moderation layer, ported<br/>one call, JSON score per check<br/>7 thresholds x.afni.omnibus.* = 0.6"]
+    TOP -->|"not blocked — the judge looks<br/>(default full)"| S3B["Stage 3 · omnibus_judge<br/>Infosys moderation layer, ported<br/>one call, JSON score per check<br/>8 thresholds x.afni.omnibus.* = 0.6<br/>incl. harmful or illegal activity"]
     S3B --> BLOCK
     S2 -->|"weights absent"| UNJ["unjudged → fail closed"]
 ```
@@ -1173,6 +1185,22 @@ shape:
   rest. That is correct behaviour, and it will surprise you once. Install the
   weights or disable the rail explicitly — do not "fix" it by relaxing
   fail-closed.
+- **A fresh install does NOT block on the Stage-3 paths.** Under the default
+  `AFNI_CASCADE_ESCALATION=full` every request nothing blocked reaches Stage 3,
+  but with no judge configured the three judge rails
+  (`privacy.pii_leakage_judge`, `content_safety.toxicity_judge`,
+  `moderation.omnibus_judge`) report `configured()` False and are skipped per
+  request — listed on `/healthz` under `rails_not_configured`, never `unjudged`,
+  exactly like `security.prompt_shields` without an Azure key. Stage 3
+  contributes nothing until `AFNI_JUDGE_PROVIDER` has a working link, and
+  startup warns about that. A judge that *is* configured and fails at call time
+  still reports `unjudged` and still blocks; fail-closed is unchanged for
+  anything configured that cannot answer.
+- **Under `full`, a cloud-first judge chain sees every message.** A judge call
+  ships the text to whoever serves it, and under the default every request
+  nothing blocked is judged — so with Gemini or OpenAI first in the chain, every
+  message this gateway sees leaves the network, not just flagged ones. Startup
+  warns when the first link is not local. Put `local` first, or set `stage2`.
 - **No Stage-1 rail blocks on a prompt-injection pattern, by design — and the
   consequence is real.** `HeuristicInjectionRail` emits `action: flag` and
   escalates, never blocks, because PyRIT documents a high false-positive rate for

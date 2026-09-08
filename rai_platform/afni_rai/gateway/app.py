@@ -271,7 +271,27 @@ def _rail_available(rail: Any) -> tuple[bool | None, str | None]:
     upstream shapes. Probing all three rather than normalising them keeps this
     module out of the tenets; a rail that answers none of them reports None,
     which is honest rather than an assumed True.
+
+    `configured()` IS ASKED FIRST, and a False from it is the answer. The string
+    `"configured() is False"` is what `/healthz` keys `rails_not_configured` on
+    and what the `full`-mode blind-rail check excludes, because the engine's
+    credential gate skips such a rail per request. The judge rails answer both
+    `available()` and `configured()` with "is a judge bound"; had `available`
+    been probed first they would have reported `available() is False`, landed in
+    `rails_unavailable`, turned the banner `degraded` on every judge-less
+    install, and been counted as blind at startup - all for a rail the engine
+    never runs. A rail with only `configured()` (prompt_shields, explainability)
+    reports exactly as before. When `configured()` is True or absent the probe
+    falls through to the original order, so `dependency_available()` still
+    wins for a rail that has both.
     """
+    configured = getattr(rail, "configured", None)
+    if callable(configured):
+        try:
+            if not bool(configured()):
+                return False, "configured() is False"
+        except Exception as exc:  # noqa: BLE001 - a probe must not break /healthz
+            return False, f"configured() raised {type(exc).__name__}"
     for attribute in ("dependency_available", "available", "configured"):
         probe = getattr(rail, attribute, None)
         if probe is None or not callable(probe):
@@ -483,11 +503,18 @@ class Gateway:
                                resolve_threshold=self.thresholds.resolve_value,
                                escalation=self.escalation)
         if self.escalation == "full":
-            # THE TWO THINGS THAT MAKE `full` UNUSABLE, CHECKED AT STARTUP.
-            # Under `full` every request that nothing blocks reaches Stage 3, so
-            # a Stage-3 rail that can never judge blocks 100% of traffic -
-            # `unjudged` always blocks, by design. Measured on a host with no
-            # Azure key: "What is the capital of France?" came back `block`.
+            # WHAT `full` NEEDS, CHECKED AT STARTUP. Under `full` every request
+            # that nothing blocks reaches Stage 3. Two things can be wrong there,
+            # and they are different in kind.
+            #
+            # A Stage-3 rail that is CONFIGURED but can never judge - its
+            # package or weights missing on a host where it was meant to run -
+            # blocks 100% of traffic, because `unjudged` always blocks, by
+            # design. Measured on a host with no Azure key, before the
+            # credential gate: "What is the capital of France?" came back
+            # `block`. That is an ERROR. The remedy is to fix the rail, not to
+            # lower the escalation; `stage2` remains an option, but it hides
+            # the fault behind fewer Stage-3 visits rather than removing it.
             blind = [rail.name for rail in self.rails
                      if rail.stage is Stage.STAGE_3
                      and _rail_available(rail)[0] is False
@@ -500,13 +527,38 @@ class Gateway:
                     "(%s). Under `full` every request reaches Stage 3, and a "
                     "rail that cannot look reports `unjudged`, which always "
                     "blocks - so EVERY REQUEST WILL BLOCK, including harmless "
-                    "ones. Configure %s, or set %s=stage2, which runs Stage 2 on "
-                    "every request and reaches Stage 3 only for severe findings.",
+                    "ones. Fix %s (install its dependency, or configure the "
+                    "judge it needs); %s=stage2 reaches Stage 3 only for severe "
+                    "findings and would hide the fault rather than remove it.",
                     ENV_ESCALATION, len(blind), ", ".join(blind),
                     blind[0], ENV_ESCALATION)
+            if self.judge_provider is None:
+                # NO JUDGE AT ALL. Not an outage - the three judge rails report
+                # `configured()` False with no judge bound, so the engine skips
+                # them per request and nothing blocks. But it is the case the
+                # burglary prompt lives in: `full` was made the default so the
+                # judge would see what Stage 2 cannot recognise, and on this
+                # host there is no judge to see it. Stage 3 runs and contributes
+                # nothing. A WARNING, because a guardrail whose strongest tier
+                # is silently empty is something an operator must be told once,
+                # at boot, in one line that names the fix.
+                LOGGER.warning(
+                    "%s=full but no judge is configured (%s unset, or nothing in "
+                    "it usable), so Stage 3 has no judge: the judge rails (%s) "
+                    "are skipped as not configured on every request and Stage 3 "
+                    "CONTRIBUTES NOTHING. A request that Stage 1 and Stage 2 "
+                    "cannot recognise - 'tips for robbing a jewellery store' - "
+                    "is ALLOWED. Set %s (a local endpoint first, then gemini "
+                    "and/or openai) so the judge actually looks.",
+                    ENV_ESCALATION, providers.ENV_PROVIDER,
+                    ", ".join(providers.unbound_judge_rails(self.rails)) or "none mounted",
+                    providers.ENV_PROVIDER)
         if self.escalation == "full" and self.judge_provider is not None:
-            first = self.judge_provider.links[0]
-            if not first.startswith("local"):
+            # `links` is the chain's shape; a custom provider handed in by a
+            # caller need not have one, and then nothing is known to warn about.
+            links = getattr(self.judge_provider, "links", None) or []
+            first = str(links[0]) if links else ""
+            if first and not first.startswith("local"):
                 # THE CONSEQUENCE OF `full`, SAID AT STARTUP RATHER THAN ON AN
                 # INVOICE. Under `full` a request nothing has blocked reaches
                 # Stage 3, and a Stage-3 judge call ships the TEXT to whoever
@@ -517,10 +569,10 @@ class Gateway:
                     "%s=full and the first judge link is %s, which is not local: "
                     "every request that no rail blocks will reach Stage 3, so the "
                     "TEXT OF EVERY MESSAGE this gateway sees will be sent to %s "
-                    "and leave this network - not only the flagged ones. Set "
-                    "%s=stage2 to keep Stage 2 on every request and Stage 3 for "
-                    "severe findings only, or put a local endpoint first in the "
-                    "judge chain.",
+                    "and leave this network - not only the flagged ones. Put a "
+                    "local endpoint first in the judge chain, or set %s=stage2 "
+                    "to keep Stage 2 on every request and Stage 3 for severe "
+                    "findings only.",
                     ENV_ESCALATION, first, first, ENV_ESCALATION)
         self.policy = FailurePolicy(self.thresholds)
 

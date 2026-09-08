@@ -10,7 +10,10 @@ client-facing traffic - rather than guessing.
 
 THE RULE THIS MODULE EXISTS TO ENFORCE
 
-    With no provider configured, every judge rail returns `unjudged`.
+    With no provider configured, every judge rail is NOT CONFIGURED: the
+    engine skips it per request and `/healthz` lists it, and Stage 3
+    contributes nothing. A provider that IS configured and cannot answer
+    makes the rail return `unjudged`, which fails closed.
 
 There is no heuristic fallback, no "if we can't reach the judge, assume clean",
 and no default provider. That is deliberate. A guessing fallback here would be
@@ -1096,7 +1099,8 @@ def from_env(env: dict[str, str] | None = None,
 
     if not names:
         LOGGER.info("no judge provider configured (%s unset or none): every "
-                    "Stage-3 judge rail will report unjudged, which fails closed",
+                    "Stage-3 judge rail is skipped as not configured, so Stage 3 "
+                    "contributes nothing until a judge is configured",
                     ENV_PROVIDER)
         return None
 
@@ -1136,7 +1140,8 @@ def from_env(env: dict[str, str] | None = None,
 
     if not links:
         LOGGER.error("%s=%r but no provider in it is usable (%s): every Stage-3 "
-                     "judge rail will report unjudged, which fails closed. Stage 1 "
+                     "judge rail is skipped as not configured, so Stage 3 "
+                     "contributes nothing until a judge is configured. Stage 1 "
                      "and Stage 2 are unaffected and this gateway still serves.",
                      ENV_PROVIDER, raw, "; ".join(skipped))
         return None
@@ -1297,10 +1302,9 @@ def bind_judges(rails: Sequence[Any], provider: JudgeProvider | None,
 def unbound_judge_rails(rails: Iterable[Any]) -> list[str]:
     """Names of the rails that take a judge and do not have one.
 
-    This is what `/healthz` reports. Each of these returns `unjudged` for every
-    payload string it is handed, which on client-facing traffic is a block - so
-    it is a fact an operator needs before wondering why Stage 3 blocks
-    everything.
+    This is what `/healthz` reports. Each of these reports `configured()` False,
+    so the engine skips it per request and Stage 3 contributes nothing for it -
+    a fact an operator needs before believing the paid tier is on.
     """
     return sorted(rail.name for rail in rails
                   if hasattr(rail, "judge") and getattr(rail, "judge") is None)

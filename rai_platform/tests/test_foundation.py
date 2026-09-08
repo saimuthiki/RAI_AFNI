@@ -265,8 +265,8 @@ class TestCascadeReporting(unittest.TestCase):
         # entire cost argument in the operator-facing output.
         # `severity` because the property under test is the COUNTING - run
         # versus skipped - and it needs a stage that is genuinely skipped. Under
-        # the shipped default a clean Stage 1 escalates, so only Stage 3 would
-        # be skipped and the arithmetic would be less able to go wrong unnoticed.
+        # the shipped default (`full`) a clean stage escalates all the way, so
+        # nothing would be skipped and the arithmetic could not go wrong.
         s1 = FakeRail("regex", Stage.STAGE_1, RailResult.clean())
         s2 = FakeRail("classifier", Stage.STAGE_2, RailResult.clean())
         s3 = FakeRail("judge", Stage.STAGE_3, RailResult.clean())
@@ -275,16 +275,29 @@ class TestCascadeReporting(unittest.TestCase):
         self.assertEqual(out.stages_skipped, 2)
         self.assertEqual(len(out.trace), 3, "the trace should still record all three")
 
-    def test_the_default_pays_for_stage_2_and_reports_it(self):
-        """The other half of the same arithmetic, under the shipped default."""
+    def test_the_default_pays_for_every_stage_and_reports_it(self):
+        """The other half of the same arithmetic, under the shipped default.
+
+        The default is `full`: a clean Stage 2 no longer ends the cascade, because
+        the request that measured that gap - burglary tips, allowed at
+        stages_run 2 - is one only the Stage-3 judge can recognise. So three run,
+        none skipped, and the count says so."""
         rails = [FakeRail("regex", Stage.STAGE_1, RailResult.clean()),
                  FakeRail("classifier", Stage.STAGE_2, RailResult.clean()),
                  FakeRail("judge", Stage.STAGE_3, RailResult.clean())]
         out = Cascade(rails).evaluate(event())
+        self.assertEqual(out.stages_run, 3)
+        self.assertEqual(out.stages_skipped, 0)
+
+    def test_stage2_mode_pays_for_stage_2_only_and_reports_it(self):
+        """The cost-saving option keeps the old arithmetic: Stage 3 costs a model
+        call and, under `stage2`, is not paid for a clean Stage 2."""
+        rails = [FakeRail("regex", Stage.STAGE_1, RailResult.clean()),
+                 FakeRail("classifier", Stage.STAGE_2, RailResult.clean()),
+                 FakeRail("judge", Stage.STAGE_3, RailResult.clean())]
+        out = Cascade(rails, escalation="stage2").evaluate(event())
         self.assertEqual(out.stages_run, 2)
-        self.assertEqual(out.stages_skipped, 1, "Stage 3 costs a model call and "
-                                                "must not be paid for a clean "
-                                                "Stage 2")
+        self.assertEqual(out.stages_skipped, 1)
 
     def test_identical_findings_from_one_detector_are_deduped(self):
         # A rail with several patterns for one attack shape matches the same span

@@ -133,7 +133,11 @@ cp .env.example .env
 ```
 
 Optional, all of it. `.env` is gitignored. Leave it empty to run without the
-Stage-3 judges.
+Stage-3 judges: with no judge bound, the three judge rails are skipped per
+request and listed on `/healthz` under `rails_not_configured` — they never
+block, and Stage 3 simply contributes nothing until `AFNI_JUDGE_PROVIDER` has a
+working link. (Startup warns, because the default `AFNI_CASCADE_ESCALATION=full`
+sends every request nothing blocked to Stage 3, and there is nobody there.)
 
 ```
 AFNI_JUDGE_PROVIDER=local,gemini,openai
@@ -451,6 +455,15 @@ fail-closed is now unconditional, so an un-provisioned machine blocks either way
 ### Level 4 (optional) · Stage-3 judges
 
 Only three rails need these, and they are the slowest and most expensive tier.
+They are also the only tier that reads a request for what it *is*: under the
+default `AFNI_CASCADE_ESCALATION=full`, a clean Stage 1 and a clean Stage 2 still
+reach the judge chain, because Stage 1 is patterns and Stage 2 is narrow
+classifiers, and a harmful request in ordinary words ("tips for stealing from a
+jewellery store without getting caught") produces nothing at either. Until this
+level is done the judge rails are skipped as not configured — the gateway allows
+with Stage 3 contributing nothing, and says so at startup. `stage2` is the
+cost-saving mode (Stage 2 always looks, Stage 3 only on a severe or requested
+finding); `severity` is the original clean-stage-ends-it rule.
 Put the values in `.env`, which is gitignored:
 
 ```
@@ -610,7 +623,7 @@ python3 -m pip install --force-reinstall uvicorn
 | A rail says `weights not in the local cache` | `transformers` is installed but the model is neither in `models/` nor in the HuggingFace cache. |
 | A rail says `transformers not installed` | Level 3.1 has not been run. |
 | `en_core_web_lg` installs, then fails to load | version mismatch with spaCy. Use `python -m spacy download en_core_web_lg`, not a wheel URL. |
-| Everything blocks after installing nothing | expected, and there is no longer a flag that turns it off. Any rail that could not look fails closed. Read `/healthz` — it lists exactly which rails are mounted but unable to run. |
+| Everything blocks after installing nothing | expected, and there is no longer a flag that turns it off. Any rail whose package or weights are missing on a host where it was meant to run fails closed. Read `/healthz` — `rails_unavailable` lists exactly which rails are mounted but unable to run. It is **not** the missing judge key: with no judge bound the Stage-3 judge rails are skipped per request and listed under `rails_not_configured`, never `unjudged`, so a keyless install allows once the Stage-2 weights are in place. |
 | `git push` rejected, "file is 740 MB" | the weights are being committed. They are gitignored; check you did not force-add them. |
 
 ### See also
@@ -915,6 +928,9 @@ can gate on it.
 **Stage 1 — 23 rails across all seven tenets — is pure Python standard library
 and needs none of the above.** Every model or package here backs a rail that
 reports `unjudged` until it arrives, and `unjudged` fails closed — unconditionally,
-for every caller. The one exception is the Azure key: `security.prompt_shields`
-without it is skipped per request and listed under `rails_not_configured` on
-`/healthz`, not a degradation. Honest behaviour is not the same as protection.
+for every caller. Credentials are the exception, not packages: `security.prompt_shields`
+without an Azure key, and the three Stage-3 judge rails with no judge bound, are
+skipped per request and listed under `rails_not_configured` on `/healthz`, not a
+degradation — Stage 3 contributes nothing until `AFNI_JUDGE_PROVIDER` has a
+working link. A rail that *is* configured and cannot answer at call time still
+fails closed. Honest behaviour is not the same as protection.

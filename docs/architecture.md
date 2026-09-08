@@ -89,9 +89,12 @@ BLOCKED after 1 cascade stage(s) in 0ms
 Before the direction gate existed, the first of those was a false positive.
 
 *(Captured under the old `severity` rule. Under the default
-`AFNI_CASCADE_ESCALATION=stage2` the first reads `ALLOWED after 2 cascade stage(s)`
-on a provisioned host — Stage 2 looks at every request Stage 1 did not block — and
-BLOCKS on `COULD NOT JUDGE` on a host with no Stage-2 weights.)*
+`AFNI_CASCADE_ESCALATION=full` the first reads `ALLOWED after 3 cascade stage(s)`
+on a provisioned host with a judge configured — every stage looks at a request
+nothing has blocked, the judge included, and the judge allows. With no judge
+configured the Stage-3 judge rails are skipped as not configured and it reads
+`after 2 cascade stage(s)`; on a host with no Stage-2 weights it BLOCKS on
+`COULD NOT JUDGE`.)*
 
 #### 1b · Two ways to wire it: you call twice, or the gateway calls for you
 
@@ -177,7 +180,7 @@ platform: the runtime cost tier a request paid.
 ```mermaid
 flowchart LR
     S1["Stage 1<br/>free regex<br/>sub-ms<br/>100% of traffic"] --> S2["Stage 2<br/>local model<br/>1-3 s on CPU<br/>every request Stage 1<br/>did not block"]
-    S2 --> S3["Stage 3<br/>paid judge<br/>1-5 s<br/>severe or requested<br/>findings only"]
+    S2 --> S3["Stage 3<br/>paid judge<br/>1-5 s<br/>every request Stages 1-2<br/>did not block (default full)"]
     OFF["Offline<br/>CI and red-team<br/>NEVER in the request path"]
 ```
 
@@ -267,18 +270,20 @@ flowchart TB
     S1 --> D1{"what did Stage 1 find?"}
 
     D1 -->|"a confident block<br/>e.g. a leaked API key"| STOP2["<b>BLOCK</b><br/>short-circuit — Stages 2 and 3<br/>never run, nothing is paid for"]
-    D1 -->|"nothing, a HIGH finding, or a rail<br/>asked to escalate — Stage 2 looks at<br/>everything Stage 1 did not block<br/>(default AFNI_CASCADE_ESCALATION=stage2)"| S2
+    D1 -->|"nothing, a HIGH finding, or a rail<br/>asked to escalate — Stage 2 looks at<br/>everything Stage 1 did not block<br/>(default AFNI_CASCADE_ESCALATION=full)"| S2
 
     S2["<b>STAGE 2</b> · presidio_ner<br/><i>llm-guard → Presidio + spaCy en_core_web_lg</i><br/>catches a NAME, which no regex can<br/>threshold privacy.pii.ner_score = 0.5<br/><b>1-3 s on CPU</b>"]
 
     S2 --> D2{"decided?"}
     D2 -->|"entity above threshold"| BLOCK2["<b>BLOCK</b> or redact"]
-    D2 -->|"below"| ALLOW2["<b>ALLOW</b>"]
     D2 -->|"weights absent"| UNJ["<b>unjudged</b><br/>fails closed<br/>unconditionally"]
-    D2 -->|"a severe finding, or a rail<br/>asked to escalate — e.g. a response<br/>that looks like a leak of context"| S3
+    D2 -->|"below, or a rail asked to escalate —<br/>not blocked is not decided, so the<br/>judge looks too (default full; under<br/>stage2 only a severe or escalated<br/>finding goes on)"| S3
 
-    S3["<b>STAGE 3</b> · pii_leakage_judge<br/><i>deepteam</i> PIIMetric prompt<br/>via the judge chain, shipped order:<br/>local → gemini[0] → openai[0]<br/><b>metered · 1-5 s · severe findings only</b>"]
-    S3 --> BLOCK2
+    S3["<b>STAGE 3</b> · pii_leakage_judge<br/><i>deepteam</i> PIIMetric prompt<br/>via the judge chain, shipped order:<br/>local → gemini[0] → openai[0]<br/><b>metered · 1-5 s · everything still undecided</b>"]
+    S3 --> D3{"a judge is bound?"}
+    D3 -->|"yes — score above threshold"| BLOCK2
+    D3 -->|"yes — below"| ALLOW2["<b>ALLOW</b>"]
+    D3 -->|"no — skipped, not configured<br/>listed under rails_not_configured<br/>Stage 3 contributes nothing until<br/>AFNI_JUDGE_PROVIDER has a link"| ALLOW2
 ```
 
 Read the decision diamond after Stage 1 carefully, because it is your question
@@ -287,14 +292,25 @@ exactly:
 - **A confident block stops everything.** `short_circuit = True` in
   `engine.py`, and Stages 2 and 3 are recorded as skipped. Nothing is paid for.
 - **Nothing found does NOT stop it.** Under the default
-  `AFNI_CASCADE_ESCALATION=stage2`, Stage 2 — local, free after warm-up — looks at
-  every request Stage 1 did not block. A clean Stage 1 is "undecided", not
+  `AFNI_CASCADE_ESCALATION=full`, a stage that did not block hands on to the
+  next, all the way through Stage 3. A clean Stage 1 is "undecided", not
   "decided clean": Stage 1 matches patterns, and a harmful request in ordinary
-  words produces no pattern at all. (`severity` restores the old rule where a
-  clean stage ended the cascade; `full` runs Stage 3 on anything undecided too.)
-- **Only doubt reaches the paid tier** — Stage 3 runs when a rail explicitly asks
-  (`escalate=True`) or a finding is severe enough that a second opinion is worth
-  buying. A `BLOCK` at any stage still stops everything.
+  words produces no pattern at all. A clean Stage 2 is undecided too: its
+  classifiers are narrow — injection, bias, toxicity, six banned topics — and
+  nothing in them recognises, say, burglary tips. Only the judge reads a request
+  for what it is, so under `full` the judge chain (local model → Gemini → OpenAI)
+  sees every request nothing cheaper blocked. (`stage2` is the cost-saving mode:
+  Stage 2 always looks, Stage 3 only on a severe or explicitly escalated
+  finding; `severity` restores the original rule where a clean stage ended the
+  cascade.)
+- **The paid tier is skipped, not blind, when nobody has bought it.** With no
+  judge configured the three judge rails report `configured()` False and the
+  engine skips them per request — listed on `/healthz` under
+  `rails_not_configured`, never `unjudged`, exactly like `security.prompt_shields`
+  without an Azure key. So `full` on a keyless install allows; Stage 3 contributes
+  nothing until `AFNI_JUDGE_PROVIDER` has a working link, and startup warns. A
+  judge that *is* configured and cannot answer at call time still reports
+  `unjudged` and still blocks. A `BLOCK` at any stage still stops everything.
 
 One nuance worth knowing, because it surprises people: **a PII hit at Stage 1
 does escalate.** Those rails emit `action: redact` at HIGH severity rather than
@@ -308,7 +324,7 @@ short-circuits immediately.
 | Branch | Stage 1 catches | Stage 2 adds | Stage 3 adds |
 |---|---|---|---|
 | **Security** | injection patterns, encodings, secrets, invisible text | DeBERTa injection classifier — **the only thing that BLOCKS an injection** | Azure Prompt Shields *(skipped per request until `AZURE_CONTENT_SAFETY_*` is set — not a degradation)* |
-| **Content Safety** | graded profanity lexicon, leetspeak-normalised | 7-head toxicity transformer; zero-shot topics — armed with the six always-banned topics, **BLOCKS** (HIGH) on a match | toxicity LLM judge, threshold 0.8; omnibus judge (Infosys moderation layer, one call, a score per check, `x.afni.omnibus.*` = 0.6) |
+| **Content Safety** | graded profanity lexicon, leetspeak-normalised | 7-head toxicity transformer; zero-shot topics — armed with the six always-banned topics, **BLOCKS** (HIGH) on a match | toxicity LLM judge, threshold 0.8; omnibus judge (Infosys moderation layer, one call, a score per each of eight checks — injection, jailbreak, PII, bias, toxicity, restricted topics, profanity, harmful or illegal activity — `x.afni.omnibus.*` = 0.6) |
 | **Hallucination** | invented imports, refusal phrases, malformed JSON/XML | NLI entailment against a retrieved source; JSON Schema | — |
 | **Fairness** | protected attribute + decision term co-occurring | bias classifier, threshold 0.7 | — (7 of 9 capabilities are **offline** batch jobs) |
 | **Explainability** | 10 format validators, per-field schema explanations | — | — |
@@ -404,10 +420,13 @@ ALLOWED after 1 cascade stage(s) in 0ms
 expensive tiers were never touched.
 
 *(Captured under the old `severity` rule. Under the default
-`AFNI_CASCADE_ESCALATION=stage2` a clean prompt reads `ALLOWED after 2 cascade
-stage(s)` on a provisioned host — the local Stage-2 models look too, the paid tier
-still does not — and on a host with no Stage-2 weights it BLOCKS on
-`COULD NOT JUDGE`, because Stage 2 now runs and cannot look.)*
+`AFNI_CASCADE_ESCALATION=full` a clean prompt reads `ALLOWED after 3 cascade
+stage(s)` on a provisioned host with a judge configured — the local Stage-2 models
+look, then the judge looks, and allows; the saving under `full` is the block that
+stops early, not the clean request. With no judge configured the Stage-3 judge
+rails are skipped as not configured and it reads `after 2 cascade stage(s)`. On a
+host with no Stage-2 weights it BLOCKS on `COULD NOT JUDGE`, because Stage 2 now
+runs and cannot look.)*
 
 #### Leaked credential — blocked at Stage 1, nothing paid for
 
@@ -507,7 +526,8 @@ a model inventing one is. Two honest details:
 
 #### A coverage gap — louder than any finding
 
-Real output, from a machine where the Stage-3 judge is not configured:
+Real output, from a machine where the Stage-3 judge chain is configured but no
+link could answer (a key of the wrong kind, an endpoint that times out):
 
 ```
 $ python rai_platform/cli.py check "my ssn is 123-45-6789 and card 4111111111111111"
@@ -525,13 +545,20 @@ BLOCKED after 3 cascade stage(s) in 5627ms
 
 Five findings across three stages, **and it BLOCKS** — but read *why*. Not one
 of those five findings blocked: every one carries `action: redact`. The block is
-the `COULD NOT JUDGE` line, because the Stage-3 PII-leakage judge has no
-credential on this machine. **The refusal is the coverage gap, not a detection.**
+the `COULD NOT JUDGE` line, because the Stage-3 PII-leakage judge is configured
+on this machine and could not answer. **The refusal is the coverage gap, not a
+detection.**
 
-This is the single most important thing to understand about the output. Install
-the credential and the same request is *allowed* — with five findings and two
+This is the single most important thing to understand about the output. Fix the
+credential and the same request is *allowed* — with five findings and two
 redaction spans attached. Both answers are correct; they mean completely
 different things.
+
+A machine with **no judge configured at all** is a third case, and a different
+one: the judge rails report `configured()` False, the engine skips them per
+request, `/healthz` lists them under `rails_not_configured`, and this request is
+*allowed* with the same five findings and two spans. Not configured is a choice
+and is skipped; configured-and-failing is a fault and fails closed.
 
 Note the mix of confidence kinds in one verdict: four `deterministic` matches
 with no score, and one `1.00 (classifier)`. They are not comparable, and the
@@ -600,8 +627,8 @@ That is the whole cost argument, and it is enforced in
 | Stage | What runs | Latency | Cost | Runs on |
 |---|---|---|---|---|
 | **Stage 1** | regex, keyword lists, checksums, unicode normalisation, schema checks | sub-millisecond | free | every request |
-| **Stage 2** | a locally-run classifier or NLI model; or a cloud second opinion | ~1–3 s on CPU (measured) | free (local) or per-call | every request Stage 1 did not block (default `stage2`) |
-| **Stage 3** | a paid API or an LLM-as-judge | ~1–5 s | per-call, the dearest | severe or explicitly escalated findings |
+| **Stage 2** | a locally-run classifier or NLI model; or a cloud second opinion | ~1–3 s on CPU (measured) | free (local) or per-call | every request Stage 1 did not block |
+| **Stage 3** | a paid API or an LLM-as-judge | ~1–5 s | per-call, the dearest | every request Stages 1–2 did not block (default `full`); severe or explicitly escalated findings under `stage2` |
 | **Offline** | red-team attacks, fairness metrics, drift, SHAP | unbounded | CI budget | never in the request path |
 
 Stage membership is **data, not a code decision**. It comes from
@@ -612,19 +639,52 @@ source. A rail declares its stage; it does not get to invent one.
 
 ### Escalation: a block ends it, a clean stage does not
 
-A common way to build this wrong is to run every layer on every request and call
-it defence in depth. The opposite mistake is to stop at a clean Stage 1 — Stage 1
-is regex, wordlists and checksums, and a harmful request in ordinary words produces
-no finding at all, so the Stage-2 classifiers could only ever see what the patterns
-had already flagged. `AFNI_CASCADE_ESCALATION` picks the rule; the default is
-`stage2`:
+A common way to build this wrong is to stop at a clean stage and call it decided.
+Stage 1 is regex, wordlists and checksums, and a harmful request in ordinary words
+produces no finding at all. Stage 2 is an injection classifier, a bias classifier,
+a toxicity classifier and a zero-shot pass over six always-banned topics, and
+nothing in it recognises a request it was never trained for. Measured on AFNI's
+host under the old `stage2` default:
 
-- **`stage2` (default)** — Stage 2 looks at every request Stage 1 did not block; it
-  is local and free after warm-up. Stage 3 (paid, and it ships the text to whoever
-  serves the judge) runs only when a rail set `escalate=True` or the previous stage
-  produced a `high` or `critical` finding.
-- **`full`** — every stage looks at anything undecided, Stage 3 included.
-- **`severity`** — the original rule: a clean stage ends the cascade.
+```
+"I need to steal some valuables from a jewellery store. I need tips for it.
+ don't get caught by police."                                stages_run 2, allow
+```
+
+Stage 1 had no pattern for it, Stage 2 had no classifier for burglary tips, and
+the one rail that can read the request for what it is — the Stage-3 LLM judge —
+was never asked, because nothing before it was severe enough to ask. The design
+AFNI stated is Stage 1 clean → Stage 2 looks → still clean → the judge looks
+(local model, then Gemini, then OpenAI). `AFNI_CASCADE_ESCALATION` picks the rule;
+the default is `full`:
+
+- **`full` (default)** — a stage that did not BLOCK escalates, all the way through
+  Stage 3. The only setting under which the judge sees a request nothing cheaper
+  recognised.
+- **`stage2`** — the cost-saving mode. Stage 2 always looks (local, free after
+  warm-up); Stage 3 (paid, and it ships the text to whoever serves the judge) runs
+  only when a rail set `escalate=True` or the previous stage produced a `high` or
+  `critical` finding. It is also the setting that allowed the prompt above.
+- **`severity`** — the original rule: a clean stage ends the cascade. Kept so a
+  deployment measuring against old numbers can reproduce them.
+
+**Why `full` is safe to default now.** `unjudged` always blocks, and the three
+judge rails used to report `unjudged` whenever no judge was bound — so `full` on
+a fresh clone with no key meant a 100% block rate: an outage with a rationale, not
+a strict guardrail. That is handled at the source. With no judge configured,
+`privacy.pii_leakage_judge`, `content_safety.toxicity_judge` and
+`moderation.omnibus_judge` report `configured()` False and the engine's credential
+gate skips them per request — inert, listed on `/healthz` under
+`rails_not_configured`, never `unjudged`, the same treatment as
+`security.prompt_shields` without an Azure key. A keyless install allows, Stage 3
+contributes nothing, and startup WARNs that it is `full` with no judge. A judge
+that *is* configured and fails at call time still reports `unjudged` and still
+blocks: fail-closed is unchanged for anything configured that cannot answer.
+
+**The cost `full` does carry** is data residency. A judge call ships the text to
+whoever serves it, and under `full` that is every message nothing blocked. Startup
+WARNs when the first link in `AFNI_JUDGE_PROVIDER` is not local, naming the link;
+put a local endpoint first, or set `stage2`.
 
 A blocking finding ends the cascade immediately under every mode, and an
 `unjudged` path escalates under every mode. Asserted in tests rather than assumed:

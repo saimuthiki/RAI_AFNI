@@ -1207,8 +1207,12 @@ class PiiLeakageJudgeRail:
     It is Stage 3 because it costs money per call and needs a paid model, so it
     is not wired to a provider here. `judge` is injected: any callable taking
     the payload text and returning a float in [0, 1], where 1.0 means "leaked".
-    With no judge configured the rail reports `unjudged`, which is the truth -
-    registered below as CLOUD cover, not as protection.
+    With no judge bound the rail is NOT CONFIGURED: `configured()` is False and
+    the engine's credential gate skips it per request (see `_unconfigured` in
+    `cascade/engine.py`), so it never becomes an `unjudged` block on a host
+    that simply has no judge. Asked directly, `check()` still reports
+    `unjudged`, which is the truth - registered below as CLOUD cover, not as
+    protection.
     """
 
     stage = Stage.STAGE_3
@@ -1247,6 +1251,21 @@ class PiiLeakageJudgeRail:
         With no judge the rail reports `unjudged`, which fails closed - so
         False here is the honest answer and the console is right to show it.
         With a judge bound it works whether or not `deepteam` is installed.
+        """
+        return self.judge is not None
+
+    def configured(self) -> bool:
+        """Is a judge bound? This is the credential gate's probe.
+
+        The same shape `security.prompt_shields` uses for "this deployment has
+        not bought this": the engine's `_unconfigured(rail)` reads ONLY a
+        callable `configured()` and skips the rail per request when it is
+        False - never `unjudged`, listed on `/healthz` under
+        `rails_not_configured`, not a degradation. `available()` is kept as
+        is for the console and coverage report.
+
+        not configured -> inert, not degraded; configured but failing at call
+        time -> unjudged -> fail closed, untouched.
         """
         return self.judge is not None
 

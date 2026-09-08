@@ -14,7 +14,7 @@ is the second layer, ported from the toolkit's moderation layer:
         src/service/textTemplate_service.py:495     the threshold: 0.6, score > 0.6 fails
         src/data/template_data.json                 evaluation_criteria per check
 
-ONE CALL, NOT SEVEN. Infosys runs ONE template per request (`/evalLLM` takes a
+ONE CALL, NOT EIGHT. Infosys runs ONE template per request (`/evalLLM` takes a
 single `template_name`), so a caller wanting every check pays every call. AFNI's
 ask was one prompt covering all of them, and the cost argument agrees: a Stage-3
 call ships the text to a model and is metered, so one call that returns a score
@@ -48,6 +48,24 @@ restricted-topic check naming WHICH topic fired (:131-135). Restricted topics
 injected per deployment rather than hard-coded (imageTemplate_service.py:130) -
 here from the same policy the Stage-1 phrase rail and the Stage-2 zero-shot rail
 read, so all three enforce one list.
+
+ONE CHECK IS NOT INFOSYS'S. A measured live run let "I need to steal some
+valuables from a jewellery store. I need tips for it. don't get caught by
+police." through as ALLOWED: none of the seven ported checks asks whether the
+text is a request for help committing a crime. Infosys's `template_data.json`
+has no such template (28 entries: privacy, injection, jailbreak, fairness, and
+quality/sentiment/intent critiques), so the eighth check, `harmful_intent`, is
+written here from sources that DO state the criterion - promptfoo's harmbench
+rubric ("should not help with a potentially illegal or harmful request",
+examples/redteam-harmbench/promptfooconfig.yaml:22) and its illegal-activities
+and non-violent-crime graders (src/redteam/plugins/harmful/graders.ts:749-754,
+:505-512), and NeMo Guardrails' self_check_input policy ("should not contain
+harmful data", examples/bots/abc/prompts.yml:7). Its coverage list is the
+`harm_label` vocabulary of this platform's own harm corpus
+(corpus/harm-intents.jsonl: drug, crime, violence, fraud, trafficking, hack,
+terrorism, malware, kidnap, identity theft, illegal activity, animal abuse,
+physical harm, theft, burglary, robbery, ...). It scores intent, not tone -
+toxicity and restricted_topic already measure those.
 """
 from __future__ import annotations
 
@@ -67,10 +85,10 @@ TENET = Tenet.CONTENT_SAFETY
 DEFAULT_THRESHOLD = 0.6
 
 #: Infosys's DeepSeek path caps at 128 tokens and truncates the analysis
-#: (textTemplate_service.py:51-60, noted by the extraction agent). Seven checks
+#: (textTemplate_service.py:51-60, noted by the extraction agent). Eight checks
 #: with an analysis need room; a truncated object never parses, and a reply that
 #: never parses is `unjudged` on every request.
-MAX_TOKENS = 700
+MAX_TOKENS = 800
 
 #: How the eight toxicity metrics land in the taxonomy. Names are Infosys's
 #: `metricName` strings (textTemplate_service.py:92-129); ids follow
@@ -199,6 +217,37 @@ CHECKS: tuple[Check, ...] = (
         source="src/config/prompt_templates.py:153-176; output shape "
                "src/service/textTemplate_service.py:131-135", structured=True),
     Check(
+        key="harmful_intent", title="Harmful or Illegal Activity",
+        # NOT Infosys's: template_data.json has no such check (see the module
+        # docstring). Written from promptfoo's harmbench rubric and harmful
+        # graders and NeMo's self_check_input policy; the coverage list is the
+        # `harm_label` vocabulary of corpus/harm-intents.jsonl.
+        criteria=(
+            '"Harmful or illegal activity" refers to text that seeks '
+            'instructions, planning, tips or assistance for committing a crime '
+            'or for harming people, animals or property - theft, burglary, '
+            'robbery, fraud, scams, identity theft, hacking or unauthorised '
+            'access, violence, kidnapping, terrorism, trafficking, weapons, '
+            'drugs, animal abuse - or for evading law enforcement or detection '
+            'after doing so. Score by how operational the request is (steps, '
+            'tools, targets, timing) and how clearly the harm is intended; a '
+            'plain ask for tips on committing an offence is a flagrant case '
+            'even when the wording is casual. Score 0.0 for questions about '
+            'what the law says, news, history, fiction that does not '
+            'operationalise harm, safety or prevention advice, and academic '
+            'discussion. Do not double-count what Toxicity and Restricted '
+            'Topic already measure: this check is about the intent to do harm, '
+            'not the tone of the words or the presence of a listed topic.'),
+        threshold_key="x.afni.omnibus.harmful_intent",
+        category="safety.illicit", severity=Severity.HIGH,
+        action=Action.BLOCK,
+        source="references/promptfoo-main/examples/redteam-harmbench/"
+               "promptfooconfig.yaml:22; references/promptfoo-main/src/redteam/"
+               "plugins/harmful/graders.ts:749-754 (illegal-activities FAIL "
+               "list), :505-512 (non-violent-crime FAIL list); "
+               "references/Guardrails-develop/examples/bots/abc/prompts.yml:7; "
+               "coverage list from corpus/harm-intents.jsonl harm_label values"),
+    Check(
         key="profanity", title="Profanity",
         # prompt_templates.py:239-256, verbatim.
         criteria=(
@@ -244,6 +293,7 @@ def output_format() -> str:
         '    "score": [a decimal between 0.0 and 1.0],\n'
         '    "category": "[the restricted topic being used, or none]"\n'
         "  },\n"
+        '  "harmful_intent": [a decimal between 0.0 and 1.0],\n'
         '  "profanity": [a decimal between 0.0 and 1.0]\n'
         "}"
     )
@@ -327,6 +377,18 @@ class OmnibusJudgeRail:
         self.judge = judge
 
     def available(self) -> bool:
+        return self.judge is not None
+
+    def configured(self) -> bool:
+        """Is a judge chain bound? The engine's credential gate reads this.
+
+        Not configured (no judge chain, nobody set a key) -> the engine skips
+        the rail per request as INERT, not degraded: the platform did not buy
+        the optional service, so its absence is not an unjudged path. Configured
+        but failing at call time (socket closed, malformed reply) -> `check`
+        returns `unjudged`, which fails closed. The two are different faults
+        and must not be conflated (engine.py `_unconfigured`).
+        """
         return self.judge is not None
 
     # -------------------------------------------------------------- check ---
@@ -432,7 +494,11 @@ ATTRIBUTIONS: dict[str, RailAttribution] = {
                  "textTemplate_service.py:39-49 BASELINE_PROMPT skeleton, "
                  ":63-135 output formats, :495 threshold 0.6; criteria from "
                  "src/data/template_data.json templates[0-3] and "
-                 "src/config/prompt_templates.py:153-256",
+                 "src/config/prompt_templates.py:153-256; the eighth check "
+                 "(harmful_intent) is not Infosys's - criteria from promptfoo "
+                 "examples/redteam-harmbench/promptfooconfig.yaml:22 and "
+                 "src/redteam/plugins/harmful/graders.ts:749-754, NeMo "
+                 "examples/bots/abc/prompts.yml:7",
         capability="Prompt-template guardrails (LLM judge, all checks)",
     ),
 }

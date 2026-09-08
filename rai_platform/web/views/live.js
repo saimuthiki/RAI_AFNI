@@ -52,8 +52,8 @@ const SAMPLES = [
         + 'the key sk-live-9f2c41ab7d5e0c1874bbaa03e1 to push it.',
   },
   {
-    label: 'Clean — Stage 2 looks, allows',
-    hint: 'nothing asked for a second opinion, so nothing was paid for',
+    label: 'Clean — all three look, allows',
+    hint: 'every stage looked, the judge included, and none found anything',
     kind: 'prompt',
     text: 'What is the notice period for terminating a registered agent appointment '
         + 'in Delaware?',
@@ -560,6 +560,27 @@ function drawLadder(ui, mode) {
     + 'row can never light up — and counting it as runtime cover would be false.';
 }
 
+// Why the next stage gets to look. The old single sentence claimed a rail "saw
+// something" whenever a stage escalated - false under the default escalation
+// (`full`), where every stage that did not BLOCK hands on to the next, the
+// judge included, whether or not anything was seen. Say what this stage
+// actually recorded.
+function escalationReason(s) {
+  const next = `stage ${s.stage + 1}`;
+  if (!s.will_escalate) {
+    return 'Nothing here asked for a second opinion, so the cascade stops paying at this stage.';
+  }
+  if (s.unjudged.length) {
+    return `A payload path here could not be judged, so ${next} was asked to look at it. `
+         + 'Unjudged escalates under every escalation setting.';
+  }
+  if (s.findings === 0) {
+    return `Nothing here blocked or flagged. ${next[0].toUpperCase()}${next.slice(1)} looks anyway `
+         + 'under this deployment\'s escalation setting - a clean stage does not end the cascade.';
+  }
+  return `A rail here flagged something without blocking, so ${next} was asked to look.`;
+}
+
 function paintStage(ui, s, stopAt) {
   const r = ui.rungs.get(s.stage);
   if (!r) return;
@@ -595,9 +616,7 @@ function paintStage(ui, s, stopAt) {
   if (s.will_escalate !== null && !s.short_circuited && s.stage < 3) {
     r.row.append(el('p', { class: 'escalated', style: 'grid-column:2' }, [
       el('span', { class: 'escalated__mark', text: s.will_escalate ? 'ESCALATE' : 'SETTLED' }),
-      el('span', { text: s.will_escalate
-        ? `A rail here saw something it was not confident enough to decide, so stage ${s.stage + 1} was asked to look.`
-        : 'Nothing here asked for a second opinion, so the cascade stops paying at this stage.' }),
+      el('span', { text: escalationReason(s) }),
     ]));
   }
 

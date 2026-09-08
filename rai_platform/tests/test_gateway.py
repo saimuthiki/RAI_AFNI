@@ -1065,7 +1065,7 @@ class TestTheSamplePayloads(unittest.TestCase):
         This test used to require ZERO findings on the benign control, and
         passed - because a clean Stage 1 ended the cascade, so presidio never
         saw the text. With Stage 2 now running on every undecided request
-        (AFNI_CASCADE_ESCALATION, default `stage2`) it does, and it flags
+        (AFNI_CASCADE_ESCALATION, default `full`) it does, and it flags
         "Amsterdam" in "What are your office hours in Amsterdam, and do you
         support iDEAL?" as `privacy.pii.address`, score 0.85.
 

@@ -195,10 +195,15 @@ response-only ones. Asserted by
 `test_direction.test_a_skipped_rail_cannot_cause_a_fail_closed_block`.
 
 **3 · A block ends the cascade; a clean stage does not.** Under the default
-`AFNI_CASCADE_ESCALATION=stage2`, Stage 2 (local, free after warm-up) looks at every request
-Stage 1 did not block; Stage 3 (paid) runs only on a severe or explicitly escalated finding.
-`full` runs every stage on anything undecided; `severity` restores the old clean-stage-ends-it
-rule. Free checks on 100% of traffic, paid checks on a thin slice — identically on both sides.
+`AFNI_CASCADE_ESCALATION=full`, a stage that did not BLOCK hands on to the next, all the way
+through Stage 3: a clean Stage 1 and a clean Stage 2 still reach the LLM judge chain (local
+model → Gemini → OpenAI), because Stage 1 is patterns and Stage 2 is narrow classifiers, and a
+harmful request in ordinary words — burglary tips, say — is recognisable only by the judge.
+`stage2` is the cost-saving mode: Stage 2 (local, free after warm-up) always looks, Stage 3
+(paid) only on a severe or explicitly escalated finding. `severity` restores the old rule where a
+clean stage ended the cascade. With no judge configured the three judge rails are skipped per
+request, not `unjudged` — Stage 3 then contributes nothing, and says so on `/healthz`. All of it
+identically on both sides.
 
 **4 · "Not safe" is not one branch.** There are four outcomes, and only two of them
 refuse:

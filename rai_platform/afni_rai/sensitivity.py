@@ -168,6 +168,10 @@ KNOBS: tuple[Knob, ...] = (
     Knob("x.afni.omnibus.restricted_topic", "Omnibus — restricted topic",
          "Omnibus judge", "The judge's confidence that the text is on one of "
          "this deployment's blocking topics. Blocks."),
+    Knob("x.afni.omnibus.harmful_intent", "Omnibus — harmful or illegal activity",
+         "Omnibus judge", "The judge's confidence that the text asks for help "
+         "committing a crime or harming people, animals or property, or for "
+         "evading the police afterwards. Blocks."),
     Knob("x.afni.omnibus.profanity", "Omnibus — profanity", "Omnibus judge",
          "The judge's confidence that the text is profane. Flags.", noisy=True),
     Knob("x.afni.gibberish", "Gibberish", "Reliability",

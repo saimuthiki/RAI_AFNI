@@ -115,7 +115,7 @@ RAIL_DEFAULTS: Mapping[str, float] = {
     # deepeval G-Eval, as mounted here
     "x.afni.rubric": 0.5,
     # Infosys moderation layer, textTemplate_service.py:495 - `threshold=0.6`,
-    # one value for every template, strictly greater-than. Seven keys rather
+    # one value for every template, strictly greater-than. Eight keys rather
     # than one so an operator can loosen one check without loosening all.
     "x.afni.omnibus.prompt_injection": 0.6,
     "x.afni.omnibus.jailbreak": 0.6,
@@ -123,6 +123,12 @@ RAIL_DEFAULTS: Mapping[str, float] = {
     "x.afni.omnibus.fairness_bias": 0.6,
     "x.afni.omnibus.toxicity": 0.6,
     "x.afni.omnibus.restricted_topic": 0.6,
+    # Not an Infosys template: the harmful/illegal-activity check is written
+    # from promptfoo's harmbench rubric (examples/redteam-harmbench/
+    # promptfooconfig.yaml:22) and NeMo's self_check_input policy (examples/
+    # bots/abc/prompts.yml:7). Same 0.6 as its seven siblings so one prompt has
+    # one scale; see tenets/moderation/__init__.py.
+    "x.afni.omnibus.harmful_intent": 0.6,
     "x.afni.omnibus.profanity": 0.6,
 }
 
