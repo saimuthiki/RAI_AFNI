@@ -3277,3 +3277,25 @@ higher threshold value will solve this problem."
   `security.indirect_injection` and `security.insecure_output` still run on the answer.
 - Thresholds 32 → 33, presets touch 30. The new knob is deliberately a second knob: 0.9 to
   refuse a prompt, 0.98 to annotate an answer.
+
+### 2026-10-20 — EvoHack 2026 (FDE hackathon) readiness: skills, playbook, use case
+**Type:** New Build
+**Ask:** Analyse the EvoHack 2026 webinar transcript and the "FDE Mode ON" deck; install every
+useful Claude skill from ~25 skill sources and ~40 tool/strategy repos; make the system ready to
+act the moment a problem statement arrives; propose a winning use case in case the team must
+bring its own.
+**What was done:**
+- Rendered the image-only deck and transcribed it; wrote the brief analysis and hidden rubric.
+- Cloned 50 repos (taste-skill found at Leonxlnx/taste-skill), indexed 10,473 unique
+  skills/agents/commands, and installed a vetted, stage-mapped set of 89 skills plus 30 extra pod
+  agents. Wrote 6 `/fde-*` stage skills, an installer, a skill search/enable helper, and a
+  verdict for every repo and site.
+- Settings and `.mcp.json` changes were blocked by the session's auto-mode guard, so they ship as
+  `hackathon/toolkit/config/` plus `apply.py` for a human to run.
+- Proposed **Margin Guardian** (contract → timesheet → invoice revenue-leakage agent, with drafted
+  fixes and RAI-gateway guardrails), scored against 4 alternatives.
+**Files created / changed:**
+- `hackathon/README.md`, `01-brief-analysis.md`, `02-fde-playbook.md`, `03-discovery-kit.md`, `04-use-case-proposal.md`, `work/README.md`
+- `hackathon/toolkit/` — README, install.sh, skill.sh, build_index.py, curated-skills.tsv, repos.tsv, plugins.tsv, skill-index.tsv, config/
+- `.claude/skills/` — 89 curated skills (with `.provenance`) + 6 `fde-*` skills
+- `.claude/agents/` — 30 agency-agents personas added

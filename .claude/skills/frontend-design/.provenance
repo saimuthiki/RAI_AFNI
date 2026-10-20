@@ -1,0 +1,3 @@
+source: https://github.com/anthropics/skills/tree/HEAD/skills/frontend-design
+stage: design
+commit: dbd4588
