@@ -1,0 +1,20 @@
+{
+  "extraKnownMarketplaces": {
+    "claude-plugins-official": { "source": { "source": "github", "repo": "anthropics/claude-plugins-official" } },
+    "anthropic-agent-skills": { "source": { "source": "github", "repo": "anthropics/skills" } },
+    "superpowers-dev": { "source": { "source": "github", "repo": "obra/superpowers" } },
+    "addy-agent-skills": { "source": { "source": "github", "repo": "addyosmani/agent-skills" } },
+    "mattpocock": { "source": { "source": "github", "repo": "mattpocock/skills" } },
+    "claude-code-workflows": { "source": { "source": "github", "repo": "wshobson/agents" } },
+    "claude-code-skills": { "source": { "source": "github", "repo": "alirezarezvani/claude-skills" } },
+    "context7-marketplace": { "source": { "source": "github", "repo": "upstash/context7" } },
+    "ui-ux-pro-max-skill": { "source": { "source": "github", "repo": "nextlevelbuilder/ui-ux-pro-max-skill" } },
+    "planning-with-files": { "source": { "source": "github", "repo": "OthmanAdi/planning-with-files" } }
+  },
+  "permissions": {
+    "allow": [
+      "Bash(bash hackathon/toolkit/skill.sh:*)",
+      "Bash(bash hackathon/toolkit/install.sh:*)"
+    ]
+  }
+}

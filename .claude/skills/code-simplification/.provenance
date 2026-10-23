@@ -1,0 +1,3 @@
+source: https://github.com/addyosmani/agent-skills/tree/HEAD/skills/code-simplification
+stage: build
+commit: aeac41d
