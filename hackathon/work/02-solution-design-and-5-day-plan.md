@@ -1,6 +1,11 @@
 # Halcyon DeliveryLens: solution design, AWS architecture and 5-day execution plan
 
-**Problem 2 · Late deliveries at Halcyon Logistics** · EvoHack 2026 · AWS
+**Problem 2 · Late deliveries at Halcyon Logistics** · EvoHack 2026 · AWS · **Team InfinityStacks**
+(Sravan Kumar D · Sai M · Dinesh K)
+
+**Built only on the AWS services the team requested** (`01-infra-request.md`): Amazon Bedrock
+(Claude) · IAM · S3 · ECR · Secrets Manager · RDS PostgreSQL · CloudWatch · Amplify (frontend)
+· EC2. Code lives on GitHub; the AI tools are Claude Chat and Claude Code.
 
 > *Find where on-time delivery actually breaks, fix each break point with AI, and prove the
 > number moves before the $680K routing contract is signed.*
@@ -81,7 +86,7 @@ schema with a synthetic generator, and map the real dataset onto it on arrival (
 | **Discovery** | Question log rounds 1 and 2; every answer mapped to a design decision; assumption register | `hackathon/work/discovery/` question log, `assumptions.md`, the "Answer → decision" table in the deck |
 | **Agent pipeline** (across roles, not just code assist) | BA, data analyst, architect, dev, test, security, DevOps and adoption agents (§10) | `ai-logs/` transcripts per role + `ai-logs/INDEX.md` |
 | **AI services** (AI inside the solution) | 5 Bedrock-powered agents in the product (§9) | Live demo + `agent_runs` table + CloudWatch |
-| **Live app demo** (working, deployed prototype) | CloudFront URL → React SPA + FastAPI on ECS Fargate + RDS | URL in README; health endpoint; deploy pipeline run |
+| **Live app demo** (working, deployed prototype) | Amplify URL → React SPA; FastAPI in Docker on EC2 (image from ECR) + RDS PostgreSQL | URL in README; health endpoint; deploy pipeline run |
 | **UI** | 8 screens (§11.2) covering the whole flow | Playwright screenshots |
 | **Backend** (working APIs, data, logic) | FastAPI + PostgreSQL, ~20 endpoints, attribution engine, simulator | OpenAPI at `/api/docs`; pytest report |
 | **Testing** | Unit, integration, E2E, LLM evals, security scans, attribution accuracy on planted data | `evidence/test-report.md`, CI artifacts |
@@ -189,7 +194,7 @@ flowchart LR
 | F11 | **At-risk Accounts view**: the 9 accounts, OTD trend, causes, actions | SHOULD | Outcome | – |
 | F12 | Allocation advisor (warehouse rebalancing suggestions) | COULD | H3 | – |
 | F13 | Agent activity / audit log screen | MUST (cheap) | AI-first evidence | – |
-| F14 | Login (Cognito) and roles | COULD | Security | – |
+| F14 | Demo login (JWT, password in Secrets Manager) | SHOULD | Security | – |
 
 **MVP = F1–F7 + F13**, which covers every L1 must-have. SHOULDs are added in the order F8 → F9 → F10 → F11.
 
@@ -226,17 +231,18 @@ flowchart TB
 sequenceDiagram
   autonumber
   actor CS as CS staff
-  participant UI as DeliveryLens UI
-  participant API as FastAPI (ECS)
+  participant UI as DeliveryLens UI (Amplify)
+  participant API as FastAPI (EC2)
   participant S3 as S3 inbox/
-  participant L as Lambda intake-trigger
+  participant L as Intake worker (EC2)
   participant BR as Bedrock (Claude Haiku)
-  participant G as Bedrock Guardrails
+  participant G as Guardrails (Bedrock or RAI rails)
   participant DB as RDS Postgres
   CS->>UI: Drop a non-standard email (.eml/.txt)
   UI->>API: POST /api/intake/emails
   API->>S3: put inbox/{id}.eml
-  S3-->>L: ObjectCreated event
+  API-->>L: enqueue job (Postgres job table)
+  L->>S3: read inbox/{id}.eml
   L->>G: screen input (PII/injection)
   L->>BR: extract order JSON (tool schema)
   BR-->>L: {client, lines[], ship_to, requested_date, confidence}
@@ -302,45 +308,61 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-  user([Judges / users]) --> CF[Amazon CloudFront<br/>HTTPS, default cert]
-  CF -->|/*| S3W[(S3: web bucket<br/>React build, OAC)]
-  CF -->|/api/*| ALB[Application Load Balancer<br/>public subnets, CloudFront-only header]
-  subgraph VPC[VPC, 2 AZs]
-    ALB --> ECS[ECS Fargate service<br/>FastAPI container<br/>private subnets]
-    ECS --> RDS[(RDS PostgreSQL<br/>db.t4g.micro, private)]
-    LBD[Lambda: email intake<br/>& batch jobs] --> RDS
+  user([Judges / users]) --> AMP[AWS Amplify Hosting<br/>React SPA, HTTPS<br/>auto-build from GitHub]
+  AMP -->|HTTPS /api/*| CADDY
+  subgraph VPC[Default VPC]
+    subgraph EC2[EC2 t3.large, Elastic IP<br/>instance role, SG: 80/443 only]
+      CADDY[Caddy reverse proxy<br/>auto TLS, host = IP.sslip.io] --> API[FastAPI container<br/>uvicorn]
+      WRK[Worker container<br/>email intake jobs +<br/>nightly risk scoring scheduler]
+    end
+    API --> RDS[(RDS PostgreSQL<br/>db.t4g.micro, not public<br/>SG: from EC2 only)]
+    WRK --> RDS
   end
-  ECS --> S3D[(S3: data bucket<br/>raw/, inbox/, reports/)]
-  S3D -->|ObjectCreated inbox/| LBD
-  ECS --> BR[Amazon Bedrock<br/>Claude Sonnet + Haiku<br/>+ Guardrails]
-  LBD --> BR
-  EB[EventBridge Scheduler<br/>nightly risk scoring] --> LBD
-  ECS --> SM[Secrets Manager]
-  LBD --> SM
-  ECS --> CW[CloudWatch Logs & Metrics<br/>dashboards, alarms]
-  LBD --> CW
-  ECR[ECR] --> ECS
-  GH[GitHub Actions / Azure DevOps<br/>OIDC role] -->|cdk deploy, image push| ECR
-  GH -->|s3 sync + invalidation| S3W
+  API --> S3D[(S3 data bucket<br/>raw/, inbox/, reports/, evidence/)]
+  WRK --> S3D
+  API --> BR[Amazon Bedrock<br/>Claude Sonnet + Haiku]
+  WRK --> BR
+  API --> SM[Secrets Manager<br/>DB creds, app config]
+  WRK --> SM
+  API -->|awslogs driver| CW[CloudWatch Logs + metrics<br/>dashboard, alarms]
+  WRK -->|awslogs driver| CW
+  ECR[(ECR: api / worker images)] -->|docker pull| EC2
+  GH[GitHub Actions<br/>IAM OIDC role] -->|build + push| ECR
+  GH -->|ssh: compose pull + up| EC2
+  GHR[GitHub repo] -->|push to main| AMP
 ```
 
 **Design choices (ADR summary):**
-- **ADR-01, ECS Fargate + ALB for the API.** No servers to manage, scales to zero work, and the
-  same Docker image runs locally. App Runner is the fallback if it is enabled in the account.
-- **ADR-02, S3 + CloudFront for the SPA.** One HTTPS URL with `/api/*` routed to the ALB, so
-  there is no CORS and no custom domain or certificate is needed.
-- **ADR-03, PostgreSQL (RDS) only.** 48k deliveries is small and SQL is enough. DuckDB is used
+- **ADR-01, EC2 + Docker Compose for the backend.** EC2 was requested, it's the simplest thing
+  to run in 5 days, and the same `docker-compose` file runs on laptops on Days 1–2 and on EC2 on
+  Day 3. There are two containers from one image: `api` (FastAPI) and `worker` (background
+  jobs). One t3.large is enough for 48k rows and demo traffic.
+- **ADR-02, Amplify Hosting for the SPA.** Amplify was requested. It builds from GitHub on
+  every push to `main` and serves over HTTPS. That gives frontend CI/CD for free.
+- **ADR-03, HTTPS on EC2 via Caddy, with no domain needed.** An HTTPS page on Amplify can't call
+  a plain-HTTP API, because browsers block mixed content. Caddy obtains a Let's Encrypt
+  certificate automatically for the hostname `<elastic-ip>.sslip.io`.
+  - **Fallback:** an Amplify reverse-proxy rewrite of `/api/<*>` to the EC2 endpoint.
+- **ADR-04, PostgreSQL on RDS only.** 48k deliveries is small and SQL is enough. DuckDB is used
   only for local exploratory analysis.
-- **ADR-04, Bedrock for all in-product AI.** It runs in the AWS account (no data leaves AWS),
-  uses IAM authentication with no API keys, and Guardrails adds PII filtering and
-  prompt-attack protection.
-- **ADR-05, deterministic analytics and LLM narration.** OTD maths, attribution and simulation
+- **ADR-05, Bedrock for all in-product AI.** It runs in the AWS account, so no data leaves AWS.
+  The EC2 instance role authenticates to Bedrock through IAM; there are no API keys.
+- **ADR-06, deterministic analytics and LLM narration.** OTD maths, attribution and simulation
   are plain Python, testable and reproducible. LLMs extract, classify, explain and answer, and
   never compute KPIs.
-- **ADR-06, infrastructure as code with AWS CDK (Python).** The stack is reproducible for the
-  L1 check and torn down after the event.
-- **ADR-07, an event-driven email intake.** An S3 event triggers Lambda, which shows a real
-  integration pattern without the weight of a queue. SQS is added only if volume demands it.
+- **ADR-07, background jobs in a worker container instead of Lambda/EventBridge.** Those
+  services weren't requested.
+  - Email intake: the upload goes to S3 `inbox/`, and the API writes a row to a Postgres `jobs`
+    table. The worker picks jobs up with `SELECT … FOR UPDATE SKIP LOCKED`, calls Bedrock and
+    writes the result.
+  - Nightly risk scoring: APScheduler inside the worker.
+  - It's the same event-driven pattern, with no extra AWS services.
+- **ADR-08, scripted infrastructure instead of CDK.** The infra is a handful of resources:
+  - `infra/scripts/*.sh` (AWS CLI) creates the S3 bucket, ECR repos, secret, security groups
+    and RDS instance.
+  - `infra/ec2-user-data.sh` bootstraps Docker, Caddy and the CloudWatch log driver.
+  - Every step is idempotent and documented in the runbook.
+  - If the provisioned IAM role allows CloudFormation, the same resources can move to a template.
 
 ### 6.3 Data flow (zones)
 
@@ -484,7 +506,10 @@ Output: the `attribution` table and the `otd_waterfall` mart. The UI shows a wat
 
 All agents run on **Amazon Bedrock** through one `llm_client`, which handles:
 - model routing (Haiku for extraction and classification; Sonnet for reasoning, Q&A and memos)
-- **Bedrock Guardrails** on input and output
+- guardrails on input and output:
+  - **Bedrock Guardrails**, if the provisioned role allows `bedrock:ApplyGuardrail`
+  - otherwise the PII and prompt-injection rails from our own RAI gateway (`rai_platform/` in
+    this repo). These work offline, need no extra AWS service, and are a differentiator to show
 - structured outputs via the tool/JSON schema
 - retries and timeouts
 - **logging every call to `agent_runs`** and CloudWatch
@@ -493,10 +518,10 @@ A `MockLLM` provider keeps tests and offline development working.
 
 | Agent | Trigger | Input → output | Model | Human-in-loop | Guardrails |
 |---|---|---|---|---|---|
-| **Email Intake Agent** | S3 `inbox/` upload (Lambda) or UI upload | Raw email → order JSON (client, lines, SKUs, qty, ship-to, dates) + per-field confidence | Haiku | Below the confidence threshold → review queue | PII filter on logs; validation against the client and SKU master; injection screening |
+| **Email Intake Agent** | UI upload → S3 `inbox/` → worker job | Raw email → order JSON (client, lines, SKUs, qty, ship-to, dates) + per-field confidence | Haiku | Below the confidence threshold → review queue | PII filter on logs; validation against the client and SKU master; injection screening |
 | **Root-Cause Explainer** | Click on a late delivery or account | Journey + attribution rows → plain-English cause narrative with evidence IDs | Sonnet | Read-only | Must cite row IDs; numbers come only from inputs |
 | **Carrier Advisor** | New shipment / UI | Lane, weight, date, scorecard → ranked carriers + rationale + cost/OTD trade-off | Sonnet (tool: scorecard query) | Planner accepts or overrides | Capacity constraint enforced in code |
-| **Exception Agent** | Nightly (EventBridge) + on demand | Top-risk shipments → recommended action (expedite, carrier swap, call client) + client message draft | Sonnet | CS approves before any message | Tone/policy guardrail; no auto-send |
+| **Exception Agent** | Nightly (worker scheduler) + on demand | Top-risk shipments → recommended action (expedite, carrier swap, call client) + client message draft | Sonnet | CS approves before any message | Tone/policy guardrail; no auto-send |
 | **Complaint Triage Agent** | Batch over the complaint log | Complaint text → category (H1–H6), severity, linked order, suggested reply | Haiku | CS reviews | PII redaction |
 | **Ask DeliveryLens** | Chat box | Question → SQL over **read-only curated views** (allow-listed) → answer + table + citations | Sonnet | – | SELECT-only role; row limit; out-of-scope refusal |
 | **Vendor Memo Writer** | Vendor Lens "Generate memo" | Attribution + simulator outputs → 1-page go/reshape/no-go memo for the COO and CFO | Sonnet | Team edits | Numbers inserted from the API, not generated |
@@ -521,7 +546,7 @@ flowchart LR
   AR --> DEV[Developer agents<br/>subagent-driven-development · TDD<br/>Backend / Frontend / AI Engineer]
   DEV --> QA[Test agents<br/>test-automation · api-tester · reality-checker<br/>LLM evals]
   QA --> SEC[Security agents<br/>appsec · security-and-hardening · ship-gate]
-  SEC --> OPS[DevOps agents<br/>devops-automator · CDK · CI/CD]
+  SEC --> OPS[DevOps agents<br/>devops-automator · AWS CLI scripts · CI/CD]
   OPS --> ADP[Adoption agents<br/>technical-writer · executive-summary<br/>user guide · training · pitch]
   ADP -.feedback.-> BA
 ```
@@ -534,7 +559,7 @@ flowchart LR
 | Developer (H2, H3) | `subagent-driven-development`, `test-driven-development`, Backend Architect, Frontend Developer, AI Engineer, `find-docs` | Code, PRs |
 | Tester (H3) | Test Automation Engineer, API Tester, Reality Checker, `webapp-testing`, `verification-before-completion` | Test reports, Playwright screenshots, eval scores |
 | Security (H3) | AppSec Engineer, `security-and-hardening`, `ship-gate`, Privacy Engineer | Threat model, scan reports |
-| DevOps (H2) | DevOps Automator, SRE, `ci-cd-and-automation`, `shipping-and-launch` | CDK stack, pipeline, runbook |
+| DevOps (H2) | DevOps Automator, SRE, `ci-cd-and-automation`, `shipping-and-launch` | AWS CLI infra scripts, EC2 bootstrap, GitHub Actions pipeline, Amplify config, runbook |
 | Adoption and pitch (H1) | Technical Writer, Executive Summary Generator, `fde-pitch`, `data-storytelling`, `pptx` | User guide, training quick-card, deck, demo script |
 
 **AI usage logs (a deliverable):**
@@ -594,17 +619,26 @@ direction, with 3–5 colours and one typeface.
 - **Data:**
   - Synthetic or provided data only; no real personal data.
   - S3 is SSE-encrypted with public access blocked.
-  - RDS is encrypted, in private subnets, and reachable only from the ECS and Lambda security groups.
+  - RDS is encrypted, not publicly accessible, and reachable only from the EC2 security group.
 - **Identity:**
-  - IAM least privilege: the task role has `bedrock:InvokeModel` on two model ARNs, S3 access on
-    the data bucket, and read access to its secret.
-  - CI uses a GitHub OIDC role, so there are no long-lived keys.
-  - **Optional:** Cognito login for the UI.
+  - IAM least privilege. The EC2 instance role has:
+    - `bedrock:InvokeModel` on two model ARNs
+    - S3 access on the data bucket only
+    - read access to the app secret
+    - ECR pull
+    - CloudWatch Logs write
+  - CI uses a GitHub OIDC role (ECR push only), so there are no long-lived AWS keys.
+  - The EC2 SSH deploy key lives in GitHub Secrets.
+  - **App login:** a simple shared demo login (JWT), with the password held in Secrets Manager.
 - **Network:**
-  - CloudFront is the only public entry point.
-  - The ALB accepts only CloudFront requests, enforced with a secret custom header plus an
-    AWS-managed prefix list.
-  - **Optional:** AWS WAF managed rules on CloudFront.
+  - The EC2 security group allows 443/80 from anywhere (80 only so Caddy can do the ACME
+    challenge and redirect).
+  - SSH (22) is open only to the team's IPs and the GitHub runner deploy step, or is closed
+    between deploys.
+  - RDS is not publicly accessible; its security group allows 5432 from the EC2 security group only.
+  - Caddy terminates TLS and adds HSTS and security headers.
+  - FastAPI CORS is restricted to the Amplify domain.
+  - IMDSv2 is required on the instance.
 - **Secrets:** DB credentials live in Secrets Manager. There are **no secrets in the repo**;
   `gitleaks` runs in CI.
 - **App:**
@@ -614,7 +648,8 @@ direction, with 3–5 colours and one typeface.
   - Ask DeliveryLens runs with a **read-only DB role** against allow-listed views, with a
     `LIMIT` and a statement timeout.
 - **AI:**
-  - Bedrock Guardrails: PII masking, prompt-attack filter, denied topics.
+  - Guardrails: PII masking, prompt-attack filter, denied topics. Uses Bedrock Guardrails if
+    permitted, otherwise the `rai_platform` rails.
   - LLMs never compute KPIs.
   - Agents cite evidence.
   - Human approval before any outbound action.
@@ -645,23 +680,32 @@ direction, with 3–5 colours and one typeface.
 
 ## 14. AWS services by phase
 
-| Phase | AWS services | Used for |
+Only the 9 requested services are used.
+
+| Phase | AWS service | Exactly what we use it for |
 |---|---|---|
-| **Discover** | – (Claude Code locally) | Question log, profiling the sample data |
-| **Design** | – | CDK stack design; Bedrock model access request (do it **on Day 3, morning**, as approval can take time) |
-| **Build (local, Days 1–2)** | **Amazon Bedrock** (if laptop credentials exist; otherwise the Anthropic API or `MockLLM`) | Develop agents |
-| **Foundation (Day 3)** | **VPC, IAM, Secrets Manager, ECR, S3, RDS PostgreSQL, CloudWatch** via **AWS CDK** | Base infrastructure |
-| **Deploy (Day 3)** | **ECS Fargate + ALB, CloudFront + S3** | API and SPA live |
-| **AI (Day 3–4)** | **Amazon Bedrock** (Claude Sonnet + Haiku), **Bedrock Guardrails** | Agents in production |
-| **Event-driven (Day 4)** | **S3 events → AWS Lambda**, **EventBridge Scheduler** | Email intake; nightly risk scoring |
-| **CI/CD (Day 3–4)** | **IAM OIDC provider** + GitHub Actions (or Azure Pipelines) | Build, test, scan, deploy |
-| **Operate and prove (Day 4–5)** | **CloudWatch dashboards and alarms**, X-Ray (optional), **AWS Budgets** | Health, agent metrics, cost guard |
-| **Harden (Day 5)** | **AWS WAF** (optional), **Cognito** (optional), Security Hub / Inspector (if enabled) | Security evidence |
+| **Discover** (done) | – | Question log; Claude Chat and Code for analysis |
+| **Build, local (D1–D2)** | **Bedrock** (if laptop credentials exist; otherwise `MockLLM`) | Develop and evaluate the agents against real Claude early |
+| **Foundation (D3 morning)** | **IAM** | EC2 instance role (Bedrock, S3, Secrets, ECR pull, Logs) and GitHub OIDC role (ECR push) |
+| | **S3** | `halcyon-dl-data` bucket: `raw/` (dataset), `inbox/` (emails), `reports/` (memos, exports), `evidence/` |
+| | **ECR** | Repositories `deliverylens-api` (one image runs both api and worker) |
+| | **Secrets Manager** | `deliverylens/app`: DB URL, demo login, model IDs, guardrail ID |
+| | **RDS PostgreSQL** | db.t4g.micro (or small), not public, automated backups on |
+| **Deploy backend (D3)** | **EC2** | t3.large Amazon Linux 2023 + Elastic IP; Docker Compose runs Caddy + api + worker |
+| | **CloudWatch** | `awslogs` log driver → log groups `/deliverylens/api`, `/deliverylens/worker`; CPU/status alarms |
+| **Deploy frontend (D3)** | **Amplify** | Connected to the GitHub repo; builds `frontend/` on every push to `main`; env var `VITE_API_URL` |
+| **AI in production (D3–D4)** | **Bedrock** | Claude Sonnet (reasoning, Q&A, memos) + Haiku (extraction, triage); Guardrails if permitted |
+| **CI/CD (D4)** | **IAM (OIDC) + ECR + EC2** | GitHub Actions: test → scan → build → push to ECR → SSH to EC2 `docker compose pull && up -d`. Amplify deploys the frontend on its own |
+| **Operate and prove (D4–D5)** | **CloudWatch** | Dashboard: API latency and errors (from structured logs via metric filters), agent calls and tokens, worker job lag; alarms |
+| **Harden (D5)** | **IAM / EC2 / RDS / S3** | Least-privilege review, IMDSv2, SG audit, S3 block-public-access, RDS encryption check |
 
 **Rough cost for the week, to be confirmed:**
-- Fargate 0.5 vCPU/1 GB, RDS t4g.micro, ALB, CloudFront, S3, Lambda: about $10–20.
+- EC2 t3.large: about $0.09/h, so about $12 for the week.
+- RDS t4g.micro: about $3.
+- Amplify, S3, ECR, CloudWatch: a few dollars.
 - Bedrock tokens: about $10–40.
-- Set an **AWS Budget alert at $100**.
+- Well under $100 in total. Stop the EC2 and RDS instances overnight if the event allows it
+  (the data persists).
 
 ---
 
@@ -673,19 +717,21 @@ direction, with 3–5 colours and one typeface.
 |---|---|---|---|
 | **D1** | Sat 24 Oct | Build core: data, analytics, API, UI skeleton | Local (Docker Compose) |
 | **D2** | Sun 25 Oct | Build agents + UI + tests; feature-complete MVP locally | Local |
-| **D3** | Mon 26 Oct | **Deploy foundation**: CDK, ECS, RDS, CloudFront, Bedrock live; round-2 answers applied | **AWS** |
-| **D4** | Tue 27 Oct | **Deploy event-driven + CI/CD**; real dataset (if it's here); SHOULD features; E2E on cloud | **AWS** |
+| **D3** | Mon 26 Oct | **Deploy foundation**: IAM, S3, ECR, Secrets, RDS, EC2 (Docker + Caddy), Amplify, Bedrock live; round-2 answers applied | **AWS** |
+| **D4** | Tue 27 Oct | **Worker jobs + CI/CD + CloudWatch**; real dataset (if it's here); SHOULD features; E2E on cloud | **AWS** |
 | **D5** | Wed 28 Oct | **Harden, prove, freeze**: security, evals, evidence pack, AI logs, demo dry-runs | **AWS** |
 | Buffer | Thu 29 Oct | Final submission: repo, URL, AI logs. Then the deck (L1 ~2–3 Nov, L2 ~4–6 Nov) | – |
 
-Roles: **H1** = FDE lead (business, discovery, UX, pitch) · **H2** = architect / AI and data /
-DevOps · **H3** = full-stack / QA / security. Replace with names.
+Roles, a suggested split (swap freely; role convergence is part of the score):
+- **H2 = Sai M:** architect, AI and data, AWS deployment and DevOps. Sai owns the D3–D5 deployment phase.
+- **H1 = Sravan Kumar D:** FDE lead for business, discovery, UX and the pitch.
+- **H3 = Dinesh K:** full-stack, QA and security.
 
 ### Day 0: today, Fri 23 Oct (pre-work, about 2 hours)
 - [ ] Submit round-2 follow-up questions (§19) in the discovery log format, **today**. Answers come Mon 26.
 - [ ] Post the infra request (AWS) once in the Teams group, from the SPOC.
 - [ ] Create the repo skeleton (§16) and the `ai-logs/` convention. Agree OTD definition v0 and step standards v0.
-- [ ] Confirm the submission repo (GitHub vs Azure DevOps).
+- [ ] Create the GitHub repo (as requested) and give all 3 members access; confirm it is the designated submission repo.
 
 ### D1, Sat 24 Oct: data, analytics core, skeleton
 
@@ -706,28 +752,28 @@ attribution accuracy is measured; CI is green.
 | 09–12 | Vendor Decision Lens copy + memo template; user guide v0 (Technical Writer agent) | `llm_client` (Bedrock + Mock), **Email Intake Agent** + eval harness | **Simulator** API + UI (levers, projected OTD) |
 | 12–15 | Q&A golden questions (30); demo script v1 | **Ask DeliveryLens** (read-only views, text-to-SQL, citations); Root-Cause Explainer | Email Intake screen + review queue; Vendor Lens screen |
 | 15–18 | Run all flows as the COO persona (Persona Walkthrough agent); UX fixes list | Vendor assessment endpoint + Memo Writer; `agent_runs` logging | Pytest coverage on engine/API; Playwright for 6 flows locally |
-| 18–20 | Update `ai-logs/INDEX.md`; pod log | **CDK stack drafted** (`infra/`), `cdk synth` passes | Bandit / pip-audit / npm audit; fix highs |
+| 18–20 | Update `ai-logs/INDEX.md`; pod log | **Deploy kit ready**: `infra/scripts/*.sh`, `ec2-user-data.sh`, `docker-compose.prod.yml` + `Caddyfile`, `amplify.yml`; dry-run on a local VM/container | Bandit / pip-audit / npm audit; fix highs |
 
 **Exit gate D2:** all MUST features (F1–F7, F13) work locally end to end; tests green; LLM evals
-run; CDK synthesises.
+run; the deploy kit has been dry-run.
 
 ### D3, Mon 26 Oct: AWS foundation and first cloud deploy
 
 | Block | H1 | H2 | H3 |
 |---|---|---|---|
-| 09–10 | Read the **round-2 answers**; update the assumption register, standards and OTD definition → decision log | Verify AWS access; **request Bedrock model access** (Sonnet, Haiku); set the Budget alert | Dockerfile hardening (non-root, slim); `.env` → Secrets Manager plan |
-| 10–13 | Apply answers to the PRD and acceptance criteria; tweak the simulator assumptions | `cdk deploy`: VPC, S3, RDS, ECR, Secrets, ECS Fargate + ALB, CloudFront + S3 web | Build and push the image to ECR; SPA build → S3; CloudFront `/api/*` behaviour |
-| 13–16 | If the dataset has arrived: mapping review with the Schema-Mapping Assistant | Switch `llm_client` to **Bedrock**; Guardrails configured; run migrations + seed on RDS | **Smoke on the cloud URL**; fix environment and config bugs |
-| 16–19 | Cloud walkthrough; capture screenshots for the deck | CloudWatch log groups + basic dashboard | Playwright E2E against the cloud URL |
+| 09–10 | Read the **round-2 answers**; update the assumption register, standards and OTD definition → decision log | Verify AWS access and IAM permissions; **check Bedrock Claude model access** (Sonnet, Haiku) in the region; raise any gap in the infra group by 10:00 | Dockerfile hardening (non-root, slim); confirm the GitHub repo and Amplify access |
+| 10–13 | Apply answers to the PRD and acceptance criteria; tweak the simulator assumptions | Run `infra/scripts`: S3 bucket, ECR repo, Secrets Manager secret, security groups, **RDS PostgreSQL**; IAM instance role | Build and push the image to **ECR**; connect **Amplify** to GitHub (`amplify.yml`), set `VITE_API_URL` |
+| 13–16 | If the dataset has arrived: mapping review with the Schema-Mapping Assistant | Launch **EC2** with user-data and an Elastic IP; `docker compose up` (Caddy + api + worker); Caddy TLS on `<eip>.sslip.io`; switch `llm_client` to **Bedrock**; run migrations + seed on RDS | **Smoke test the Amplify URL → EC2 API**; fix CORS, mixed-content and config bugs |
+| 16–19 | Cloud walkthrough; capture screenshots for the deck | **CloudWatch** log groups via the awslogs driver; first alarms | Playwright E2E against the Amplify URL |
 
-**Exit gate D3:** the **public CloudFront URL works end to end on AWS with Bedrock**. This
-covers the L1 "live app demo", UI, backend and AI services.
+**Exit gate D3:** the **public Amplify URL works end to end on AWS (EC2 + RDS + Bedrock)**.
+This covers the L1 "live app demo", UI, backend and AI services.
 
 ### D4, Tue 27 Oct: event-driven, CI/CD, real data, SHOULD features
 
 | Block | H1 | H2 | H3 |
 |---|---|---|---|
-| 09–12 | Real-data findings ("people say vs data says") → discovery insights slide draft | **Lambda email intake** on S3 `inbox/` events; EventBridge nightly risk job | **CI/CD**: GitHub Actions (OIDC) → test → scan → build → deploy |
+| 09–12 | Real-data findings ("people say vs data says") → discovery insights slide draft | **Worker** on EC2: email-intake jobs (S3 `inbox/` + Postgres job queue) and the nightly risk-scoring scheduler | **CI/CD**: GitHub Actions (OIDC) → test → scan → build → push to ECR → SSH deploy to EC2; Amplify auto-deploys the frontend |
 | 12–15 | Customer Success flow: at-risk accounts view copy; proactive message templates | Load the **real dataset** (§7.4) → re-run attribution; Carrier Advisor | Carrier scorecard + At-risk screens |
 | 15–18 | KPI and ROI model v1 (`financial-analyst`): OTD uplift → revenue retained vs $680K | Exception Agent + Complaint Triage Agent | E2E for the new flows; regression on the cloud |
 | 18–20 | `ai-logs` curation per role | Risk model metrics → evidence | Security: ZAP baseline vs the cloud URL; fix findings |
@@ -739,8 +785,8 @@ features (F8–F11) are live, or deliberately cut and logged.
 
 | Block | H1 | H2 | H3 |
 |---|---|---|---|
-| 09–12 | **Before/after proof run**: new synthetic orders, as-is vs to-be; final waterfall + vendor recommendation | IAM least-privilege review; WAF/Cognito (optional); alarms; Budget check | Full regression on the cloud; `evidence/` pack (tests, evals, security, perf) |
-| 12–15 | Vendor memo final; README (how to run, URL, architecture) | Runbook + teardown script; data reset endpoint for the demo | Acceptance matrix (every criterion → evidence) with the Reality Checker |
+| 09–12 | **Before/after proof run**: new synthetic orders, as-is vs to-be; final waterfall + vendor recommendation | IAM least-privilege review; security groups and IMDSv2; RDS snapshot; CloudWatch dashboard final | Full regression on the cloud; `evidence/` pack (tests, evals, security, perf) |
+| 12–15 | Vendor memo final; README (how to run, URL, architecture) | Runbook (start/stop/redeploy/restore) + teardown script; data reset endpoint for the demo | Acceptance matrix (every criterion → evidence) with the Reality Checker |
 | 15–18 | **Demo dry-run ×2 on the cloud**, timed at 20 minutes | Fix blockers only | Record a backup demo video (`demo-video` / `ui-demo`) |
 | 18–20 | **Code freeze**; tag `v1.0-submission` | Final deploy from the tag | Final smoke + screenshots |
 
@@ -778,8 +824,13 @@ halcyon-deliverylens/
 │  ├─ migrations/
 │  └─ tests/{unit,integration,evals}/
 ├─ frontend/                 # React + TS + Vite
-├─ lambdas/email_intake/
-├─ infra/                    # AWS CDK (Python)
+├─ backend/app/worker/       # email-intake jobs + nightly scheduler (same image as api)
+├─ infra/
+│  ├─ scripts/               # AWS CLI: s3, ecr, secrets, sg, rds, iam (idempotent)
+│  ├─ ec2-user-data.sh       # Docker, compose, awslogs, Caddy bootstrap
+│  ├─ docker-compose.prod.yml
+│  └─ Caddyfile
+├─ amplify.yml               # Amplify build spec for frontend/
 ├─ e2e/                      # Playwright
 ├─ evidence/                 # test, eval, security, perf reports, screenshots
 ├─ ai-logs/                  # agent usage logs per role + INDEX.md
@@ -799,8 +850,11 @@ halcyon-deliverylens/
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Dataset arrives late or differs from expectations | Re-work | Canonical schema + mapping layer + synthetic generator; a half-day budget reserved for the mapping |
-| AWS access arrives after Mon morning | Lose deploy days | Everything runs in Docker Compose; CDK is synthesised on D2; escalate in the infra group at 10:00 Mon |
-| Bedrock model access not approved quickly | No in-product AI on the cloud | Request at the D3 start; fallback is the Anthropic API key via Secrets Manager (same `llm_client`) |
+| AWS access arrives after Mon morning | Lose deploy days | Everything runs in Docker Compose; the deploy kit is dry-run on D2; escalate in the infra group at 10:00 Mon |
+| Bedrock model access not approved quickly | No in-product AI on the cloud | Check at the D3 start; escalate immediately; fallback is an approved Claude API key in Secrets Manager (same `llm_client`) |
+| Browser blocks the HTTP API from the HTTPS Amplify page (mixed content) | UI can't reach the API | Caddy auto-TLS on `<eip>.sslip.io`; fallback Amplify reverse-proxy rewrite `/api/<*>` |
+| Single EC2 instance is a single point of failure | Demo outage | Elastic IP + `restart: always`; RDS holds all state; AMI snapshot after D5; redeploy from ECR in under 10 minutes (runbook) |
+| Provisioned IAM role lacks a needed permission (e.g. Guardrails, SG edits) | Blocked step | List the required actions in the D3 09:00 check; fall back to `rai_platform` rails for guardrails |
 | The Claude Code 5-hour window | Slower build | Stagger the three members' sessions; Haiku for bulk tasks; `caveman` mode for internal chats |
 | Over-scoping | Missed deadline (elimination) | MoSCoW; MVP gate on D2; cut SHOULDs on D4 if needed |
 | Attribution challenged by judges | Credibility | Show the planted-truth accuracy and the counterfactual method; state the assumptions |
